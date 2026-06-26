@@ -1,18 +1,15 @@
+
 """
 ARIA - Workflow principal
 """
 
+import os
+
 from pricing_BS import OptionContract
-from portfolio import (
-    Portfolio,
-    OptionPosition,
-    StockPosition
-)
-from anomaly_detector import (
-    AnomalyDetector,
-    create_snapshot
-)
+from portfolio import Portfolio, OptionPosition, StockPosition
+from anomaly_detector import AnomalyDetector, create_snapshot
 from risk_history import RiskHistory
+from llm_explainer import LLMExplainer
 
 
 def update_portfolio_market(
@@ -20,10 +17,7 @@ def update_portfolio_market(
     spot: float,
     implied_volatility: float
 ) -> None:
-    """
-    Met à jour le spot et la volatilité
-    de toutes les positions du portefeuille
-    """
+    """Met à jour le spot et la volatilité du portefeuille."""
 
     for position in portfolio.positions:
 
@@ -83,11 +77,48 @@ def build_demo_portfolio() -> Portfolio:
     return portfolio
 
 
+def generate_llm_analysis(
+    snapshot,
+    alerts
+) -> str:
+    """Demande au LLM d'expliquer les alertes détectées."""
+
+    if not alerts:
+        return (
+            "Aucune anomalie détectée. "
+            "L'analyse LLM n'est pas nécessaire."
+        )
+
+    model = os.getenv("ARIA_LLM_MODEL")
+
+    if not model:
+        return (
+            "Le modèle LLM n'est pas défini. "
+            "Ajoute la variable ARIA_LLM_MODEL."
+        )
+
+    try:
+        explainer = LLMExplainer(
+            model=model
+        )
+
+        return explainer.explain(
+            snapshot=snapshot,
+            alerts=alerts
+        )
+
+    except Exception as error:
+        return (
+            "Impossible de générer l'analyse LLM.\n"
+            f"Erreur : {error}"
+        )
+
+
 def run_aria(
     current_spot: float,
     current_volatility: float
 ) -> None:
-    """Lance une analyse complète du portefeuille."""
+    """Lance le workflow complet d'ARIA."""
 
     portfolio = build_demo_portfolio()
 
@@ -139,7 +170,7 @@ def run_aria(
         f"{current_volatility:.2%}"
     )
 
-    print("\nAnalyse ARIA")
+    print("\nAlertes quantitatives")
 
     if not alerts:
         print("Aucune anomalie détectée.")
@@ -151,6 +182,15 @@ def run_aria(
 
         for alert in alerts:
             alert.display()
+
+    print("\nAnalyse du LLM")
+
+    llm_analysis = generate_llm_analysis(
+        snapshot=current_snapshot,
+        alerts=alerts
+    )
+
+    print(llm_analysis)
 
     history_manager.save_snapshot(
         current_snapshot
@@ -164,7 +204,7 @@ def run_aria(
 
 if __name__ == "__main__":
 
-    # Modifie ces deux valeurs pour simuler le marché
+    # Modifie ces valeurs pour simuler une situation de marché
     current_spot = 465
     current_volatility = 0.32
 
@@ -172,3 +212,4 @@ if __name__ == "__main__":
         current_spot=current_spot,
         current_volatility=current_volatility
     )
+
