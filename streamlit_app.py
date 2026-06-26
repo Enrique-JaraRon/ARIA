@@ -1,3 +1,4 @@
+
 """
 ARIA - Application Streamlit
 """
@@ -69,7 +70,6 @@ def build_portfolio_from_table(
 
         instrument = row.get("Instrument")
 
-        # Les nouvelles lignes vides sont simplement ignorées
         if pd.isna(instrument):
             continue
 
@@ -152,8 +152,6 @@ st.write(
 )
 
 
-# Paramètres du marché
-
 st.sidebar.header("Marché")
 
 current_spot = st.sidebar.number_input(
@@ -187,8 +185,6 @@ current_volatility = current_volatility_percent / 100
 risk_free_rate = risk_free_rate_percent / 100
 dividend_yield = dividend_yield_percent / 100
 
-
-# Limites utilisées par le détecteur
 
 st.sidebar.header("Limites de risque")
 
@@ -235,8 +231,6 @@ z_score_limit = st.sidebar.number_input(
 )
 
 
-# Le tableau reste en mémoire pendant la session
-
 if "portfolio_data" not in st.session_state:
     st.session_state.portfolio_data = default_portfolio()
 
@@ -262,7 +256,7 @@ edited_portfolio = st.data_editor(
     key="portfolio_editor",
     num_rows="dynamic",
     hide_index=True,
-    use_container_width=True,
+    width="stretch",
     column_config={
         "Instrument": st.column_config.SelectboxColumn(
             "Instrument",
@@ -450,7 +444,7 @@ if analyse_button:
     st.dataframe(
         pd.DataFrame(positions_summary),
         hide_index=True,
-        use_container_width=True
+        width="stretch"
     )
 
 
@@ -519,3 +513,4 @@ if analyse_button:
     st.success(
         "Le snapshot actuel a été ajouté à l'historique."
     )
+
