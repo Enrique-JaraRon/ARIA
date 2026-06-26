@@ -32,6 +32,7 @@ def default_portfolio() -> pd.DataFrame:
                 "Nom": "Calls ATM achetés",
                 "Type option": "call",
                 "Quantité": 20,
+                "Multiplicateur": 100,
                 "Strike": 500.0,
                 "Maturité": 0.25
             },
@@ -40,6 +41,7 @@ def default_portfolio() -> pd.DataFrame:
                 "Nom": "Puts vendus",
                 "Type option": "put",
                 "Quantité": -10,
+                "Multiplicateur": 100,
                 "Strike": 470.0,
                 "Maturité": 0.25
             },
@@ -48,6 +50,7 @@ def default_portfolio() -> pd.DataFrame:
                 "Nom": "Couverture en actions",
                 "Type option": "call",
                 "Quantité": -5,
+                "Multiplicateur": 1,
                 "Strike": 500.0,
                 "Maturité": 0.25
             }
@@ -97,6 +100,7 @@ def build_portfolio_from_table(
             option_type = row.get("Type option")
             strike = row.get("Strike")
             maturity = row.get("Maturité")
+            multiplier_value = row.get("Multiplicateur")
 
             if pd.isna(option_type):
                 raise ValueError(
@@ -113,6 +117,16 @@ def build_portfolio_from_table(
                     f"La maturité est invalide à la ligne {index + 1}."
                 )
 
+            if pd.isna(multiplier_value):
+                multiplier = 1
+            else:
+                multiplier = int(multiplier_value)
+
+            if multiplier <= 0:
+                raise ValueError(
+                    f"Le multiplicateur est invalide à la ligne {index + 1}."
+                )
+
             contract = OptionContract(
                 S=spot,
                 K=float(strike),
@@ -126,6 +140,7 @@ def build_portfolio_from_table(
             portfolio.add_option(
                 contract=contract,
                 quantity=quantity,
+                multiplier=multiplier,
                 name=str(name)
             )
 
@@ -400,6 +415,11 @@ st.write(
     "Une quantité négative correspond à une position vendue."
 )
 
+st.caption(
+    "Pour une option, l'exposition réelle est égale à "
+    "quantité × multiplicateur."
+)
+
 if st.button(
     "Réinitialiser le portefeuille"
 ):
@@ -434,6 +454,16 @@ edited_portfolio = st.data_editor(
             "Quantité",
             step=1,
             format="%d"
+        ),
+        "Multiplicateur": st.column_config.NumberColumn(
+            "Multiplicateur",
+            min_value=1,
+            step=1,
+            format="%d",
+            help=(
+                "Nombre d'unités du sous-jacent "
+                "représentées par un contrat."
+            )
         ),
         "Strike": st.column_config.NumberColumn(
             "Strike",
@@ -598,6 +628,11 @@ if analyse_button:
                         position.contract.option_type.upper()
                     ),
                     "Quantité": position.quantity,
+                    "Multiplicateur": position.multiplier,
+                    "Exposition": (
+                        position.quantity
+                        * position.multiplier
+                    ),
                     "Strike": position.contract.K,
                     "Maturité": position.contract.T,
                     "Valeur": position.market_value()
@@ -610,6 +645,8 @@ if analyse_button:
                     "Nom": position.name,
                     "Instrument": "ACTION",
                     "Quantité": position.quantity,
+                    "Multiplicateur": 1,
+                    "Exposition": position.quantity,
                     "Strike": None,
                     "Maturité": None,
                     "Valeur": position.market_value()
@@ -629,6 +666,12 @@ if analyse_button:
             ),
             "Maturité": st.column_config.NumberColumn(
                 format="%.3f"
+            ),
+            "Multiplicateur": st.column_config.NumberColumn(
+                format="%d"
+            ),
+            "Exposition": st.column_config.NumberColumn(
+                format="%d"
             )
         }
     )
