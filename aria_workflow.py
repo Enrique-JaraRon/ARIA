@@ -22,7 +22,7 @@ def update_portfolio_market(
 ) -> None:
     """
     Met à jour le spot et la volatilité
-    de toutes les positions du portefeuille.
+    de toutes les positions du portefeuille
     """
 
     for position in portfolio.positions:
