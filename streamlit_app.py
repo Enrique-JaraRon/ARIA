@@ -13,6 +13,7 @@ from anomaly_detector import AnomalyDetector, create_snapshot
 from risk_history import RiskHistory
 from aria_workflow import generate_llm_analysis
 from scenario_analysis import run_scenario, run_standard_scenarios
+from risk_surface import calculate_risk_surface, surface_to_dataframe
 
 
 st.set_page_config(
@@ -160,7 +161,7 @@ def build_portfolio_from_table(
 def create_stress_chart(
     scenario_results
 ) -> alt.Chart:
-    """Crée un graphique clair des profits et pertes par scénario."""
+    """Crée un graphique des profits et pertes par scénario."""
 
     chart_data = pd.DataFrame(
         [
@@ -177,7 +178,9 @@ def create_stress_chart(
         ]
     )
 
-    bars = alt.Chart(chart_data).mark_bar(
+    bars = alt.Chart(
+        chart_data
+    ).mark_bar(
         cornerRadiusEnd=6,
         size=32
     ).encode(
@@ -227,7 +230,9 @@ def create_stress_chart(
         ]
     )
 
-    labels = alt.Chart(chart_data).mark_text(
+    labels = alt.Chart(
+        chart_data
+    ).mark_text(
         align="left",
         baseline="middle",
         dx=6,
@@ -265,7 +270,7 @@ def create_stress_chart(
         x="x:Q"
     )
 
-    chart = (
+    return (
         bars
         + labels
         + zero_line
@@ -289,10 +294,10 @@ def create_stress_chart(
         titleColor="#374151"
     )
 
-    return chart
 
-
-st.title("ARIA - Adaptive Risk Intelligence Agent")
+st.title(
+    "ARIA - Adaptive Risk Intelligence Agent"
+)
 
 st.write(
     "Construis ton portefeuille, modifie les conditions de marché "
@@ -302,7 +307,9 @@ st.write(
 
 # Paramètres du marché
 
-st.sidebar.header("Marché")
+st.sidebar.header(
+    "Marché"
+)
 
 current_spot = st.sidebar.number_input(
     "Prix du sous-jacent",
@@ -331,14 +338,24 @@ dividend_yield_percent = st.sidebar.number_input(
     step=0.25
 )
 
-current_volatility = current_volatility_percent / 100
-risk_free_rate = risk_free_rate_percent / 100
-dividend_yield = dividend_yield_percent / 100
+current_volatility = (
+    current_volatility_percent / 100
+)
+
+risk_free_rate = (
+    risk_free_rate_percent / 100
+)
+
+dividend_yield = (
+    dividend_yield_percent / 100
+)
 
 
 # Limites de risque
 
-st.sidebar.header("Limites de risque")
+st.sidebar.header(
+    "Limites de risque"
+)
 
 delta_limit = st.sidebar.number_input(
     "Limite de delta",
@@ -385,7 +402,9 @@ z_score_limit = st.sidebar.number_input(
 
 # Scénario personnalisé
 
-st.sidebar.header("Scénario personnalisé")
+st.sidebar.header(
+    "Scénario personnalisé"
+)
 
 custom_spot_change_percent = st.sidebar.number_input(
     "Choc du spot en %",
@@ -405,10 +424,14 @@ custom_volatility_change_points = st.sidebar.number_input(
 # Composition du portefeuille
 
 if "portfolio_data" not in st.session_state:
-    st.session_state.portfolio_data = default_portfolio()
+    st.session_state.portfolio_data = (
+        default_portfolio()
+    )
 
 
-st.subheader("Composition du portefeuille")
+st.subheader(
+    "Composition du portefeuille"
+)
 
 st.write(
     "Une quantité positive correspond à une position achetée. "
@@ -423,10 +446,14 @@ st.caption(
 if st.button(
     "Réinitialiser le portefeuille"
 ):
-    st.session_state.portfolio_data = default_portfolio()
+    st.session_state.portfolio_data = (
+        default_portfolio()
+    )
 
     if "portfolio_editor" in st.session_state:
-        del st.session_state["portfolio_editor"]
+        del st.session_state[
+            "portfolio_editor"
+        ]
 
     st.rerun()
 
@@ -440,7 +467,10 @@ edited_portfolio = st.data_editor(
     column_config={
         "Instrument": st.column_config.SelectboxColumn(
             "Instrument",
-            options=["Option", "Action"],
+            options=[
+                "Option",
+                "Action"
+            ],
             required=True
         ),
         "Nom": st.column_config.TextColumn(
@@ -448,7 +478,10 @@ edited_portfolio = st.data_editor(
         ),
         "Type option": st.column_config.SelectboxColumn(
             "Type d'option",
-            options=["call", "put"]
+            options=[
+                "call",
+                "put"
+            ]
         ),
         "Quantité": st.column_config.NumberColumn(
             "Quantité",
@@ -479,7 +512,9 @@ edited_portfolio = st.data_editor(
     }
 )
 
-st.session_state.portfolio_data = edited_portfolio
+st.session_state.portfolio_data = (
+    edited_portfolio
+)
 
 
 analyse_button = st.button(
@@ -501,7 +536,9 @@ if analyse_button:
         )
 
     except ValueError as error:
-        st.error(str(error))
+        st.error(
+            str(error)
+        )
         st.stop()
 
 
@@ -515,7 +552,9 @@ if analyse_button:
         file_path="data/risk_history.csv"
     )
 
-    history = history_manager.load_snapshots()
+    history = (
+        history_manager.load_snapshots()
+    )
 
     previous_snapshot = (
         history[-1]
@@ -542,15 +581,22 @@ if analyse_button:
         previous=previous_snapshot
     )
 
-    greeks = portfolio.total_greeks()
+    greeks = (
+        portfolio.total_greeks()
+    )
 
 
     # Résumé général
 
     st.divider()
-    st.subheader("Résumé du portefeuille")
 
-    column_1, column_2, column_3, column_4 = st.columns(4)
+    st.subheader(
+        "Résumé du portefeuille"
+    )
+
+    column_1, column_2, column_3, column_4 = (
+        st.columns(4)
+    )
 
     column_1.metric(
         "Valeur du portefeuille",
@@ -575,9 +621,13 @@ if analyse_button:
 
     # Greeks
 
-    st.subheader("Greeks du portefeuille")
+    st.subheader(
+        "Greeks du portefeuille"
+    )
 
-    greek_1, greek_2, greek_3 = st.columns(3)
+    greek_1, greek_2, greek_3 = (
+        st.columns(3)
+    )
 
     greek_1.metric(
         "Delta",
@@ -594,7 +644,9 @@ if analyse_button:
         f"{greeks['vega']:.4f}"
     )
 
-    greek_4, greek_5, greek_6 = st.columns(3)
+    greek_4, greek_5, greek_6 = (
+        st.columns(3)
+    )
 
     greek_4.metric(
         "Theta journalier",
@@ -612,15 +664,20 @@ if analyse_button:
     )
 
 
-    # Positions
+    # Positions analysées
 
-    st.subheader("Positions analysées")
+    st.subheader(
+        "Positions analysées"
+    )
 
     positions_summary = []
 
     for position in portfolio.positions:
 
-        if hasattr(position, "contract"):
+        if hasattr(
+            position,
+            "contract"
+        ):
             positions_summary.append(
                 {
                     "Nom": position.name,
@@ -654,24 +711,36 @@ if analyse_button:
             )
 
     st.dataframe(
-        pd.DataFrame(positions_summary),
+        pd.DataFrame(
+            positions_summary
+        ),
         hide_index=True,
         width="stretch",
         column_config={
-            "Valeur": st.column_config.NumberColumn(
-                format="%.2f"
+            "Valeur": (
+                st.column_config.NumberColumn(
+                    format="%.2f"
+                )
             ),
-            "Strike": st.column_config.NumberColumn(
-                format="%.2f"
+            "Strike": (
+                st.column_config.NumberColumn(
+                    format="%.2f"
+                )
             ),
-            "Maturité": st.column_config.NumberColumn(
-                format="%.3f"
+            "Maturité": (
+                st.column_config.NumberColumn(
+                    format="%.3f"
+                )
             ),
-            "Multiplicateur": st.column_config.NumberColumn(
-                format="%d"
+            "Multiplicateur": (
+                st.column_config.NumberColumn(
+                    format="%d"
+                )
             ),
-            "Exposition": st.column_config.NumberColumn(
-                format="%d"
+            "Exposition": (
+                st.column_config.NumberColumn(
+                    format="%d"
+                )
             )
         }
     )
@@ -680,10 +749,15 @@ if analyse_button:
     # Stress tests
 
     st.divider()
-    st.subheader("Stress tests")
 
-    scenario_results = run_standard_scenarios(
-        portfolio
+    st.subheader(
+        "Stress tests"
+    )
+
+    scenario_results = (
+        run_standard_scenarios(
+            portfolio
+        )
     )
 
     custom_result = run_scenario(
@@ -700,7 +774,6 @@ if analyse_button:
     scenario_results.append(
         custom_result
     )
-
 
     scenario_table = pd.DataFrame(
         [
@@ -725,15 +798,21 @@ if analyse_button:
 
     best_scenario = max(
         scenario_results,
-        key=lambda result: result.profit_and_loss
+        key=lambda result: (
+            result.profit_and_loss
+        )
     )
 
     worst_scenario = min(
         scenario_results,
-        key=lambda result: result.profit_and_loss
+        key=lambda result: (
+            result.profit_and_loss
+        )
     )
 
-    best_column, worst_column = st.columns(2)
+    best_column, worst_column = (
+        st.columns(2)
+    )
 
     best_column.metric(
         "Meilleur scénario",
@@ -747,7 +826,6 @@ if analyse_button:
         f"{worst_scenario.profit_and_loss:+,.2f}"
     )
 
-
     stress_chart = create_stress_chart(
         scenario_results
     )
@@ -756,7 +834,6 @@ if analyse_button:
         stress_chart,
         width="stretch"
     )
-
 
     with st.expander(
         "Voir le détail complet des stress tests"
@@ -800,10 +877,144 @@ if analyse_button:
         )
 
 
-    # Alertes
+    # Matrice Spot × Volatilité
 
     st.divider()
-    st.subheader("Alertes quantitatives")
+
+    st.subheader(
+        "Matrice de risque"
+    )
+
+    st.write(
+        "Cette matrice montre le profit ou la perte du portefeuille "
+        "pour plusieurs combinaisons de chocs de spot et de volatilité."
+    )
+
+    spot_changes = [
+        -0.10,
+        -0.05,
+        0.00,
+        0.05,
+        0.10
+    ]
+
+    volatility_changes = [
+        -0.10,
+        -0.05,
+        0.00,
+        0.05,
+        0.10
+    ]
+
+    surface_points = calculate_risk_surface(
+        portfolio=portfolio,
+        spot_changes=spot_changes,
+        volatility_changes=volatility_changes
+    )
+
+    surface_data = surface_to_dataframe(
+        surface_points
+    )
+
+    risk_matrix = surface_data.pivot(
+        index="Variation volatilité",
+        columns="Variation spot",
+        values="Profit / Perte"
+    )
+
+    risk_matrix = risk_matrix.sort_index(
+        ascending=False
+    )
+
+    risk_matrix.columns = [
+        f"Spot {value:+.0%}"
+        for value in risk_matrix.columns
+    ]
+
+    risk_matrix.index = [
+        f"Vol {value:+.0%}"
+        for value in risk_matrix.index
+    ]
+
+    styled_matrix = (
+        risk_matrix.style
+        .background_gradient(
+            cmap="RdYlGn",
+            axis=None
+        )
+        .format(
+            "{:+,.0f}"
+        )
+        .set_properties(
+            **{
+                "font-weight": "bold",
+                "text-align": "center"
+            }
+        )
+    )
+
+    st.dataframe(
+        styled_matrix,
+        width="stretch",
+        height=260
+    )
+
+    st.caption(
+        "Vert : gain pour le portefeuille — "
+        "Rouge : perte pour le portefeuille — "
+        "Jaune : résultat proche de zéro."
+    )
+
+    worst_surface_point = surface_data.loc[
+        surface_data[
+            "Profit / Perte"
+        ].idxmin()
+    ]
+
+    best_surface_point = surface_data.loc[
+        surface_data[
+            "Profit / Perte"
+        ].idxmax()
+    ]
+
+    surface_column_1, surface_column_2 = (
+        st.columns(2)
+    )
+
+    surface_column_1.metric(
+        "Zone la plus favorable",
+        (
+            f"Spot "
+            f"{best_surface_point['Variation spot']:+.0%}, "
+            f"Vol "
+            f"{best_surface_point['Variation volatilité']:+.0%}"
+        ),
+        (
+            f"{best_surface_point['Profit / Perte']:+,.2f}"
+        )
+    )
+
+    surface_column_2.metric(
+        "Zone la plus risquée",
+        (
+            f"Spot "
+            f"{worst_surface_point['Variation spot']:+.0%}, "
+            f"Vol "
+            f"{worst_surface_point['Variation volatilité']:+.0%}"
+        ),
+        (
+            f"{worst_surface_point['Profit / Perte']:+,.2f}"
+        )
+    )
+
+
+    # Alertes quantitatives
+
+    st.divider()
+
+    st.subheader(
+        "Alertes quantitatives"
+    )
 
     if not alerts:
         st.success(
@@ -818,7 +1029,8 @@ if analyse_button:
         for alert in alerts:
 
             alert_text = (
-                f"**{alert.name}** — {alert.message}\n\n"
+                f"**{alert.name}** — "
+                f"{alert.message}\n\n"
                 f"Valeur actuelle : "
                 f"`{alert.current_value:.6f}`"
             )
@@ -831,32 +1043,44 @@ if analyse_button:
 
             if alert.z_score is not None:
                 alert_text += (
-                    f"\n\nZ-score : `{alert.z_score:.2f}`"
+                    f"\n\nZ-score : "
+                    f"`{alert.z_score:.2f}`"
                 )
 
             if alert.severity == "CRITIQUE":
-                st.error(alert_text)
+                st.error(
+                    alert_text
+                )
 
             elif alert.severity == "ÉLEVÉE":
-                st.warning(alert_text)
+                st.warning(
+                    alert_text
+                )
 
             else:
-                st.info(alert_text)
+                st.info(
+                    alert_text
+                )
 
 
     # Analyse du LLM
 
     st.divider()
-    st.subheader("Analyse du LLM")
+
+    st.subheader(
+        "Analyse du LLM"
+    )
 
     if alerts:
 
         with st.spinner(
             "ARIA génère l'explication..."
         ):
-            llm_analysis = generate_llm_analysis(
-                snapshot=current_snapshot,
-                alerts=alerts
+            llm_analysis = (
+                generate_llm_analysis(
+                    snapshot=current_snapshot,
+                    alerts=alerts
+                )
             )
 
         st.markdown(
