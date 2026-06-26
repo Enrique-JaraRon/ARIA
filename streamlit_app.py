@@ -5,6 +5,7 @@ ARIA - Application Streamlit
 
 import pandas as pd
 import streamlit as st
+from scenario_analysis import run_standard_scenarios
 
 from pricing_BS import OptionContract
 from portfolio import Portfolio
@@ -447,6 +448,78 @@ if analyse_button:
         width="stretch"
     )
 
+    st.subheader("Stress tests")
+
+    scenario_results = run_standard_scenarios(
+        portfolio
+    )
+
+    scenario_table = pd.DataFrame(
+        [
+            {
+                "Scénario": result.name,
+                "Variation spot": (
+                    f"{result.spot_change_percent:.1%}"
+                ),
+                "Variation volatilité": (
+                    f"{result.volatility_change_points:+.1%}"
+                ),
+                "Valeur initiale": result.initial_value,
+                "Valeur stressée": result.stressed_value,
+                "Profit / Perte": result.profit_and_loss,
+                "Delta stressé": result.stressed_delta,
+                "Gamma stressé": result.stressed_gamma,
+                "Vega stressé": result.stressed_vega
+            }
+            for result in scenario_results
+        ]
+    )
+
+    st.dataframe(
+        scenario_table,
+        hide_index=True,
+        width="stretch",
+        column_config={
+            "Valeur initiale": st.column_config.NumberColumn(
+                format="%.2f"
+            ),
+            "Valeur stressée": st.column_config.NumberColumn(
+                format="%.2f"
+            ),
+            "Profit / Perte": st.column_config.NumberColumn(
+                format="%.2f"
+            ),
+            "Delta stressé": st.column_config.NumberColumn(
+                format="%.4f"
+            ),
+            "Gamma stressé": st.column_config.NumberColumn(
+                format="%.4f"
+            ),
+            "Vega stressé": st.column_config.NumberColumn(
+                format="%.4f"
+            )
+        }
+    )
+
+    st.write("Profit ou perte par scénario")
+
+    chart_data = pd.DataFrame(
+        {
+            "Scénario": [
+                result.name
+                for result in scenario_results
+            ],
+            "Profit / Perte": [
+                result.profit_and_loss
+                for result in scenario_results
+            ]
+        }
+    ).set_index("Scénario")
+
+    st.bar_chart(
+        chart_data,
+        width="stretch"
+    )
 
     st.subheader("Alertes quantitatives")
 
