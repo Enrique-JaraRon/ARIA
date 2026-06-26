@@ -4,7 +4,6 @@ ARIA - Gestion d'un portefeuille d'options
 """
 
 from dataclasses import dataclass, field
-from typing import Literal
 
 from pricing_BS import OptionContract, bs_price, bs_greeks
 
@@ -15,31 +14,65 @@ class OptionPosition:
 
     contract: OptionContract
     quantity: int
+    multiplier: int = 1
     name: str = ""
+
+    def __post_init__(self) -> None:
+        """Vérifie que la position est valide."""
+
+        if self.quantity == 0:
+            raise ValueError(
+                "La quantité ne peut pas être égale à zéro."
+            )
+
+        if self.multiplier <= 0:
+            raise ValueError(
+                "Le multiplicateur doit être strictement positif."
+            )
 
     def market_value(self) -> float:
         """
         Calcule la valeur totale de la position.
 
-        Une quantité positive représente une position achetée.
-        Une quantité négative représente une position vendue.
+        Valeur =
+        prix d'une option × quantité × multiplicateur.
         """
 
-        return bs_price(self.contract) * self.quantity
+        option_price = bs_price(
+            self.contract
+        )
+
+        return (
+            option_price
+            * self.quantity
+            * self.multiplier
+        )
 
     def total_greeks(self) -> dict[str, float]:
-        """Calcule les Greeks de toute la position."""
+        """
+        Calcule les Greeks de toute la position.
 
-        greeks = bs_greeks(self.contract)
+        Chaque Greek est multiplié par la quantité
+        et par le multiplicateur du contrat.
+        """
+
+        greeks = bs_greeks(
+            self.contract
+        )
+
+        position_size = (
+            self.quantity
+            * self.multiplier
+        )
 
         return {
-            "delta": greeks["delta"] * self.quantity,
-            "gamma": greeks["gamma"] * self.quantity,
-            "theta": greeks["theta"] * self.quantity,
-            "vega": greeks["vega"] * self.quantity,
-            "rho": greeks["rho"] * self.quantity,
-            "vanna": greeks["vanna"] * self.quantity,
-            "volga": greeks["volga"] * self.quantity,
+            "delta": greeks["delta"] * position_size,
+            "gamma": greeks["gamma"] * position_size,
+            "theta": greeks["theta"] * position_size,
+            "vega": greeks["vega"] * position_size,
+            "rho": greeks["rho"] * position_size,
+            "vanna": greeks["vanna"] * position_size,
+            "volga": greeks["volga"] * position_size,
         }
 
 
@@ -52,15 +85,25 @@ class StockPosition:
     name: str = "Sous-jacent"
 
     def __post_init__(self) -> None:
+        """Vérifie que la position est valide."""
+
         if self.spot <= 0:
             raise ValueError(
                 "Le prix du sous-jacent doit être strictement positif."
             )
 
+        if self.quantity == 0:
+            raise ValueError(
+                "La quantité ne peut pas être égale à zéro."
+            )
+
     def market_value(self) -> float:
         """Calcule la valeur totale de la position en actions."""
 
-        return self.spot * self.quantity
+        return (
+            self.spot
+            * self.quantity
+        )
 
     def total_greeks(self) -> dict[str, float]:
         """
@@ -89,28 +132,34 @@ class Portfolio:
     """Regroupe plusieurs positions financières."""
 
     name: str = "Portefeuille ARIA"
-    positions: list[Position] = field(default_factory=list)
+    positions: list[Position] = field(
+        default_factory=list
+    )
 
     def add_option(
         self,
         contract: OptionContract,
         quantity: int,
-        name: str = ""
+        name: str = "",
+        multiplier: int = 1
     ) -> None:
-        """Ajoute une position sur option."""
+        """
+        Ajoute une position sur option.
 
-        if quantity == 0:
-            raise ValueError(
-                "La quantité ne peut pas être égale à zéro."
-            )
+        Le multiplicateur vaut 1 par défaut
+        pour conserver la compatibilité avec l'ancien code.
+        """
 
         position = OptionPosition(
             contract=contract,
             quantity=quantity,
+            multiplier=multiplier,
             name=name
         )
 
-        self.positions.append(position)
+        self.positions.append(
+            position
+        )
 
     def add_stock(
         self,
@@ -120,20 +169,20 @@ class Portfolio:
     ) -> None:
         """Ajoute une position sur le sous-jacent."""
 
-        if quantity == 0:
-            raise ValueError(
-                "La quantité ne peut pas être égale à zéro."
-            )
-
         position = StockPosition(
             spot=spot,
             quantity=quantity,
             name=name
         )
 
-        self.positions.append(position)
+        self.positions.append(
+            position
+        )
 
-    def remove_position(self, index: int) -> None:
+    def remove_position(
+        self,
+        index: int
+    ) -> None:
         """Supprime une position grâce à son numéro."""
 
         if index < 0 or index >= len(self.positions):
@@ -141,7 +190,9 @@ class Portfolio:
                 "Le numéro de position n'existe pas."
             )
 
-        self.positions.pop(index)
+        self.positions.pop(
+            index
+        )
 
     def total_market_value(self) -> float:
         """Calcule la valeur totale du portefeuille."""
@@ -165,24 +216,38 @@ class Portfolio:
         }
 
         for position in self.positions:
-            position_greeks = position.total_greeks()
+            position_greeks = (
+                position.total_greeks()
+            )
 
             for greek in totals:
-                totals[greek] += position_greeks[greek]
+                totals[greek] += (
+                    position_greeks[greek]
+                )
 
         return totals
 
     def summary(self) -> None:
         """Affiche un résumé lisible du portefeuille."""
 
-        print(f"\n{self.name}")
-        print(f"Nombre de positions : {len(self.positions)}")
+        print(
+            f"\n{self.name}"
+        )
+
+        print(
+            f"Nombre de positions : "
+            f"{len(self.positions)}"
+        )
 
         if not self.positions:
-            print("Le portefeuille est vide.")
+            print(
+                "Le portefeuille est vide."
+            )
             return
 
-        print("\nPositions")
+        print(
+            "\nPositions"
+        )
 
         for index, position in enumerate(
             self.positions,
@@ -194,16 +259,21 @@ class Portfolio:
                 else f"Position {index}"
             )
 
-            if isinstance(position, OptionPosition):
+            if isinstance(
+                position,
+                OptionPosition
+            ):
                 contract = position.contract
 
                 print(
                     f"{index}. {position_name} | "
-                    f"{position.quantity:+d} "
+                    f"{position.quantity:+d} contrat(s) "
                     f"{contract.option_type.upper()} | "
+                    f"Multiplicateur {position.multiplier} | "
                     f"Strike {contract.K} | "
                     f"Maturité {contract.T} an | "
-                    f"Valeur {position.market_value():.2f}"
+                    f"Valeur "
+                    f"{position.market_value():.2f}"
                 )
 
             else:
@@ -211,22 +281,51 @@ class Portfolio:
                     f"{index}. {position_name} | "
                     f"{position.quantity:+d} actions | "
                     f"Spot {position.spot} | "
-                    f"Valeur {position.market_value():.2f}"
+                    f"Valeur "
+                    f"{position.market_value():.2f}"
                 )
 
         totals = self.total_greeks()
 
-        print("\nValeur totale")
-        print(f"{self.total_market_value():.2f}")
+        print(
+            "\nValeur totale"
+        )
 
-        print("\nGreeks du portefeuille")
-        print(f"Delta : {totals['delta']:.6f}")
-        print(f"Gamma : {totals['gamma']:.6f}")
-        print(f"Theta : {totals['theta']:.6f}")
-        print(f"Vega : {totals['vega']:.6f}")
-        print(f"Rho : {totals['rho']:.6f}")
-        print(f"Vanna : {totals['vanna']:.6f}")
-        print(f"Volga : {totals['volga']:.6f}")
+        print(
+            f"{self.total_market_value():.2f}"
+        )
+
+        print(
+            "\nGreeks du portefeuille"
+        )
+
+        print(
+            f"Delta : {totals['delta']:.6f}"
+        )
+
+        print(
+            f"Gamma : {totals['gamma']:.6f}"
+        )
+
+        print(
+            f"Theta : {totals['theta']:.6f}"
+        )
+
+        print(
+            f"Vega : {totals['vega']:.6f}"
+        )
+
+        print(
+            f"Rho : {totals['rho']:.6f}"
+        )
+
+        print(
+            f"Vanna : {totals['vanna']:.6f}"
+        )
+
+        print(
+            f"Volga : {totals['volga']:.6f}"
+        )
 
 
 if __name__ == "__main__":
@@ -257,18 +356,20 @@ if __name__ == "__main__":
     portfolio.add_option(
         contract=call,
         quantity=10,
+        multiplier=100,
         name="Calls ATM achetés"
     )
 
     portfolio.add_option(
         contract=put,
         quantity=-5,
+        multiplier=100,
         name="Puts vendus"
     )
 
     portfolio.add_stock(
         spot=500,
-        quantity=-3,
+        quantity=-300,
         name="Couverture en SPY"
     )
 
