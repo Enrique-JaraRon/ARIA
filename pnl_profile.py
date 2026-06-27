@@ -100,6 +100,67 @@ def pnl_profile_to_dataframe(
     )
 
 
+def find_breakeven_spots(
+    pnl_data: pd.DataFrame
+) -> list[float]:
+    """
+    Trouve les spots où le P&L traverse zéro.
+
+    La méthode utilise une interpolation linéaire entre deux points.
+    """
+
+    breakeven_spots = []
+
+    sorted_data = pnl_data.sort_values(
+        "Spot stressé"
+    ).reset_index(
+        drop=True
+    )
+
+    for index in range(
+        len(sorted_data) - 1
+    ):
+
+        spot_1 = sorted_data.loc[
+            index,
+            "Spot stressé"
+        ]
+
+        spot_2 = sorted_data.loc[
+            index + 1,
+            "Spot stressé"
+        ]
+
+        pnl_1 = sorted_data.loc[
+            index,
+            "Profit / Perte"
+        ]
+
+        pnl_2 = sorted_data.loc[
+            index + 1,
+            "Profit / Perte"
+        ]
+
+        if pnl_1 == 0:
+            breakeven_spots.append(
+                spot_1
+            )
+
+        elif pnl_1 * pnl_2 < 0:
+
+            breakeven_spot = spot_1 + (
+                (0 - pnl_1)
+                * (spot_2 - spot_1)
+                / (pnl_2 - pnl_1)
+            )
+
+            breakeven_spots.append(
+                breakeven_spot
+            )
+
+    return breakeven_spots
+
+
 if __name__ == "__main__":
     from pricing_BS import OptionContract
 
@@ -136,4 +197,20 @@ if __name__ == "__main__":
         points
     )
 
+    breakevens = find_breakeven_spots(
+        dataframe
+    )
+
     print(dataframe)
+
+    print("\nPoints morts")
+
+    if breakevens:
+        for spot in breakevens:
+            print(
+                f"Spot ≈ {spot:.2f}"
+            )
+    else:
+        print(
+            "Aucun point mort trouvé dans l'intervalle testé."
+        )

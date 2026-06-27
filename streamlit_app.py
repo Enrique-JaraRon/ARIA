@@ -14,7 +14,11 @@ from risk_history import RiskHistory
 from aria_workflow import generate_llm_analysis
 from scenario_analysis import run_scenario, run_standard_scenarios
 from risk_surface import calculate_risk_surface, surface_to_dataframe
-from pnl_profile import calculate_pnl_profile, pnl_profile_to_dataframe
+from pnl_profile import (
+    calculate_pnl_profile,
+    pnl_profile_to_dataframe,
+    find_breakeven_spots
+)
 
 
 st.set_page_config(
@@ -298,7 +302,8 @@ def create_stress_chart(
 
 def create_pnl_profile_chart(
     pnl_data: pd.DataFrame,
-    current_spot: float
+    current_spot: float,
+    breakeven_spots: list[float]
 ) -> alt.Chart:
     """Crée une courbe de P&L selon le niveau du spot."""
 
@@ -429,18 +434,38 @@ def create_pnl_profile_chart(
         x="x:Q"
     )
 
+    breakeven_data = pd.DataFrame(
+        {
+            "x": breakeven_spots
+        }
+    )
+
+    breakeven_lines = alt.Chart(
+        breakeven_data
+    ).mark_rule(
+        color="#F59E0B",
+        strokeDash=[
+            4,
+            4
+        ],
+        strokeWidth=2
+    ).encode(
+        x="x:Q"
+    )
+
     return (
         line
         + points
         + zero_line
         + current_spot_line
+        + breakeven_lines
     ).properties(
         height=420,
         title=alt.TitleParams(
             text="Profil de P&L selon le niveau du spot",
             subtitle=(
-                "La volatilité reste constante. "
-                "La ligne verticale noire indique le spot actuel."
+                "Ligne noire : spot actuel — "
+                "ligne orange : point mort approximatif"
             ),
             fontSize=20,
             subtitleFontSize=13,
@@ -464,8 +489,6 @@ st.write(
     "et lance une analyse complète des risques."
 )
 
-
-# Paramètres du marché
 
 st.sidebar.header(
     "Marché"
@@ -510,8 +533,6 @@ dividend_yield = (
     dividend_yield_percent / 100
 )
 
-
-# Limites de risque
 
 st.sidebar.header(
     "Limites de risque"
@@ -560,8 +581,6 @@ z_score_limit = st.sidebar.number_input(
 )
 
 
-# Scénario personnalisé
-
 st.sidebar.header(
     "Scénario personnalisé"
 )
@@ -580,8 +599,6 @@ custom_volatility_change_points = st.sidebar.number_input(
     help="15 signifie une hausse de volatilité de 15 points."
 )
 
-
-# Composition du portefeuille
 
 if "portfolio_data" not in st.session_state:
     st.session_state.portfolio_data = (
@@ -746,8 +763,6 @@ if analyse_button:
     )
 
 
-    # Résumé général
-
     st.divider()
 
     st.subheader(
@@ -778,8 +793,6 @@ if analyse_button:
         len(portfolio.positions)
     )
 
-
-    # Greeks
 
     st.subheader(
         "Greeks du portefeuille"
@@ -823,8 +836,6 @@ if analyse_button:
         f"{greeks['volga']:.6f}"
     )
 
-
-    # Positions analysées
 
     st.subheader(
         "Positions analysées"
@@ -905,8 +916,6 @@ if analyse_button:
         }
     )
 
-
-    # Stress tests
 
     st.divider()
 
@@ -1037,8 +1046,6 @@ if analyse_button:
         )
 
 
-    # Matrice Spot × Volatilité
-
     st.divider()
 
     st.subheader(
@@ -1168,8 +1175,6 @@ if analyse_button:
     )
 
 
-    # Profil de P&L
-
     st.divider()
 
     st.subheader(
@@ -1194,9 +1199,14 @@ if analyse_button:
         pnl_points
     )
 
+    breakeven_spots = find_breakeven_spots(
+        pnl_data
+    )
+
     pnl_chart = create_pnl_profile_chart(
         pnl_data=pnl_data,
-        current_spot=current_spot
+        current_spot=current_spot,
+        breakeven_spots=breakeven_spots
     )
 
     st.altair_chart(
@@ -1216,8 +1226,8 @@ if analyse_button:
         ].idxmax()
     ]
 
-    pnl_column_1, pnl_column_2 = (
-        st.columns(2)
+    pnl_column_1, pnl_column_2, pnl_column_3 = (
+        st.columns(3)
     )
 
     pnl_column_1.metric(
@@ -1232,8 +1242,19 @@ if analyse_button:
         f"{worst_pnl_point['Profit / Perte']:+,.2f}"
     )
 
+    if breakeven_spots:
+        breakeven_text = ", ".join(
+            f"{spot:,.2f}"
+            for spot in breakeven_spots
+        )
+    else:
+        breakeven_text = "Aucun dans l'intervalle"
 
-    # Alertes quantitatives
+    pnl_column_3.metric(
+        "Point mort estimé",
+        breakeven_text
+    )
+
 
     st.divider()
 
@@ -1287,8 +1308,6 @@ if analyse_button:
                     alert_text
                 )
 
-
-    # Analyse du LLM
 
     st.divider()
 
