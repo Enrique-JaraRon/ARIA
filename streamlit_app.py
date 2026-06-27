@@ -14,6 +14,7 @@ from risk_history import RiskHistory
 from aria_workflow import generate_llm_analysis
 from scenario_analysis import run_scenario, run_standard_scenarios
 from risk_surface import calculate_risk_surface, surface_to_dataframe
+from pnl_profile import calculate_pnl_profile, pnl_profile_to_dataframe
 
 
 st.set_page_config(
@@ -177,7 +178,7 @@ def create_stress_chart(
             for result in scenario_results
         ]
     )
-    
+
     bars = alt.Chart(
         chart_data
     ).mark_bar(
@@ -281,6 +282,165 @@ def create_stress_chart(
             subtitle=(
                 "À droite : gain potentiel — "
                 "À gauche : perte potentielle"
+            ),
+            fontSize=20,
+            subtitleFontSize=13,
+            anchor="start",
+            offset=20
+        )
+    ).configure_view(
+        strokeWidth=0
+    ).configure_axis(
+        labelColor="#374151",
+        titleColor="#374151"
+    )
+
+
+def create_pnl_profile_chart(
+    pnl_data: pd.DataFrame,
+    current_spot: float
+) -> alt.Chart:
+    """Crée une courbe de P&L selon le niveau du spot."""
+
+    chart_data = pnl_data.copy()
+
+    chart_data["Résultat"] = chart_data[
+        "Profit / Perte"
+    ].apply(
+        lambda value: (
+            "Gain"
+            if value >= 0
+            else "Perte"
+        )
+    )
+
+    line = alt.Chart(
+        chart_data
+    ).mark_line(
+        strokeWidth=3,
+        color="#2563EB"
+    ).encode(
+        x=alt.X(
+            "Spot stressé:Q",
+            title="Niveau du spot",
+            axis=alt.Axis(
+                format=",.0f",
+                labelFontSize=12,
+                titleFontSize=13
+            )
+        ),
+        y=alt.Y(
+            "Profit / Perte:Q",
+            title="Profit / Perte",
+            axis=alt.Axis(
+                format=",.0f",
+                labelFontSize=12,
+                titleFontSize=13,
+                grid=True,
+                gridOpacity=0.15
+            )
+        ),
+        tooltip=[
+            alt.Tooltip(
+                "Spot stressé:Q",
+                title="Spot",
+                format=",.2f"
+            ),
+            alt.Tooltip(
+                "Variation spot:Q",
+                title="Variation du spot",
+                format="+.1%"
+            ),
+            alt.Tooltip(
+                "Profit / Perte:Q",
+                title="Profit / Perte",
+                format=",.2f"
+            )
+        ]
+    )
+
+    points = alt.Chart(
+        chart_data
+    ).mark_circle(
+        size=45
+    ).encode(
+        x="Spot stressé:Q",
+        y="Profit / Perte:Q",
+        color=alt.Color(
+            "Résultat:N",
+            scale=alt.Scale(
+                domain=[
+                    "Gain",
+                    "Perte"
+                ],
+                range=[
+                    "#19A974",
+                    "#E05252"
+                ]
+            ),
+            legend=alt.Legend(
+                title=None,
+                orient="top"
+            )
+        ),
+        tooltip=[
+            alt.Tooltip(
+                "Spot stressé:Q",
+                title="Spot",
+                format=",.2f"
+            ),
+            alt.Tooltip(
+                "Profit / Perte:Q",
+                title="Profit / Perte",
+                format=",.2f"
+            )
+        ]
+    )
+
+    zero_line = alt.Chart(
+        pd.DataFrame(
+            {
+                "y": [0]
+            }
+        )
+    ).mark_rule(
+        color="#6B7280",
+        strokeDash=[
+            6,
+            4
+        ],
+        strokeWidth=1.5
+    ).encode(
+        y="y:Q"
+    )
+
+    current_spot_line = alt.Chart(
+        pd.DataFrame(
+            {
+                "x": [
+                    current_spot
+                ]
+            }
+        )
+    ).mark_rule(
+        color="#111827",
+        strokeWidth=2
+    ).encode(
+        x="x:Q"
+    )
+
+    return (
+        line
+        + points
+        + zero_line
+        + current_spot_line
+    ).properties(
+        height=420,
+        title=alt.TitleParams(
+            text="Profil de P&L selon le niveau du spot",
+            subtitle=(
+                "La volatilité reste constante. "
+                "La ligne verticale noire indique le spot actuel."
             ),
             fontSize=20,
             subtitleFontSize=13,
@@ -1005,6 +1165,71 @@ if analyse_button:
         (
             f"{worst_surface_point['Profit / Perte']:+,.2f}"
         )
+    )
+
+
+    # Profil de P&L
+
+    st.divider()
+
+    st.subheader(
+        "Profil de P&L"
+    )
+
+    st.write(
+        "Cette courbe montre comment le portefeuille évolue "
+        "si le sous-jacent baisse ou monte progressivement, "
+        "en gardant la volatilité constante."
+    )
+
+    pnl_points = calculate_pnl_profile(
+        portfolio=portfolio,
+        current_spot=current_spot,
+        minimum_change=-0.30,
+        maximum_change=0.30,
+        number_of_points=61
+    )
+
+    pnl_data = pnl_profile_to_dataframe(
+        pnl_points
+    )
+
+    pnl_chart = create_pnl_profile_chart(
+        pnl_data=pnl_data,
+        current_spot=current_spot
+    )
+
+    st.altair_chart(
+        pnl_chart,
+        width="stretch"
+    )
+
+    worst_pnl_point = pnl_data.loc[
+        pnl_data[
+            "Profit / Perte"
+        ].idxmin()
+    ]
+
+    best_pnl_point = pnl_data.loc[
+        pnl_data[
+            "Profit / Perte"
+        ].idxmax()
+    ]
+
+    pnl_column_1, pnl_column_2 = (
+        st.columns(2)
+    )
+
+    pnl_column_1.metric(
+        "Meilleur spot testé",
+        f"{best_pnl_point['Spot stressé']:,.2f}",
+        f"{best_pnl_point['Profit / Perte']:+,.2f}"
+    )
+
+    pnl_column_2.metric(
+        "Pire spot testé",
+        f"{worst_pnl_point['Spot stressé']:,.2f}",
+        f"{worst_pnl_point['Profit / Perte']:+,.2f}"
     )
 
 
