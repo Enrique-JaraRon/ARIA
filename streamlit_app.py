@@ -23,6 +23,11 @@ from greeks_profile import (
     calculate_greeks_profile,
     greeks_profile_to_dataframe
 )
+from history_analytics import (
+    load_history_dataframe,
+    clean_history_dataframe,
+    get_history_summary
+)
 
 
 st.set_page_config(
@@ -196,24 +201,11 @@ def create_stress_chart(
         y=alt.Y(
             "Scénario:N",
             sort=None,
-            title=None,
-            axis=alt.Axis(
-                labelFontSize=13,
-                labelLimit=250,
-                ticks=False,
-                domain=False
-            )
+            title=None
         ),
         x=alt.X(
             "Profit / Perte:Q",
-            title="Profit / Perte du portefeuille",
-            axis=alt.Axis(
-                format=",.0f",
-                labelFontSize=12,
-                titleFontSize=13,
-                grid=True,
-                gridOpacity=0.15
-            )
+            title="Profit / Perte du portefeuille"
         ),
         color=alt.Color(
             "Résultat:N",
@@ -295,9 +287,6 @@ def create_stress_chart(
         )
     ).configure_view(
         strokeWidth=0
-    ).configure_axis(
-        labelColor="#374151",
-        titleColor="#374151"
     )
 
 
@@ -328,23 +317,11 @@ def create_pnl_profile_chart(
     ).encode(
         x=alt.X(
             "Spot stressé:Q",
-            title="Niveau du spot",
-            axis=alt.Axis(
-                format=",.0f",
-                labelFontSize=12,
-                titleFontSize=13
-            )
+            title="Niveau du spot"
         ),
         y=alt.Y(
             "Profit / Perte:Q",
-            title="Profit / Perte",
-            axis=alt.Axis(
-                format=",.0f",
-                labelFontSize=12,
-                titleFontSize=13,
-                grid=True,
-                gridOpacity=0.15
-            )
+            title="Profit / Perte"
         ),
         tooltip=[
             alt.Tooltip(
@@ -382,19 +359,7 @@ def create_pnl_profile_chart(
                 title=None,
                 orient="top"
             )
-        ),
-        tooltip=[
-            alt.Tooltip(
-                "Spot stressé:Q",
-                title="Spot",
-                format=",.2f"
-            ),
-            alt.Tooltip(
-                "Profit / Perte:Q",
-                title="Profit / Perte",
-                format=",.2f"
-            )
-        ]
+        )
     )
 
     zero_line = alt.Chart(
@@ -405,10 +370,7 @@ def create_pnl_profile_chart(
         )
     ).mark_rule(
         color="#6B7280",
-        strokeDash=[
-            6,
-            4
-        ],
+        strokeDash=[6, 4],
         strokeWidth=1.5
     ).encode(
         y="y:Q"
@@ -417,9 +379,7 @@ def create_pnl_profile_chart(
     current_spot_line = alt.Chart(
         pd.DataFrame(
             {
-                "x": [
-                    current_spot
-                ]
+                "x": [current_spot]
             }
         )
     ).mark_rule(
@@ -429,20 +389,15 @@ def create_pnl_profile_chart(
         x="x:Q"
     )
 
-    breakeven_data = pd.DataFrame(
-        {
-            "x": breakeven_spots
-        }
-    )
-
     breakeven_lines = alt.Chart(
-        breakeven_data
+        pd.DataFrame(
+            {
+                "x": breakeven_spots
+            }
+        )
     ).mark_rule(
         color="#F59E0B",
-        strokeDash=[
-            4,
-            4
-        ],
+        strokeDash=[4, 4],
         strokeWidth=2
     ).encode(
         x="x:Q"
@@ -466,9 +421,6 @@ def create_pnl_profile_chart(
         )
     ).configure_view(
         strokeWidth=0
-    ).configure_axis(
-        labelColor="#374151",
-        titleColor="#374151"
     )
 
 
@@ -504,23 +456,11 @@ def create_greeks_profile_chart(
     ).encode(
         x=alt.X(
             "Spot stressé:Q",
-            title="Niveau du spot",
-            axis=alt.Axis(
-                format=",.0f",
-                labelFontSize=12,
-                titleFontSize=13
-            )
+            title="Niveau du spot"
         ),
         y=alt.Y(
             "Valeur:Q",
-            title="Valeur du Greek",
-            axis=alt.Axis(
-                format=",.2f",
-                labelFontSize=12,
-                titleFontSize=13,
-                grid=True,
-                gridOpacity=0.15
-            )
+            title="Valeur du Greek"
         ),
         color=alt.Color(
             "Greek:N",
@@ -555,9 +495,7 @@ def create_greeks_profile_chart(
     current_spot_line = alt.Chart(
         pd.DataFrame(
             {
-                "x": [
-                    current_spot
-                ]
+                "x": [current_spot]
             }
         )
     ).mark_rule(
@@ -582,9 +520,80 @@ def create_greeks_profile_chart(
         )
     ).configure_view(
         strokeWidth=0
-    ).configure_axis(
-        labelColor="#374151",
-        titleColor="#374151"
+    )
+
+
+def create_history_chart(
+    history_data: pd.DataFrame,
+    metric: str
+) -> alt.Chart:
+    """Crée une courbe historique pour une métrique donnée."""
+
+    chart_data = history_data.copy()
+
+    line = alt.Chart(
+        chart_data
+    ).mark_line(
+        strokeWidth=3,
+        color="#2563EB"
+    ).encode(
+        x=alt.X(
+            "timestamp:T",
+            title="Date"
+        ),
+        y=alt.Y(
+            f"{metric}:Q",
+            title=metric
+        ),
+        tooltip=[
+            alt.Tooltip(
+                "timestamp:T",
+                title="Date"
+            ),
+            alt.Tooltip(
+                f"{metric}:Q",
+                title=metric,
+                format=",.4f"
+            )
+        ]
+    )
+
+    points = alt.Chart(
+        chart_data
+    ).mark_circle(
+        size=50,
+        color="#2563EB"
+    ).encode(
+        x="timestamp:T",
+        y=f"{metric}:Q",
+        tooltip=[
+            alt.Tooltip(
+                "timestamp:T",
+                title="Date"
+            ),
+            alt.Tooltip(
+                f"{metric}:Q",
+                title=metric,
+                format=",.4f"
+            )
+        ]
+    )
+
+    return (
+        line
+        + points
+    ).properties(
+        height=380,
+        title=alt.TitleParams(
+            text=f"Historique de {metric}",
+            subtitle="Évolution des snapshots sauvegardés par ARIA",
+            fontSize=20,
+            subtitleFontSize=13,
+            anchor="start",
+            offset=20
+        )
+    ).configure_view(
+        strokeWidth=0
     )
 
 
@@ -870,12 +879,29 @@ if analyse_button:
         portfolio.total_greeks()
     )
 
+    history_manager.save_snapshot(
+        current_snapshot
+    )
 
-    overview_tab, stress_tab, profiles_tab, alerts_tab = st.tabs(
+    updated_history = load_history_dataframe(
+        "data/risk_history.csv"
+    )
+
+    updated_history = clean_history_dataframe(
+        updated_history
+    )
+
+    history_summary = get_history_summary(
+        updated_history
+    )
+
+
+    overview_tab, stress_tab, profiles_tab, history_tab, alerts_tab = st.tabs(
         [
             "Vue générale",
             "Stress tests",
             "Profils de risque",
+            "Historique",
             "Alertes & LLM"
         ]
     )
@@ -1004,34 +1030,7 @@ if analyse_button:
                 positions_summary
             ),
             hide_index=True,
-            width="stretch",
-            column_config={
-                "Valeur": (
-                    st.column_config.NumberColumn(
-                        format="%.2f"
-                    )
-                ),
-                "Strike": (
-                    st.column_config.NumberColumn(
-                        format="%.2f"
-                    )
-                ),
-                "Maturité": (
-                    st.column_config.NumberColumn(
-                        format="%.3f"
-                    )
-                ),
-                "Multiplicateur": (
-                    st.column_config.NumberColumn(
-                        format="%d"
-                    )
-                ),
-                "Exposition": (
-                    st.column_config.NumberColumn(
-                        format="%d"
-                    )
-                )
-            }
+            width="stretch"
         )
 
 
@@ -1062,39 +1061,14 @@ if analyse_button:
             custom_result
         )
 
-        scenario_table = pd.DataFrame(
-            [
-                {
-                    "Scénario": result.name,
-                    "Variation spot": (
-                        f"{result.spot_change_percent:+.1%}"
-                    ),
-                    "Variation volatilité": (
-                        f"{result.volatility_change_points:+.1%}"
-                    ),
-                    "Valeur initiale": result.initial_value,
-                    "Valeur stressée": result.stressed_value,
-                    "Profit / Perte": result.profit_and_loss,
-                    "Delta stressé": result.stressed_delta,
-                    "Gamma stressé": result.stressed_gamma,
-                    "Vega stressé": result.stressed_vega
-                }
-                for result in scenario_results
-            ]
-        )
-
         best_scenario = max(
             scenario_results,
-            key=lambda result: (
-                result.profit_and_loss
-            )
+            key=lambda result: result.profit_and_loss
         )
 
         worst_scenario = min(
             scenario_results,
-            key=lambda result: (
-                result.profit_and_loss
-            )
+            key=lambda result: result.profit_and_loss
         )
 
         best_column, worst_column = (
@@ -1122,45 +1096,34 @@ if analyse_button:
             width="stretch"
         )
 
+        scenario_table = pd.DataFrame(
+            [
+                {
+                    "Scénario": result.name,
+                    "Variation spot": (
+                        f"{result.spot_change_percent:+.1%}"
+                    ),
+                    "Variation volatilité": (
+                        f"{result.volatility_change_points:+.1%}"
+                    ),
+                    "Valeur initiale": result.initial_value,
+                    "Valeur stressée": result.stressed_value,
+                    "Profit / Perte": result.profit_and_loss,
+                    "Delta stressé": result.stressed_delta,
+                    "Gamma stressé": result.stressed_gamma,
+                    "Vega stressé": result.stressed_vega
+                }
+                for result in scenario_results
+            ]
+        )
+
         with st.expander(
             "Voir le détail complet des stress tests"
         ):
             st.dataframe(
                 scenario_table,
                 hide_index=True,
-                width="stretch",
-                column_config={
-                    "Valeur initiale": (
-                        st.column_config.NumberColumn(
-                            format="%.2f"
-                        )
-                    ),
-                    "Valeur stressée": (
-                        st.column_config.NumberColumn(
-                            format="%.2f"
-                        )
-                    ),
-                    "Profit / Perte": (
-                        st.column_config.NumberColumn(
-                            format="%.2f"
-                        )
-                    ),
-                    "Delta stressé": (
-                        st.column_config.NumberColumn(
-                            format="%.4f"
-                        )
-                    ),
-                    "Gamma stressé": (
-                        st.column_config.NumberColumn(
-                            format="%.4f"
-                        )
-                    ),
-                    "Vega stressé": (
-                        st.column_config.NumberColumn(
-                            format="%.4f"
-                        )
-                    )
-                }
+                width="stretch"
             )
 
 
@@ -1168,11 +1131,6 @@ if analyse_button:
 
         st.subheader(
             "Matrice de risque"
-        )
-
-        st.write(
-            "Cette matrice montre le profit ou la perte du portefeuille "
-            "pour plusieurs combinaisons de chocs de spot et de volatilité."
         )
 
         spot_changes = [
@@ -1244,65 +1202,11 @@ if analyse_button:
             height=260
         )
 
-        st.caption(
-            "Vert : gain pour le portefeuille — "
-            "Rouge : perte pour le portefeuille — "
-            "Jaune : résultat proche de zéro."
-        )
-
-        worst_surface_point = surface_data.loc[
-            surface_data[
-                "Profit / Perte"
-            ].idxmin()
-        ]
-
-        best_surface_point = surface_data.loc[
-            surface_data[
-                "Profit / Perte"
-            ].idxmax()
-        ]
-
-        surface_column_1, surface_column_2 = (
-            st.columns(2)
-        )
-
-        surface_column_1.metric(
-            "Zone la plus favorable",
-            (
-                f"Spot "
-                f"{best_surface_point['Variation spot']:+.0%}, "
-                f"Vol "
-                f"{best_surface_point['Variation volatilité']:+.0%}"
-            ),
-            (
-                f"{best_surface_point['Profit / Perte']:+,.2f}"
-            )
-        )
-
-        surface_column_2.metric(
-            "Zone la plus risquée",
-            (
-                f"Spot "
-                f"{worst_surface_point['Variation spot']:+.0%}, "
-                f"Vol "
-                f"{worst_surface_point['Variation volatilité']:+.0%}"
-            ),
-            (
-                f"{worst_surface_point['Profit / Perte']:+,.2f}"
-            )
-        )
-
 
     with profiles_tab:
 
         st.subheader(
             "Profil de P&L"
-        )
-
-        st.write(
-            "Cette courbe montre comment le portefeuille évolue "
-            "si le sous-jacent baisse ou monte progressivement, "
-            "en gardant la volatilité constante."
         )
 
         pnl_points = calculate_pnl_profile(
@@ -1332,16 +1236,12 @@ if analyse_button:
             width="stretch"
         )
 
-        worst_pnl_point = pnl_data.loc[
-            pnl_data[
-                "Profit / Perte"
-            ].idxmin()
+        best_pnl_point = pnl_data.loc[
+            pnl_data["Profit / Perte"].idxmax()
         ]
 
-        best_pnl_point = pnl_data.loc[
-            pnl_data[
-                "Profit / Perte"
-            ].idxmax()
+        worst_pnl_point = pnl_data.loc[
+            pnl_data["Profit / Perte"].idxmin()
         ]
 
         pnl_column_1, pnl_column_2, pnl_column_3 = (
@@ -1380,11 +1280,6 @@ if analyse_button:
             "Profil des Greeks"
         )
 
-        st.write(
-            "Cette section montre comment les Greeks du portefeuille "
-            "évoluent quand le sous-jacent baisse ou monte progressivement."
-        )
-
         selected_greeks = st.multiselect(
             "Greeks à afficher",
             options=[
@@ -1403,12 +1298,8 @@ if analyse_button:
             ]
         )
 
-        if not selected_greeks:
-            st.info(
-                "Sélectionne au moins un Greek à afficher."
-            )
+        if selected_greeks:
 
-        else:
             greeks_points = calculate_greeks_profile(
                 portfolio=portfolio,
                 current_spot=current_spot,
@@ -1432,60 +1323,98 @@ if analyse_button:
                 width="stretch"
             )
 
+
+    with history_tab:
+
+        st.subheader(
+            "Historique des snapshots"
+        )
+
+        if updated_history.empty:
+            st.info(
+                "Aucun historique disponible pour le moment."
+            )
+
+        else:
+            hist_col_1, hist_col_2, hist_col_3, hist_col_4 = (
+                st.columns(4)
+            )
+
+            hist_col_1.metric(
+                "Nombre de snapshots",
+                history_summary["number_of_snapshots"]
+            )
+
+            hist_col_2.metric(
+                "Dernière valeur",
+                (
+                    f"{history_summary['latest_portfolio_value']:,.2f}"
+                    if history_summary["latest_portfolio_value"] is not None
+                    else "N/A"
+                )
+            )
+
+            hist_col_3.metric(
+                "Valeur min",
+                (
+                    f"{history_summary['minimum_portfolio_value']:,.2f}"
+                    if history_summary["minimum_portfolio_value"] is not None
+                    else "N/A"
+                )
+            )
+
+            hist_col_4.metric(
+                "Valeur max",
+                (
+                    f"{history_summary['maximum_portfolio_value']:,.2f}"
+                    if history_summary["maximum_portfolio_value"] is not None
+                    else "N/A"
+                )
+            )
+
+            available_metrics = [
+                column
+                for column in [
+                    "portfolio_value",
+                    "spot",
+                    "implied_volatility",
+                    "delta",
+                    "gamma",
+                    "theta",
+                    "vega",
+                    "rho",
+                    "vanna",
+                    "volga"
+                ]
+                if column in updated_history.columns
+            ]
+
+            selected_metric = st.selectbox(
+                "Métrique à afficher",
+                available_metrics
+            )
+
+            if (
+                "timestamp" in updated_history.columns
+                and selected_metric in updated_history.columns
+            ):
+                history_chart = create_history_chart(
+                    history_data=updated_history,
+                    metric=selected_metric
+                )
+
+                st.altair_chart(
+                    history_chart,
+                    width="stretch"
+                )
+
             with st.expander(
-                "Voir le détail complet du profil des Greeks"
+                "Voir l'historique complet"
             ):
                 st.dataframe(
-                    greeks_data,
+                    updated_history,
                     hide_index=True,
-                    width="stretch",
-                    column_config={
-                        "Variation spot": (
-                            st.column_config.NumberColumn(
-                                format="+.1%"
-                            )
-                        ),
-                        "Spot stressé": (
-                            st.column_config.NumberColumn(
-                                format="%.2f"
-                            )
-                        ),
-                        "Delta": (
-                            st.column_config.NumberColumn(
-                                format="%.4f"
-                            )
-                        ),
-                        "Gamma": (
-                            st.column_config.NumberColumn(
-                                format="%.6f"
-                            )
-                        ),
-                        "Theta": (
-                            st.column_config.NumberColumn(
-                                format="%.4f"
-                            )
-                        ),
-                        "Vega": (
-                            st.column_config.NumberColumn(
-                                format="%.4f"
-                            )
-                        ),
-                        "Rho": (
-                            st.column_config.NumberColumn(
-                                format="%.4f"
-                            )
-                        ),
-                        "Vanna": (
-                            st.column_config.NumberColumn(
-                                format="%.6f"
-                            )
-                        ),
-                        "Volga": (
-                            st.column_config.NumberColumn(
-                                format="%.6f"
-                            )
-                        )
-                    }
+                    width="stretch"
                 )
 
 
@@ -1553,11 +1482,9 @@ if analyse_button:
             with st.spinner(
                 "ARIA génère l'explication..."
             ):
-                llm_analysis = (
-                    generate_llm_analysis(
-                        snapshot=current_snapshot,
-                        alerts=alerts
-                    )
+                llm_analysis = generate_llm_analysis(
+                    snapshot=current_snapshot,
+                    alerts=alerts
                 )
 
             st.markdown(
@@ -1570,10 +1497,6 @@ if analyse_button:
                 "n'est nécessaire."
             )
 
-
-    history_manager.save_snapshot(
-        current_snapshot
-    )
 
     st.success(
         "Le snapshot actuel a été ajouté à l'historique."
