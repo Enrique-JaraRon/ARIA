@@ -19,6 +19,10 @@ from pnl_profile import (
     pnl_profile_to_dataframe,
     find_breakeven_spots
 )
+from greeks_profile import (
+    calculate_greeks_profile,
+    greeks_profile_to_dataframe
+)
 
 
 st.set_page_config(
@@ -466,6 +470,125 @@ def create_pnl_profile_chart(
             subtitle=(
                 "Ligne noire : spot actuel — "
                 "ligne orange : point mort approximatif"
+            ),
+            fontSize=20,
+            subtitleFontSize=13,
+            anchor="start",
+            offset=20
+        )
+    ).configure_view(
+        strokeWidth=0
+    ).configure_axis(
+        labelColor="#374151",
+        titleColor="#374151"
+    )
+
+
+def create_greeks_profile_chart(
+    greeks_data: pd.DataFrame,
+    current_spot: float,
+    selected_greeks: list[str]
+) -> alt.Chart:
+    """Crée une courbe des Greeks selon le niveau du spot."""
+
+    chart_data = greeks_data[
+        [
+            "Spot stressé",
+            "Variation spot"
+        ]
+        + selected_greeks
+    ].copy()
+
+    long_data = chart_data.melt(
+        id_vars=[
+            "Spot stressé",
+            "Variation spot"
+        ],
+        value_vars=selected_greeks,
+        var_name="Greek",
+        value_name="Valeur"
+    )
+
+    lines = alt.Chart(
+        long_data
+    ).mark_line(
+        strokeWidth=3
+    ).encode(
+        x=alt.X(
+            "Spot stressé:Q",
+            title="Niveau du spot",
+            axis=alt.Axis(
+                format=",.0f",
+                labelFontSize=12,
+                titleFontSize=13
+            )
+        ),
+        y=alt.Y(
+            "Valeur:Q",
+            title="Valeur du Greek",
+            axis=alt.Axis(
+                format=",.2f",
+                labelFontSize=12,
+                titleFontSize=13,
+                grid=True,
+                gridOpacity=0.15
+            )
+        ),
+        color=alt.Color(
+            "Greek:N",
+            legend=alt.Legend(
+                title=None,
+                orient="top"
+            )
+        ),
+        tooltip=[
+            alt.Tooltip(
+                "Greek:N",
+                title="Greek"
+            ),
+            alt.Tooltip(
+                "Spot stressé:Q",
+                title="Spot",
+                format=",.2f"
+            ),
+            alt.Tooltip(
+                "Variation spot:Q",
+                title="Variation du spot",
+                format="+.1%"
+            ),
+            alt.Tooltip(
+                "Valeur:Q",
+                title="Valeur",
+                format=",.4f"
+            )
+        ]
+    )
+
+    current_spot_line = alt.Chart(
+        pd.DataFrame(
+            {
+                "x": [
+                    current_spot
+                ]
+            }
+        )
+    ).mark_rule(
+        color="#111827",
+        strokeWidth=2
+    ).encode(
+        x="x:Q"
+    )
+
+    return (
+        lines
+        + current_spot_line
+    ).properties(
+        height=420,
+        title=alt.TitleParams(
+            text="Profil des Greeks selon le niveau du spot",
+            subtitle=(
+                "La volatilité reste constante. "
+                "La ligne noire indique le spot actuel."
             ),
             fontSize=20,
             subtitleFontSize=13,
@@ -1254,6 +1377,121 @@ if analyse_button:
         "Point mort estimé",
         breakeven_text
     )
+
+
+    st.divider()
+
+    st.subheader(
+        "Profil des Greeks"
+    )
+
+    st.write(
+        "Cette section montre comment les Greeks du portefeuille "
+        "évoluent quand le sous-jacent baisse ou monte progressivement."
+    )
+
+    selected_greeks = st.multiselect(
+        "Greeks à afficher",
+        options=[
+            "Delta",
+            "Gamma",
+            "Theta",
+            "Vega",
+            "Rho",
+            "Vanna",
+            "Volga"
+        ],
+        default=[
+            "Delta",
+            "Gamma",
+            "Vega"
+        ]
+    )
+
+    if not selected_greeks:
+        st.info(
+            "Sélectionne au moins un Greek à afficher."
+        )
+
+    else:
+        greeks_points = calculate_greeks_profile(
+            portfolio=portfolio,
+            current_spot=current_spot,
+            minimum_change=-0.30,
+            maximum_change=0.30,
+            number_of_points=61
+        )
+
+        greeks_data = greeks_profile_to_dataframe(
+            greeks_points
+        )
+
+        greeks_chart = create_greeks_profile_chart(
+            greeks_data=greeks_data,
+            current_spot=current_spot,
+            selected_greeks=selected_greeks
+        )
+
+        st.altair_chart(
+            greeks_chart,
+            width="stretch"
+        )
+
+        with st.expander(
+            "Voir le détail complet du profil des Greeks"
+        ):
+            st.dataframe(
+                greeks_data,
+                hide_index=True,
+                width="stretch",
+                column_config={
+                    "Variation spot": (
+                        st.column_config.NumberColumn(
+                            format="+.1%"
+                        )
+                    ),
+                    "Spot stressé": (
+                        st.column_config.NumberColumn(
+                            format="%.2f"
+                        )
+                    ),
+                    "Delta": (
+                        st.column_config.NumberColumn(
+                            format="%.4f"
+                        )
+                    ),
+                    "Gamma": (
+                        st.column_config.NumberColumn(
+                            format="%.6f"
+                        )
+                    ),
+                    "Theta": (
+                        st.column_config.NumberColumn(
+                            format="%.4f"
+                        )
+                    ),
+                    "Vega": (
+                        st.column_config.NumberColumn(
+                            format="%.4f"
+                        )
+                    ),
+                    "Rho": (
+                        st.column_config.NumberColumn(
+                            format="%.4f"
+                        )
+                    ),
+                    "Vanna": (
+                        st.column_config.NumberColumn(
+                            format="%.6f"
+                        )
+                    ),
+                    "Volga": (
+                        st.column_config.NumberColumn(
+                            format="%.6f"
+                        )
+                    )
+                }
+            )
 
 
     st.divider()
