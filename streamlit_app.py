@@ -177,7 +177,7 @@ def create_stress_chart(
             for result in scenario_results
         ]
     )
-
+    
     bars = alt.Chart(
         chart_data
     ).mark_bar(
