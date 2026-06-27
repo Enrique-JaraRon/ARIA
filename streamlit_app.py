@@ -30,6 +30,7 @@ from history_analytics import (
 )
 from hedging_analysis import calculate_delta_hedge
 from var_analysis import calculate_var_es, parametric_var_estimate
+from risk_score import calculate_risk_score
 
 
 st.set_page_config(
@@ -1068,6 +1069,35 @@ if analyse_button:
         horizon_days=var_horizon_days
     )
 
+    scenario_results = run_standard_scenarios(
+        portfolio
+    )
+
+    custom_result = run_scenario(
+        portfolio=portfolio,
+        name="Scénario personnalisé",
+        spot_change_percent=(
+            custom_spot_change_percent / 100
+        ),
+        volatility_change_points=(
+            custom_volatility_change_points / 100
+        )
+    )
+
+    scenario_results.append(
+        custom_result
+    )
+
+    risk_score_result = calculate_risk_score(
+        portfolio=portfolio,
+        alerts=alerts,
+        var_result=var_result,
+        scenario_results=scenario_results,
+        delta_limit=delta_limit,
+        gamma_limit=gamma_limit,
+        vega_limit=vega_limit
+    )
+
     history_manager.save_snapshot(
         current_snapshot
     )
@@ -1097,6 +1127,60 @@ if analyse_button:
 
 
     with overview_tab:
+
+        st.subheader(
+            "Risk Score ARIA"
+        )
+
+        score_col_1, score_col_2 = (
+            st.columns(
+                [
+                    1,
+                    3
+                ]
+            )
+        )
+
+        score_col_1.metric(
+            "Score de risque",
+            f"{risk_score_result.score}/100",
+            risk_score_result.label
+        )
+
+        with score_col_2:
+            st.progress(
+                risk_score_result.score / 100
+            )
+
+            if risk_score_result.score >= 80:
+                st.error(
+                    risk_score_result.explanation
+                )
+
+            elif risk_score_result.score >= 60:
+                st.warning(
+                    risk_score_result.explanation
+                )
+
+            elif risk_score_result.score >= 30:
+                st.info(
+                    risk_score_result.explanation
+                )
+
+            else:
+                st.success(
+                    risk_score_result.explanation
+                )
+
+        st.write(
+            "**Principaux facteurs de risque :**"
+        )
+
+        for driver in risk_score_result.main_drivers:
+            st.write(
+                f"- {driver}"
+            )
+
 
         st.subheader(
             "Résumé du portefeuille"
@@ -1272,27 +1356,6 @@ if analyse_button:
 
         st.subheader(
             "Stress tests"
-        )
-
-        scenario_results = (
-            run_standard_scenarios(
-                portfolio
-            )
-        )
-
-        custom_result = run_scenario(
-            portfolio=portfolio,
-            name="Scénario personnalisé",
-            spot_change_percent=(
-                custom_spot_change_percent / 100
-            ),
-            volatility_change_points=(
-                custom_volatility_change_points / 100
-            )
-        )
-
-        scenario_results.append(
-            custom_result
         )
 
         best_scenario = max(
