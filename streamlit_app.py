@@ -29,6 +29,7 @@ from history_analytics import (
     get_history_summary
 )
 from hedging_analysis import calculate_delta_hedge
+from var_analysis import calculate_var_es, parametric_var_estimate
 
 
 st.set_page_config(
@@ -624,6 +625,118 @@ def create_history_chart(
     )
 
 
+def create_var_distribution_chart(
+    simulations_data: pd.DataFrame,
+    var_amount: float,
+    expected_shortfall: float
+) -> alt.Chart:
+    """Crée un histogramme des pertes simulées."""
+
+    chart_data = simulations_data.copy()
+
+    histogram = alt.Chart(
+        chart_data
+    ).mark_bar(
+        opacity=0.75
+    ).encode(
+        x=alt.X(
+            "Perte:Q",
+            bin=alt.Bin(
+                maxbins=50
+            ),
+            title="Perte simulée"
+        ),
+        y=alt.Y(
+            "count():Q",
+            title="Nombre de simulations"
+        ),
+        tooltip=[
+            alt.Tooltip(
+                "count():Q",
+                title="Nombre de simulations"
+            )
+        ]
+    )
+
+    var_line = alt.Chart(
+        pd.DataFrame(
+            {
+                "x": [
+                    var_amount
+                ],
+                "Label": [
+                    "VaR"
+                ]
+            }
+        )
+    ).mark_rule(
+        color="#E05252",
+        strokeWidth=3
+    ).encode(
+        x="x:Q",
+        tooltip=[
+            alt.Tooltip(
+                "Label:N"
+            ),
+            alt.Tooltip(
+                "x:Q",
+                title="Montant",
+                format=",.2f"
+            )
+        ]
+    )
+
+    es_line = alt.Chart(
+        pd.DataFrame(
+            {
+                "x": [
+                    expected_shortfall
+                ],
+                "Label": [
+                    "Expected Shortfall"
+                ]
+            }
+        )
+    ).mark_rule(
+        color="#7C3AED",
+        strokeWidth=3,
+        strokeDash=[
+            6,
+            4
+        ]
+    ).encode(
+        x="x:Q",
+        tooltip=[
+            alt.Tooltip(
+                "Label:N"
+            ),
+            alt.Tooltip(
+                "x:Q",
+                title="Montant",
+                format=",.2f"
+            )
+        ]
+    )
+
+    return (
+        histogram
+        + var_line
+        + es_line
+    ).properties(
+        height=380,
+        title=alt.TitleParams(
+            text="Distribution des pertes simulées",
+            subtitle="Ligne rouge : VaR — ligne violette : Expected Shortfall",
+            fontSize=20,
+            subtitleFontSize=13,
+            anchor="start",
+            offset=20
+        )
+    ).configure_view(
+        strokeWidth=0
+    )
+
+
 st.title(
     "ARIA - Adaptive Risk Intelligence Agent"
 )
@@ -741,6 +854,35 @@ custom_volatility_change_points = st.sidebar.number_input(
     value=15.0,
     step=1.0,
     help="15 signifie une hausse de volatilité de 15 points."
+)
+
+
+st.sidebar.header(
+    "VaR / Expected Shortfall"
+)
+
+var_confidence_percent = st.sidebar.selectbox(
+    "Niveau de confiance",
+    options=[
+        95,
+        99
+    ],
+    index=0
+)
+
+var_horizon_days = st.sidebar.number_input(
+    "Horizon en jours",
+    min_value=1,
+    value=1,
+    step=1
+)
+
+var_simulations = st.sidebar.number_input(
+    "Nombre de simulations",
+    min_value=100,
+    max_value=10000,
+    value=1000,
+    step=100
 )
 
 
@@ -909,6 +1051,21 @@ if analyse_button:
     hedge_result = calculate_delta_hedge(
         portfolio=portfolio,
         current_spot=current_spot
+    )
+
+    var_result, var_simulations_data = calculate_var_es(
+        portfolio=portfolio,
+        annual_volatility=current_volatility,
+        confidence_level=var_confidence_percent / 100,
+        horizon_days=var_horizon_days,
+        number_of_simulations=var_simulations
+    )
+
+    parametric_var = parametric_var_estimate(
+        portfolio=portfolio,
+        annual_volatility=current_volatility,
+        confidence_level=var_confidence_percent / 100,
+        horizon_days=var_horizon_days
     )
 
     history_manager.save_snapshot(
@@ -1278,6 +1435,80 @@ if analyse_button:
             width="stretch",
             height=260
         )
+
+
+        st.divider()
+
+        st.subheader(
+            "VaR / Expected Shortfall"
+        )
+
+        var_col_1, var_col_2, var_col_3, var_col_4 = (
+            st.columns(4)
+        )
+
+        var_col_1.metric(
+            f"VaR {var_confidence_percent}%",
+            f"{var_result.var_amount:,.2f}"
+        )
+
+        var_col_2.metric(
+            "Expected Shortfall",
+            f"{var_result.expected_shortfall:,.2f}"
+        )
+
+        var_col_3.metric(
+            "Pire perte simulée",
+            f"{var_result.worst_loss:,.2f}"
+        )
+
+        var_col_4.metric(
+            "VaR paramétrique",
+            f"{parametric_var:,.2f}"
+        )
+
+        st.caption(
+            "La VaR estime une perte maximale sur un horizon donné "
+            "avec un certain niveau de confiance. "
+            "L'Expected Shortfall estime la perte moyenne dans les pires scénarios."
+        )
+
+        var_chart = create_var_distribution_chart(
+            simulations_data=var_simulations_data,
+            var_amount=var_result.var_amount,
+            expected_shortfall=var_result.expected_shortfall
+        )
+
+        st.altair_chart(
+            var_chart,
+            width="stretch"
+        )
+
+        with st.expander(
+            "Voir les simulations VaR"
+        ):
+            st.dataframe(
+                var_simulations_data,
+                hide_index=True,
+                width="stretch",
+                column_config={
+                    "Rendement spot": (
+                        st.column_config.NumberColumn(
+                            format="+.4%"
+                        )
+                    ),
+                    "Profit / Perte": (
+                        st.column_config.NumberColumn(
+                            format="%.2f"
+                        )
+                    ),
+                    "Perte": (
+                        st.column_config.NumberColumn(
+                            format="%.2f"
+                        )
+                    )
+                }
+            )
 
 
     with profiles_tab:
