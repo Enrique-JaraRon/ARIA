@@ -1,5 +1,29 @@
+# Environnements Python
+.venv/
+venv/
+env/
+
+# Fichiers Python temporaires
 __pycache__/
 *.pyc
-.pytest_cache/
+*.pyo
+*.pyd
+
+# Variables d'environnement
 .env
-*.env
+
+# Streamlit
+.streamlit/secrets.toml
+
+# Fichiers système
+.DS_Store
+Thumbs.db
+
+# Cache pytest
+.pytest_cache/
+
+# Données générées
+data/risk_history.csv
+
+# Notebooks éventuels
+.ipynb_checkpoints/
