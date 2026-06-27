@@ -7,8 +7,8 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 
-from pricing_BS import OptionContract
 from portfolio import Portfolio
+from pricing_BS import OptionContract
 from anomaly_detector import AnomalyDetector, create_snapshot
 from risk_history import RiskHistory
 from aria_workflow import generate_llm_analysis
@@ -28,6 +28,7 @@ from history_analytics import (
     clean_history_dataframe,
     get_history_summary
 )
+from hedging_analysis import calculate_delta_hedge
 
 
 st.set_page_config(
@@ -210,8 +211,14 @@ def create_stress_chart(
         color=alt.Color(
             "Résultat:N",
             scale=alt.Scale(
-                domain=["Gain", "Perte"],
-                range=["#19A974", "#E05252"]
+                domain=[
+                    "Gain",
+                    "Perte"
+                ],
+                range=[
+                    "#19A974",
+                    "#E05252"
+                ]
             ),
             legend=alt.Legend(
                 title=None,
@@ -261,7 +268,9 @@ def create_stress_chart(
     zero_line = alt.Chart(
         pd.DataFrame(
             {
-                "x": [0]
+                "x": [
+                    0
+                ]
             }
         )
     ).mark_rule(
@@ -352,8 +361,14 @@ def create_pnl_profile_chart(
         color=alt.Color(
             "Résultat:N",
             scale=alt.Scale(
-                domain=["Gain", "Perte"],
-                range=["#19A974", "#E05252"]
+                domain=[
+                    "Gain",
+                    "Perte"
+                ],
+                range=[
+                    "#19A974",
+                    "#E05252"
+                ]
             ),
             legend=alt.Legend(
                 title=None,
@@ -365,12 +380,17 @@ def create_pnl_profile_chart(
     zero_line = alt.Chart(
         pd.DataFrame(
             {
-                "y": [0]
+                "y": [
+                    0
+                ]
             }
         )
     ).mark_rule(
         color="#6B7280",
-        strokeDash=[6, 4],
+        strokeDash=[
+            6,
+            4
+        ],
         strokeWidth=1.5
     ).encode(
         y="y:Q"
@@ -379,7 +399,9 @@ def create_pnl_profile_chart(
     current_spot_line = alt.Chart(
         pd.DataFrame(
             {
-                "x": [current_spot]
+                "x": [
+                    current_spot
+                ]
             }
         )
     ).mark_rule(
@@ -397,7 +419,10 @@ def create_pnl_profile_chart(
         )
     ).mark_rule(
         color="#F59E0B",
-        strokeDash=[4, 4],
+        strokeDash=[
+            4,
+            4
+        ],
         strokeWidth=2
     ).encode(
         x="x:Q"
@@ -495,7 +520,9 @@ def create_greeks_profile_chart(
     current_spot_line = alt.Chart(
         pd.DataFrame(
             {
-                "x": [current_spot]
+                "x": [
+                    current_spot
+                ]
             }
         )
     ).mark_rule(
@@ -879,6 +906,11 @@ if analyse_button:
         portfolio.total_greeks()
     )
 
+    hedge_result = calculate_delta_hedge(
+        portfolio=portfolio,
+        current_spot=current_spot
+    )
+
     history_manager.save_snapshot(
         current_snapshot
     )
@@ -978,6 +1010,51 @@ if analyse_button:
         greek_6.metric(
             "Volga",
             f"{greeks['volga']:.6f}"
+        )
+
+
+        st.subheader(
+            "Couverture delta indicative"
+        )
+
+        if hedge_result.hedge_quantity > 0:
+            hedge_action = "Acheter"
+        elif hedge_result.hedge_quantity < 0:
+            hedge_action = "Vendre"
+        else:
+            hedge_action = "Ne rien faire"
+
+        hedge_col_1, hedge_col_2, hedge_col_3, hedge_col_4 = (
+            st.columns(4)
+        )
+
+        hedge_col_1.metric(
+            "Delta actuel",
+            f"{hedge_result.current_delta:,.4f}"
+        )
+
+        hedge_col_2.metric(
+            "Action de couverture",
+            hedge_action
+        )
+
+        hedge_col_3.metric(
+            "Quantité sous-jacent",
+            f"{abs(hedge_result.hedge_quantity):,.0f}"
+        )
+
+        hedge_col_4.metric(
+            "Valeur de couverture",
+            f"{hedge_result.hedge_market_value:,.2f}"
+        )
+
+        st.info(
+            hedge_result.explanation
+        )
+
+        st.caption(
+            "Cette couverture est indicative : elle neutralise le delta "
+            "instantané mais ne neutralise pas le gamma, la vega ou les autres risques."
         )
 
 
