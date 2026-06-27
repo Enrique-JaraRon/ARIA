@@ -287,10 +287,7 @@ def create_stress_chart(
         height=360,
         title=alt.TitleParams(
             text="Impact des scénarios sur le portefeuille",
-            subtitle=(
-                "À droite : gain potentiel — "
-                "À gauche : perte potentielle"
-            ),
+            subtitle="À droite : gain potentiel — À gauche : perte potentielle",
             fontSize=20,
             subtitleFontSize=13,
             anchor="start",
@@ -378,14 +375,8 @@ def create_pnl_profile_chart(
         color=alt.Color(
             "Résultat:N",
             scale=alt.Scale(
-                domain=[
-                    "Gain",
-                    "Perte"
-                ],
-                range=[
-                    "#19A974",
-                    "#E05252"
-                ]
+                domain=["Gain", "Perte"],
+                range=["#19A974", "#E05252"]
             ),
             legend=alt.Legend(
                 title=None,
@@ -467,10 +458,7 @@ def create_pnl_profile_chart(
         height=420,
         title=alt.TitleParams(
             text="Profil de P&L selon le niveau du spot",
-            subtitle=(
-                "Ligne noire : spot actuel — "
-                "ligne orange : point mort approximatif"
-            ),
+            subtitle="Ligne noire : spot actuel — ligne orange : point mort approximatif",
             fontSize=20,
             subtitleFontSize=13,
             anchor="start",
@@ -586,10 +574,7 @@ def create_greeks_profile_chart(
         height=420,
         title=alt.TitleParams(
             text="Profil des Greeks selon le niveau du spot",
-            subtitle=(
-                "La volatilité reste constante. "
-                "La ligne noire indique le spot actuel."
-            ),
+            subtitle="La volatilité reste constante. La ligne noire indique le spot actuel.",
             fontSize=20,
             subtitleFontSize=13,
             anchor="start",
@@ -886,535 +871,441 @@ if analyse_button:
     )
 
 
-    st.divider()
-
-    st.subheader(
-        "Résumé du portefeuille"
-    )
-
-    column_1, column_2, column_3, column_4 = (
-        st.columns(4)
-    )
-
-    column_1.metric(
-        "Valeur du portefeuille",
-        f"{portfolio.total_market_value():,.2f}"
-    )
-
-    column_2.metric(
-        "Spot",
-        f"{current_spot:,.2f}"
-    )
-
-    column_3.metric(
-        "Volatilité implicite",
-        f"{current_volatility:.2%}"
-    )
-
-    column_4.metric(
-        "Nombre de positions",
-        len(portfolio.positions)
-    )
-
-
-    st.subheader(
-        "Greeks du portefeuille"
-    )
-
-    greek_1, greek_2, greek_3 = (
-        st.columns(3)
-    )
-
-    greek_1.metric(
-        "Delta",
-        f"{greeks['delta']:.4f}"
-    )
-
-    greek_2.metric(
-        "Gamma",
-        f"{greeks['gamma']:.4f}"
-    )
-
-    greek_3.metric(
-        "Vega",
-        f"{greeks['vega']:.4f}"
-    )
-
-    greek_4, greek_5, greek_6 = (
-        st.columns(3)
-    )
-
-    greek_4.metric(
-        "Theta journalier",
-        f"{greeks['theta']:.4f}"
-    )
-
-    greek_5.metric(
-        "Rho",
-        f"{greeks['rho']:.4f}"
-    )
-
-    greek_6.metric(
-        "Volga",
-        f"{greeks['volga']:.6f}"
-    )
-
-
-    st.subheader(
-        "Positions analysées"
-    )
-
-    positions_summary = []
-
-    for position in portfolio.positions:
-
-        if hasattr(
-            position,
-            "contract"
-        ):
-            positions_summary.append(
-                {
-                    "Nom": position.name,
-                    "Instrument": (
-                        position.contract.option_type.upper()
-                    ),
-                    "Quantité": position.quantity,
-                    "Multiplicateur": position.multiplier,
-                    "Exposition": (
-                        position.quantity
-                        * position.multiplier
-                    ),
-                    "Strike": position.contract.K,
-                    "Maturité": position.contract.T,
-                    "Valeur": position.market_value()
-                }
-            )
-
-        else:
-            positions_summary.append(
-                {
-                    "Nom": position.name,
-                    "Instrument": "ACTION",
-                    "Quantité": position.quantity,
-                    "Multiplicateur": 1,
-                    "Exposition": position.quantity,
-                    "Strike": None,
-                    "Maturité": None,
-                    "Valeur": position.market_value()
-                }
-            )
-
-    st.dataframe(
-        pd.DataFrame(
-            positions_summary
-        ),
-        hide_index=True,
-        width="stretch",
-        column_config={
-            "Valeur": (
-                st.column_config.NumberColumn(
-                    format="%.2f"
-                )
-            ),
-            "Strike": (
-                st.column_config.NumberColumn(
-                    format="%.2f"
-                )
-            ),
-            "Maturité": (
-                st.column_config.NumberColumn(
-                    format="%.3f"
-                )
-            ),
-            "Multiplicateur": (
-                st.column_config.NumberColumn(
-                    format="%d"
-                )
-            ),
-            "Exposition": (
-                st.column_config.NumberColumn(
-                    format="%d"
-                )
-            )
-        }
-    )
-
-
-    st.divider()
-
-    st.subheader(
-        "Stress tests"
-    )
-
-    scenario_results = (
-        run_standard_scenarios(
-            portfolio
-        )
-    )
-
-    custom_result = run_scenario(
-        portfolio=portfolio,
-        name="Scénario personnalisé",
-        spot_change_percent=(
-            custom_spot_change_percent / 100
-        ),
-        volatility_change_points=(
-            custom_volatility_change_points / 100
-        )
-    )
-
-    scenario_results.append(
-        custom_result
-    )
-
-    scenario_table = pd.DataFrame(
+    overview_tab, stress_tab, profiles_tab, alerts_tab = st.tabs(
         [
-            {
-                "Scénario": result.name,
-                "Variation spot": (
-                    f"{result.spot_change_percent:+.1%}"
-                ),
-                "Variation volatilité": (
-                    f"{result.volatility_change_points:+.1%}"
-                ),
-                "Valeur initiale": result.initial_value,
-                "Valeur stressée": result.stressed_value,
-                "Profit / Perte": result.profit_and_loss,
-                "Delta stressé": result.stressed_delta,
-                "Gamma stressé": result.stressed_gamma,
-                "Vega stressé": result.stressed_vega
-            }
-            for result in scenario_results
+            "Vue générale",
+            "Stress tests",
+            "Profils de risque",
+            "Alertes & LLM"
         ]
     )
 
-    best_scenario = max(
-        scenario_results,
-        key=lambda result: (
-            result.profit_and_loss
+
+    with overview_tab:
+
+        st.subheader(
+            "Résumé du portefeuille"
         )
-    )
 
-    worst_scenario = min(
-        scenario_results,
-        key=lambda result: (
-            result.profit_and_loss
+        column_1, column_2, column_3, column_4 = (
+            st.columns(4)
         )
-    )
 
-    best_column, worst_column = (
-        st.columns(2)
-    )
+        column_1.metric(
+            "Valeur du portefeuille",
+            f"{portfolio.total_market_value():,.2f}"
+        )
 
-    best_column.metric(
-        "Meilleur scénario",
-        best_scenario.name,
-        f"{best_scenario.profit_and_loss:+,.2f}"
-    )
+        column_2.metric(
+            "Spot",
+            f"{current_spot:,.2f}"
+        )
 
-    worst_column.metric(
-        "Scénario le plus défavorable",
-        worst_scenario.name,
-        f"{worst_scenario.profit_and_loss:+,.2f}"
-    )
+        column_3.metric(
+            "Volatilité implicite",
+            f"{current_volatility:.2%}"
+        )
 
-    stress_chart = create_stress_chart(
-        scenario_results
-    )
+        column_4.metric(
+            "Nombre de positions",
+            len(portfolio.positions)
+        )
 
-    st.altair_chart(
-        stress_chart,
-        width="stretch"
-    )
 
-    with st.expander(
-        "Voir le détail complet des stress tests"
-    ):
+        st.subheader(
+            "Greeks du portefeuille"
+        )
+
+        greek_1, greek_2, greek_3 = (
+            st.columns(3)
+        )
+
+        greek_1.metric(
+            "Delta",
+            f"{greeks['delta']:.4f}"
+        )
+
+        greek_2.metric(
+            "Gamma",
+            f"{greeks['gamma']:.4f}"
+        )
+
+        greek_3.metric(
+            "Vega",
+            f"{greeks['vega']:.4f}"
+        )
+
+        greek_4, greek_5, greek_6 = (
+            st.columns(3)
+        )
+
+        greek_4.metric(
+            "Theta journalier",
+            f"{greeks['theta']:.4f}"
+        )
+
+        greek_5.metric(
+            "Rho",
+            f"{greeks['rho']:.4f}"
+        )
+
+        greek_6.metric(
+            "Volga",
+            f"{greeks['volga']:.6f}"
+        )
+
+
+        st.subheader(
+            "Positions analysées"
+        )
+
+        positions_summary = []
+
+        for position in portfolio.positions:
+
+            if hasattr(
+                position,
+                "contract"
+            ):
+                positions_summary.append(
+                    {
+                        "Nom": position.name,
+                        "Instrument": (
+                            position.contract.option_type.upper()
+                        ),
+                        "Quantité": position.quantity,
+                        "Multiplicateur": position.multiplier,
+                        "Exposition": (
+                            position.quantity
+                            * position.multiplier
+                        ),
+                        "Strike": position.contract.K,
+                        "Maturité": position.contract.T,
+                        "Valeur": position.market_value()
+                    }
+                )
+
+            else:
+                positions_summary.append(
+                    {
+                        "Nom": position.name,
+                        "Instrument": "ACTION",
+                        "Quantité": position.quantity,
+                        "Multiplicateur": 1,
+                        "Exposition": position.quantity,
+                        "Strike": None,
+                        "Maturité": None,
+                        "Valeur": position.market_value()
+                    }
+                )
+
         st.dataframe(
-            scenario_table,
+            pd.DataFrame(
+                positions_summary
+            ),
             hide_index=True,
             width="stretch",
             column_config={
-                "Valeur initiale": (
+                "Valeur": (
                     st.column_config.NumberColumn(
                         format="%.2f"
                     )
                 ),
-                "Valeur stressée": (
+                "Strike": (
                     st.column_config.NumberColumn(
                         format="%.2f"
                     )
                 ),
-                "Profit / Perte": (
+                "Maturité": (
                     st.column_config.NumberColumn(
-                        format="%.2f"
+                        format="%.3f"
                     )
                 ),
-                "Delta stressé": (
+                "Multiplicateur": (
                     st.column_config.NumberColumn(
-                        format="%.4f"
+                        format="%d"
                     )
                 ),
-                "Gamma stressé": (
+                "Exposition": (
                     st.column_config.NumberColumn(
-                        format="%.4f"
-                    )
-                ),
-                "Vega stressé": (
-                    st.column_config.NumberColumn(
-                        format="%.4f"
+                        format="%d"
                     )
                 )
             }
         )
 
 
-    st.divider()
+    with stress_tab:
 
-    st.subheader(
-        "Matrice de risque"
-    )
-
-    st.write(
-        "Cette matrice montre le profit ou la perte du portefeuille "
-        "pour plusieurs combinaisons de chocs de spot et de volatilité."
-    )
-
-    spot_changes = [
-        -0.10,
-        -0.05,
-        0.00,
-        0.05,
-        0.10
-    ]
-
-    volatility_changes = [
-        -0.10,
-        -0.05,
-        0.00,
-        0.05,
-        0.10
-    ]
-
-    surface_points = calculate_risk_surface(
-        portfolio=portfolio,
-        spot_changes=spot_changes,
-        volatility_changes=volatility_changes
-    )
-
-    surface_data = surface_to_dataframe(
-        surface_points
-    )
-
-    risk_matrix = surface_data.pivot(
-        index="Variation volatilité",
-        columns="Variation spot",
-        values="Profit / Perte"
-    )
-
-    risk_matrix = risk_matrix.sort_index(
-        ascending=False
-    )
-
-    risk_matrix.columns = [
-        f"Spot {value:+.0%}"
-        for value in risk_matrix.columns
-    ]
-
-    risk_matrix.index = [
-        f"Vol {value:+.0%}"
-        for value in risk_matrix.index
-    ]
-
-    styled_matrix = (
-        risk_matrix.style
-        .background_gradient(
-            cmap="RdYlGn",
-            axis=None
+        st.subheader(
+            "Stress tests"
         )
-        .format(
-            "{:+,.0f}"
+
+        scenario_results = (
+            run_standard_scenarios(
+                portfolio
+            )
         )
-        .set_properties(
-            **{
-                "font-weight": "bold",
-                "text-align": "center"
-            }
+
+        custom_result = run_scenario(
+            portfolio=portfolio,
+            name="Scénario personnalisé",
+            spot_change_percent=(
+                custom_spot_change_percent / 100
+            ),
+            volatility_change_points=(
+                custom_volatility_change_points / 100
+            )
         )
-    )
 
-    st.dataframe(
-        styled_matrix,
-        width="stretch",
-        height=260
-    )
-
-    st.caption(
-        "Vert : gain pour le portefeuille — "
-        "Rouge : perte pour le portefeuille — "
-        "Jaune : résultat proche de zéro."
-    )
-
-    worst_surface_point = surface_data.loc[
-        surface_data[
-            "Profit / Perte"
-        ].idxmin()
-    ]
-
-    best_surface_point = surface_data.loc[
-        surface_data[
-            "Profit / Perte"
-        ].idxmax()
-    ]
-
-    surface_column_1, surface_column_2 = (
-        st.columns(2)
-    )
-
-    surface_column_1.metric(
-        "Zone la plus favorable",
-        (
-            f"Spot "
-            f"{best_surface_point['Variation spot']:+.0%}, "
-            f"Vol "
-            f"{best_surface_point['Variation volatilité']:+.0%}"
-        ),
-        (
-            f"{best_surface_point['Profit / Perte']:+,.2f}"
+        scenario_results.append(
+            custom_result
         )
-    )
 
-    surface_column_2.metric(
-        "Zone la plus risquée",
-        (
-            f"Spot "
-            f"{worst_surface_point['Variation spot']:+.0%}, "
-            f"Vol "
-            f"{worst_surface_point['Variation volatilité']:+.0%}"
-        ),
-        (
-            f"{worst_surface_point['Profit / Perte']:+,.2f}"
+        scenario_table = pd.DataFrame(
+            [
+                {
+                    "Scénario": result.name,
+                    "Variation spot": (
+                        f"{result.spot_change_percent:+.1%}"
+                    ),
+                    "Variation volatilité": (
+                        f"{result.volatility_change_points:+.1%}"
+                    ),
+                    "Valeur initiale": result.initial_value,
+                    "Valeur stressée": result.stressed_value,
+                    "Profit / Perte": result.profit_and_loss,
+                    "Delta stressé": result.stressed_delta,
+                    "Gamma stressé": result.stressed_gamma,
+                    "Vega stressé": result.stressed_vega
+                }
+                for result in scenario_results
+            ]
         )
-    )
 
-
-    st.divider()
-
-    st.subheader(
-        "Profil de P&L"
-    )
-
-    st.write(
-        "Cette courbe montre comment le portefeuille évolue "
-        "si le sous-jacent baisse ou monte progressivement, "
-        "en gardant la volatilité constante."
-    )
-
-    pnl_points = calculate_pnl_profile(
-        portfolio=portfolio,
-        current_spot=current_spot,
-        minimum_change=-0.30,
-        maximum_change=0.30,
-        number_of_points=61
-    )
-
-    pnl_data = pnl_profile_to_dataframe(
-        pnl_points
-    )
-
-    breakeven_spots = find_breakeven_spots(
-        pnl_data
-    )
-
-    pnl_chart = create_pnl_profile_chart(
-        pnl_data=pnl_data,
-        current_spot=current_spot,
-        breakeven_spots=breakeven_spots
-    )
-
-    st.altair_chart(
-        pnl_chart,
-        width="stretch"
-    )
-
-    worst_pnl_point = pnl_data.loc[
-        pnl_data[
-            "Profit / Perte"
-        ].idxmin()
-    ]
-
-    best_pnl_point = pnl_data.loc[
-        pnl_data[
-            "Profit / Perte"
-        ].idxmax()
-    ]
-
-    pnl_column_1, pnl_column_2, pnl_column_3 = (
-        st.columns(3)
-    )
-
-    pnl_column_1.metric(
-        "Meilleur spot testé",
-        f"{best_pnl_point['Spot stressé']:,.2f}",
-        f"{best_pnl_point['Profit / Perte']:+,.2f}"
-    )
-
-    pnl_column_2.metric(
-        "Pire spot testé",
-        f"{worst_pnl_point['Spot stressé']:,.2f}",
-        f"{worst_pnl_point['Profit / Perte']:+,.2f}"
-    )
-
-    if breakeven_spots:
-        breakeven_text = ", ".join(
-            f"{spot:,.2f}"
-            for spot in breakeven_spots
+        best_scenario = max(
+            scenario_results,
+            key=lambda result: (
+                result.profit_and_loss
+            )
         )
-    else:
-        breakeven_text = "Aucun dans l'intervalle"
 
-    pnl_column_3.metric(
-        "Point mort estimé",
-        breakeven_text
-    )
+        worst_scenario = min(
+            scenario_results,
+            key=lambda result: (
+                result.profit_and_loss
+            )
+        )
+
+        best_column, worst_column = (
+            st.columns(2)
+        )
+
+        best_column.metric(
+            "Meilleur scénario",
+            best_scenario.name,
+            f"{best_scenario.profit_and_loss:+,.2f}"
+        )
+
+        worst_column.metric(
+            "Scénario le plus défavorable",
+            worst_scenario.name,
+            f"{worst_scenario.profit_and_loss:+,.2f}"
+        )
+
+        stress_chart = create_stress_chart(
+            scenario_results
+        )
+
+        st.altair_chart(
+            stress_chart,
+            width="stretch"
+        )
+
+        with st.expander(
+            "Voir le détail complet des stress tests"
+        ):
+            st.dataframe(
+                scenario_table,
+                hide_index=True,
+                width="stretch",
+                column_config={
+                    "Valeur initiale": (
+                        st.column_config.NumberColumn(
+                            format="%.2f"
+                        )
+                    ),
+                    "Valeur stressée": (
+                        st.column_config.NumberColumn(
+                            format="%.2f"
+                        )
+                    ),
+                    "Profit / Perte": (
+                        st.column_config.NumberColumn(
+                            format="%.2f"
+                        )
+                    ),
+                    "Delta stressé": (
+                        st.column_config.NumberColumn(
+                            format="%.4f"
+                        )
+                    ),
+                    "Gamma stressé": (
+                        st.column_config.NumberColumn(
+                            format="%.4f"
+                        )
+                    ),
+                    "Vega stressé": (
+                        st.column_config.NumberColumn(
+                            format="%.4f"
+                        )
+                    )
+                }
+            )
 
 
-    st.divider()
+        st.divider()
 
-    st.subheader(
-        "Profil des Greeks"
-    )
+        st.subheader(
+            "Matrice de risque"
+        )
 
-    st.write(
-        "Cette section montre comment les Greeks du portefeuille "
-        "évoluent quand le sous-jacent baisse ou monte progressivement."
-    )
+        st.write(
+            "Cette matrice montre le profit ou la perte du portefeuille "
+            "pour plusieurs combinaisons de chocs de spot et de volatilité."
+        )
 
-    selected_greeks = st.multiselect(
-        "Greeks à afficher",
-        options=[
-            "Delta",
-            "Gamma",
-            "Theta",
-            "Vega",
-            "Rho",
-            "Vanna",
-            "Volga"
-        ],
-        default=[
-            "Delta",
-            "Gamma",
-            "Vega"
+        spot_changes = [
+            -0.10,
+            -0.05,
+            0.00,
+            0.05,
+            0.10
         ]
-    )
 
-    if not selected_greeks:
-        st.info(
-            "Sélectionne au moins un Greek à afficher."
+        volatility_changes = [
+            -0.10,
+            -0.05,
+            0.00,
+            0.05,
+            0.10
+        ]
+
+        surface_points = calculate_risk_surface(
+            portfolio=portfolio,
+            spot_changes=spot_changes,
+            volatility_changes=volatility_changes
         )
 
-    else:
-        greeks_points = calculate_greeks_profile(
+        surface_data = surface_to_dataframe(
+            surface_points
+        )
+
+        risk_matrix = surface_data.pivot(
+            index="Variation volatilité",
+            columns="Variation spot",
+            values="Profit / Perte"
+        )
+
+        risk_matrix = risk_matrix.sort_index(
+            ascending=False
+        )
+
+        risk_matrix.columns = [
+            f"Spot {value:+.0%}"
+            for value in risk_matrix.columns
+        ]
+
+        risk_matrix.index = [
+            f"Vol {value:+.0%}"
+            for value in risk_matrix.index
+        ]
+
+        styled_matrix = (
+            risk_matrix.style
+            .background_gradient(
+                cmap="RdYlGn",
+                axis=None
+            )
+            .format(
+                "{:+,.0f}"
+            )
+            .set_properties(
+                **{
+                    "font-weight": "bold",
+                    "text-align": "center"
+                }
+            )
+        )
+
+        st.dataframe(
+            styled_matrix,
+            width="stretch",
+            height=260
+        )
+
+        st.caption(
+            "Vert : gain pour le portefeuille — "
+            "Rouge : perte pour le portefeuille — "
+            "Jaune : résultat proche de zéro."
+        )
+
+        worst_surface_point = surface_data.loc[
+            surface_data[
+                "Profit / Perte"
+            ].idxmin()
+        ]
+
+        best_surface_point = surface_data.loc[
+            surface_data[
+                "Profit / Perte"
+            ].idxmax()
+        ]
+
+        surface_column_1, surface_column_2 = (
+            st.columns(2)
+        )
+
+        surface_column_1.metric(
+            "Zone la plus favorable",
+            (
+                f"Spot "
+                f"{best_surface_point['Variation spot']:+.0%}, "
+                f"Vol "
+                f"{best_surface_point['Variation volatilité']:+.0%}"
+            ),
+            (
+                f"{best_surface_point['Profit / Perte']:+,.2f}"
+            )
+        )
+
+        surface_column_2.metric(
+            "Zone la plus risquée",
+            (
+                f"Spot "
+                f"{worst_surface_point['Variation spot']:+.0%}, "
+                f"Vol "
+                f"{worst_surface_point['Variation volatilité']:+.0%}"
+            ),
+            (
+                f"{worst_surface_point['Profit / Perte']:+,.2f}"
+            )
+        )
+
+
+    with profiles_tab:
+
+        st.subheader(
+            "Profil de P&L"
+        )
+
+        st.write(
+            "Cette courbe montre comment le portefeuille évolue "
+            "si le sous-jacent baisse ou monte progressivement, "
+            "en gardant la volatilité constante."
+        )
+
+        pnl_points = calculate_pnl_profile(
             portfolio=portfolio,
             current_spot=current_spot,
             minimum_change=-0.30,
@@ -1422,158 +1313,262 @@ if analyse_button:
             number_of_points=61
         )
 
-        greeks_data = greeks_profile_to_dataframe(
-            greeks_points
+        pnl_data = pnl_profile_to_dataframe(
+            pnl_points
         )
 
-        greeks_chart = create_greeks_profile_chart(
-            greeks_data=greeks_data,
+        breakeven_spots = find_breakeven_spots(
+            pnl_data
+        )
+
+        pnl_chart = create_pnl_profile_chart(
+            pnl_data=pnl_data,
             current_spot=current_spot,
-            selected_greeks=selected_greeks
+            breakeven_spots=breakeven_spots
         )
 
         st.altair_chart(
-            greeks_chart,
+            pnl_chart,
             width="stretch"
         )
 
-        with st.expander(
-            "Voir le détail complet du profil des Greeks"
-        ):
-            st.dataframe(
-                greeks_data,
-                hide_index=True,
-                width="stretch",
-                column_config={
-                    "Variation spot": (
-                        st.column_config.NumberColumn(
-                            format="+.1%"
-                        )
-                    ),
-                    "Spot stressé": (
-                        st.column_config.NumberColumn(
-                            format="%.2f"
-                        )
-                    ),
-                    "Delta": (
-                        st.column_config.NumberColumn(
-                            format="%.4f"
-                        )
-                    ),
-                    "Gamma": (
-                        st.column_config.NumberColumn(
-                            format="%.6f"
-                        )
-                    ),
-                    "Theta": (
-                        st.column_config.NumberColumn(
-                            format="%.4f"
-                        )
-                    ),
-                    "Vega": (
-                        st.column_config.NumberColumn(
-                            format="%.4f"
-                        )
-                    ),
-                    "Rho": (
-                        st.column_config.NumberColumn(
-                            format="%.4f"
-                        )
-                    ),
-                    "Vanna": (
-                        st.column_config.NumberColumn(
-                            format="%.6f"
-                        )
-                    ),
-                    "Volga": (
-                        st.column_config.NumberColumn(
-                            format="%.6f"
-                        )
-                    )
-                }
-            )
+        worst_pnl_point = pnl_data.loc[
+            pnl_data[
+                "Profit / Perte"
+            ].idxmin()
+        ]
 
+        best_pnl_point = pnl_data.loc[
+            pnl_data[
+                "Profit / Perte"
+            ].idxmax()
+        ]
 
-    st.divider()
-
-    st.subheader(
-        "Alertes quantitatives"
-    )
-
-    if not alerts:
-        st.success(
-            "Aucune anomalie détectée."
+        pnl_column_1, pnl_column_2, pnl_column_3 = (
+            st.columns(3)
         )
 
-    else:
-        st.warning(
-            f"{len(alerts)} anomalie(s) détectée(s)."
+        pnl_column_1.metric(
+            "Meilleur spot testé",
+            f"{best_pnl_point['Spot stressé']:,.2f}",
+            f"{best_pnl_point['Profit / Perte']:+,.2f}"
         )
 
-        for alert in alerts:
-
-            alert_text = (
-                f"**{alert.name}** — "
-                f"{alert.message}\n\n"
-                f"Valeur actuelle : "
-                f"`{alert.current_value:.6f}`"
-            )
-
-            if alert.reference_value is not None:
-                alert_text += (
-                    "\n\nValeur de référence : "
-                    f"`{alert.reference_value:.6f}`"
-                )
-
-            if alert.z_score is not None:
-                alert_text += (
-                    f"\n\nZ-score : "
-                    f"`{alert.z_score:.2f}`"
-                )
-
-            if alert.severity == "CRITIQUE":
-                st.error(
-                    alert_text
-                )
-
-            elif alert.severity == "ÉLEVÉE":
-                st.warning(
-                    alert_text
-                )
-
-            else:
-                st.info(
-                    alert_text
-                )
-
-
-    st.divider()
-
-    st.subheader(
-        "Analyse du LLM"
-    )
-
-    if alerts:
-
-        with st.spinner(
-            "ARIA génère l'explication..."
-        ):
-            llm_analysis = (
-                generate_llm_analysis(
-                    snapshot=current_snapshot,
-                    alerts=alerts
-                )
-            )
-
-        st.markdown(
-            llm_analysis
+        pnl_column_2.metric(
+            "Pire spot testé",
+            f"{worst_pnl_point['Spot stressé']:,.2f}",
+            f"{worst_pnl_point['Profit / Perte']:+,.2f}"
         )
 
-    else:
+        if breakeven_spots:
+            breakeven_text = ", ".join(
+                f"{spot:,.2f}"
+                for spot in breakeven_spots
+            )
+        else:
+            breakeven_text = "Aucun dans l'intervalle"
+
+        pnl_column_3.metric(
+            "Point mort estimé",
+            breakeven_text
+        )
+
+
+        st.divider()
+
+        st.subheader(
+            "Profil des Greeks"
+        )
+
         st.write(
-            "Aucune analyse LLM supplémentaire "
-            "n'est nécessaire."
+            "Cette section montre comment les Greeks du portefeuille "
+            "évoluent quand le sous-jacent baisse ou monte progressivement."
         )
+
+        selected_greeks = st.multiselect(
+            "Greeks à afficher",
+            options=[
+                "Delta",
+                "Gamma",
+                "Theta",
+                "Vega",
+                "Rho",
+                "Vanna",
+                "Volga"
+            ],
+            default=[
+                "Delta",
+                "Gamma",
+                "Vega"
+            ]
+        )
+
+        if not selected_greeks:
+            st.info(
+                "Sélectionne au moins un Greek à afficher."
+            )
+
+        else:
+            greeks_points = calculate_greeks_profile(
+                portfolio=portfolio,
+                current_spot=current_spot,
+                minimum_change=-0.30,
+                maximum_change=0.30,
+                number_of_points=61
+            )
+
+            greeks_data = greeks_profile_to_dataframe(
+                greeks_points
+            )
+
+            greeks_chart = create_greeks_profile_chart(
+                greeks_data=greeks_data,
+                current_spot=current_spot,
+                selected_greeks=selected_greeks
+            )
+
+            st.altair_chart(
+                greeks_chart,
+                width="stretch"
+            )
+
+            with st.expander(
+                "Voir le détail complet du profil des Greeks"
+            ):
+                st.dataframe(
+                    greeks_data,
+                    hide_index=True,
+                    width="stretch",
+                    column_config={
+                        "Variation spot": (
+                            st.column_config.NumberColumn(
+                                format="+.1%"
+                            )
+                        ),
+                        "Spot stressé": (
+                            st.column_config.NumberColumn(
+                                format="%.2f"
+                            )
+                        ),
+                        "Delta": (
+                            st.column_config.NumberColumn(
+                                format="%.4f"
+                            )
+                        ),
+                        "Gamma": (
+                            st.column_config.NumberColumn(
+                                format="%.6f"
+                            )
+                        ),
+                        "Theta": (
+                            st.column_config.NumberColumn(
+                                format="%.4f"
+                            )
+                        ),
+                        "Vega": (
+                            st.column_config.NumberColumn(
+                                format="%.4f"
+                            )
+                        ),
+                        "Rho": (
+                            st.column_config.NumberColumn(
+                                format="%.4f"
+                            )
+                        ),
+                        "Vanna": (
+                            st.column_config.NumberColumn(
+                                format="%.6f"
+                            )
+                        ),
+                        "Volga": (
+                            st.column_config.NumberColumn(
+                                format="%.6f"
+                            )
+                        )
+                    }
+                )
+
+
+    with alerts_tab:
+
+        st.subheader(
+            "Alertes quantitatives"
+        )
+
+        if not alerts:
+            st.success(
+                "Aucune anomalie détectée."
+            )
+
+        else:
+            st.warning(
+                f"{len(alerts)} anomalie(s) détectée(s)."
+            )
+
+            for alert in alerts:
+
+                alert_text = (
+                    f"**{alert.name}** — "
+                    f"{alert.message}\n\n"
+                    f"Valeur actuelle : "
+                    f"`{alert.current_value:.6f}`"
+                )
+
+                if alert.reference_value is not None:
+                    alert_text += (
+                        "\n\nValeur de référence : "
+                        f"`{alert.reference_value:.6f}`"
+                    )
+
+                if alert.z_score is not None:
+                    alert_text += (
+                        f"\n\nZ-score : "
+                        f"`{alert.z_score:.2f}`"
+                    )
+
+                if alert.severity == "CRITIQUE":
+                    st.error(
+                        alert_text
+                    )
+
+                elif alert.severity == "ÉLEVÉE":
+                    st.warning(
+                        alert_text
+                    )
+
+                else:
+                    st.info(
+                        alert_text
+                    )
+
+
+        st.divider()
+
+        st.subheader(
+            "Analyse du LLM"
+        )
+
+        if alerts:
+
+            with st.spinner(
+                "ARIA génère l'explication..."
+            ):
+                llm_analysis = (
+                    generate_llm_analysis(
+                        snapshot=current_snapshot,
+                        alerts=alerts
+                    )
+                )
+
+            st.markdown(
+                llm_analysis
+            )
+
+        else:
+            st.write(
+                "Aucune analyse LLM supplémentaire "
+                "n'est nécessaire."
+            )
 
 
     history_manager.save_snapshot(
