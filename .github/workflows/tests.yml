@@ -13,7 +13,7 @@ on:
 
 jobs:
   test:
-    name: Run Python tests
+    name: Run Python tests and linting
     runs-on: ubuntu-latest
 
     steps:
@@ -33,6 +33,10 @@ jobs:
         run: |
           pip install -r requirements.txt
 
+      - name: Run Ruff linting
+        run: |
+          ruff check .
+
       - name: Run tests
         run: |
-          pytest -v
+          pytest -v 
