@@ -1,0 +1,65 @@
+[project]
+name = "aria-risk-agent"
+version = "0.1.0"
+description = "Adaptive Risk Intelligence Agent - Python and Streamlit risk management dashboard"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+    { name = "Enrique" }
+]
+keywords = [
+    "finance",
+    "risk-management",
+    "options",
+    "black-scholes",
+    "streamlit",
+    "var",
+    "greeks",
+    "stress-testing"
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Office/Business :: Financial",
+    "Topic :: Scientific/Engineering :: Mathematics"
+]
+
+dependencies = [
+    "streamlit",
+    "pandas",
+    "numpy",
+    "scipy",
+    "matplotlib",
+    "altair",
+    "openai",
+    "python-dotenv",
+    "pytest",
+    "yfinance"
+]
+
+
+[tool.pytest.ini_options]
+testpaths = [
+    "."
+]
+python_files = [
+    "test_*.py"
+]
+addopts = "-v"
+
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+
+
+[tool.ruff.lint]
+select = [
+    "E",
+    "F",
+    "W",
+    "I"
+]
+ignore = [
+    "E501"
+]
