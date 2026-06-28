@@ -30,21 +30,10 @@ REQUIRED_FILES = [
     "run_aria.py",
     "start_aria.bat",
     "check_quality.bat",
+    ".env.example",
     "requirements.txt",
     "README.md",
     ".gitignore",
-]
-
-REQUIRED_MODULES = [
-    "streamlit",
-    "pandas",
-    "numpy",
-    "scipy",
-    "altair",
-    "openai",
-    "dotenv",
-    "yfinance",
-    "pytest"
 ]
 
 
