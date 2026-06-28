@@ -26,12 +26,14 @@ REQUIRED_FILES = [
     "report_generator.py",
     "llm_explainer.py",
     "aria_workflow.py",
+    "quality_check.py",
+    "run_aria.py",
+    "start_aria.bat",
+    "check_quality.bat",
     "requirements.txt",
     "README.md",
-    "run_aria.py",
-    ".gitignore"
+    ".gitignore",
 ]
-
 
 REQUIRED_MODULES = [
     "streamlit",
