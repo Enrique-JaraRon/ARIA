@@ -31,6 +31,7 @@ from hedging_analysis import calculate_delta_hedge
 from var_analysis import calculate_var_es, parametric_var_estimate
 from risk_score import calculate_risk_score
 from market_data import get_market_snapshot
+from report_generator import generate_risk_report
 
 
 st.set_page_config(
@@ -867,15 +868,13 @@ st.sidebar.header(
 custom_spot_change_percent = st.sidebar.number_input(
     "Choc du spot en %",
     value=-10.0,
-    step=1.0,
-    help="-10 signifie une baisse du spot de 10 %."
+    step=1.0
 )
 
 custom_volatility_change_points = st.sidebar.number_input(
     "Choc de volatilité en points",
     value=15.0,
-    step=1.0,
-    help="15 signifie une hausse de volatilité de 15 points."
+    step=1.0
 )
 
 
@@ -1022,7 +1021,6 @@ if analyse_button:
         )
         st.stop()
 
-
     current_snapshot = create_snapshot(
         portfolio=portfolio,
         spot=current_spot,
@@ -1131,7 +1129,6 @@ if analyse_button:
         updated_history
     )
 
-
     overview_tab, stress_tab, profiles_tab, history_tab, alerts_tab = st.tabs(
         [
             "Vue générale",
@@ -1141,7 +1138,6 @@ if analyse_button:
             "Alertes & LLM"
         ]
     )
-
 
     with overview_tab:
 
@@ -1193,7 +1189,6 @@ if analyse_button:
                 f"- {driver}"
             )
 
-
         if market_snapshot is not None:
 
             st.subheader(
@@ -1224,12 +1219,6 @@ if analyse_button:
                 f"{market_snapshot.annualized_volatility:.2%}"
             )
 
-            st.caption(
-                "La volatilité historique est utilisée ici comme proxy "
-                "de volatilité pour les calculs ARIA."
-            )
-
-
         st.subheader(
             "Résumé du portefeuille"
         )
@@ -1257,7 +1246,6 @@ if analyse_button:
             "Nombre de positions",
             len(portfolio.positions)
         )
-
 
         st.subheader(
             "Greeks du portefeuille"
@@ -1301,7 +1289,6 @@ if analyse_button:
             f"{greeks['volga']:.6f}"
         )
 
-
         st.subheader(
             "Couverture delta indicative"
         )
@@ -1340,7 +1327,6 @@ if analyse_button:
         st.info(
             hedge_result.explanation
         )
-
 
         st.subheader(
             "Positions analysées"
@@ -1393,7 +1379,6 @@ if analyse_button:
             hide_index=True,
             width="stretch"
         )
-
 
     with stress_tab:
 
@@ -1465,7 +1450,6 @@ if analyse_button:
                 hide_index=True,
                 width="stretch"
             )
-
 
         st.divider()
 
@@ -1542,7 +1526,6 @@ if analyse_button:
             height=260
         )
 
-
         st.divider()
 
         st.subheader(
@@ -1592,7 +1575,6 @@ if analyse_button:
                 hide_index=True,
                 width="stretch"
             )
-
 
     with profiles_tab:
 
@@ -1664,7 +1646,6 @@ if analyse_button:
             breakeven_text
         )
 
-
         st.divider()
 
         st.subheader(
@@ -1713,7 +1694,6 @@ if analyse_button:
                 greeks_chart,
                 width="stretch"
             )
-
 
     with history_tab:
 
@@ -1808,7 +1788,6 @@ if analyse_button:
                     width="stretch"
                 )
 
-
     with alerts_tab:
 
         st.subheader(
@@ -1861,12 +1840,13 @@ if analyse_button:
                         alert_text
                     )
 
-
         st.divider()
 
         st.subheader(
             "Analyse du LLM"
         )
+
+        llm_analysis = None
 
         if alerts:
 
@@ -1888,6 +1868,39 @@ if analyse_button:
                 "n'est nécessaire."
             )
 
+        st.divider()
+
+        st.subheader(
+            "Rapport de risque"
+        )
+
+        report_text = generate_risk_report(
+            portfolio=portfolio,
+            spot=current_spot,
+            volatility=current_volatility,
+            alerts=alerts,
+            scenario_results=scenario_results,
+            var_result=var_result,
+            parametric_var=parametric_var,
+            hedge_result=hedge_result,
+            risk_score_result=risk_score_result,
+            market_snapshot=market_snapshot,
+            llm_analysis=llm_analysis
+        )
+
+        st.download_button(
+            label="Télécharger le rapport ARIA",
+            data=report_text,
+            file_name="rapport_risque_aria.md",
+            mime="text/markdown",
+            type="primary",
+            width="stretch"
+        )
+
+        st.caption(
+            "Le rapport est généré au format Markdown. "
+            "Il peut être ouvert dans VS Code, Notion, GitHub ou converti ensuite en PDF."
+        )
 
     st.success(
         "Le snapshot actuel a été ajouté à l'historique."
