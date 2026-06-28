@@ -28,6 +28,7 @@ REQUIRED_FILES = [
     "aria_workflow.py",
     "requirements.txt",
     "README.md",
+    "run_aria.py",
     ".gitignore"
 ]
 
