@@ -4,7 +4,7 @@ ARIA - Analyse de couverture delta
 
 from dataclasses import dataclass
 
-from portfolio import Portfolio, StockPosition
+from portfolio import Portfolio
 
 
 @dataclass

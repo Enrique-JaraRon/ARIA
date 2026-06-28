@@ -5,7 +5,7 @@ ARIA - Analyse de scénarios et stress tests
 from copy import deepcopy
 from dataclasses import dataclass
 
-from portfolio import Portfolio, OptionPosition, StockPosition
+from portfolio import OptionPosition, Portfolio, StockPosition
 
 
 @dataclass

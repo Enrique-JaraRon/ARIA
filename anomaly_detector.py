@@ -6,8 +6,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from statistics import mean, pstdev
 
-from pricing_BS import OptionContract
 from portfolio import Portfolio
+from pricing_BS import OptionContract
 
 
 @dataclass

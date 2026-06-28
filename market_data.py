@@ -126,4 +126,4 @@ if __name__ == "__main__":
     print(f"Prix précédent : {snapshot.previous_price:.2f}")
     print(f"Rendement journalier : {snapshot.daily_return:.2%}")
     print(f"Volatilité annualisée : {snapshot.annualized_volatility:.2%}")
-    print(f"Observations : {snapshot.number_of_observations}")  
+    print(f"Observations : {snapshot.number_of_observations}")

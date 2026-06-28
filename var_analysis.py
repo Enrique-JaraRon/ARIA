@@ -3,9 +3,9 @@
 ARIA - Analyse VaR et Expected Shortfall
 """
 
+import random
 from dataclasses import dataclass
 from statistics import NormalDist
-import random
 
 import pandas as pd
 

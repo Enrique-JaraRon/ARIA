@@ -5,7 +5,7 @@ ARIA - Gestion d'un portefeuille d'options
 
 from dataclasses import dataclass, field
 
-from pricing_BS import OptionContract, bs_price, bs_greeks
+from pricing_BS import OptionContract, bs_greeks, bs_price
 
 
 @dataclass

@@ -2,8 +2,8 @@
 Tests du module var_analysis.py
 """
 
-from pricing_BS import OptionContract
 from portfolio import Portfolio
+from pricing_BS import OptionContract
 from var_analysis import calculate_var_es, parametric_var_estimate
 
 

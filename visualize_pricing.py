@@ -3,10 +3,10 @@
 ARIA - Visualisation du prix et des Greeks
 """
 
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
 
-from pricing_BS import OptionContract, bs_price, bs_greeks
+from pricing_BS import OptionContract, bs_greeks, bs_price
 
 
 def calculate_values_for_spots(

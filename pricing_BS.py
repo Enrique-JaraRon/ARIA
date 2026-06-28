@@ -3,9 +3,9 @@
 ARIA - Moteur de pricing Black-Scholes
 """
 
+import warnings
 from dataclasses import dataclass
 from typing import Literal
-import warnings
 
 import numpy as np
 from scipy.stats import norm

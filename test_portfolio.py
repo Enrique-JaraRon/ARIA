@@ -1,7 +1,7 @@
 import pytest
 
-from pricing_BS import OptionContract, bs_price, bs_greeks
-from portfolio import Portfolio, OptionPosition, StockPosition
+from portfolio import OptionPosition, Portfolio, StockPosition
+from pricing_BS import OptionContract, bs_greeks, bs_price
 
 
 @pytest.fixture

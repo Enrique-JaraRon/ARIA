@@ -649,11 +649,11 @@ def generate_risk_report(
 
 
 if __name__ == "__main__":
+    from hedging_analysis import calculate_delta_hedge
     from pricing_BS import OptionContract
+    from risk_score import calculate_risk_score
     from scenario_analysis import run_standard_scenarios
     from var_analysis import calculate_var_es, parametric_var_estimate
-    from hedging_analysis import calculate_delta_hedge
-    from risk_score import calculate_risk_score
 
     portfolio = Portfolio(
         name="Test rapport"

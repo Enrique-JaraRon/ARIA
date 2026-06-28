@@ -2,12 +2,11 @@ import pytest
 
 from pricing_BS import (
     OptionContract,
-    bs_price,
     bs_greeks,
+    bs_price,
     implied_volatility,
-    verify_put_call_parity
+    verify_put_call_parity,
 )
-
 
 # Crée un call simple que l'on réutilise dans plusieurs tests
 

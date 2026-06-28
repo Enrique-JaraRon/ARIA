@@ -2,11 +2,11 @@
 Tests du module risk_score.py
 """
 
-from pricing_BS import OptionContract
 from portfolio import Portfolio
+from pricing_BS import OptionContract
+from risk_score import calculate_risk_score
 from scenario_analysis import run_standard_scenarios
 from var_analysis import calculate_var_es
-from risk_score import calculate_risk_score
 
 
 def create_test_portfolio() -> Portfolio:

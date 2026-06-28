@@ -1,11 +1,8 @@
-import pytest
 from datetime import datetime
 
-from anomaly_detector import (
-    RiskSnapshot,
-    Alert,
-    AnomalyDetector
-)
+import pytest
+
+from anomaly_detector import Alert, AnomalyDetector, RiskSnapshot
 
 
 @pytest.fixture

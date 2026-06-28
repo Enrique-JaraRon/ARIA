@@ -5,11 +5,11 @@ ARIA - Workflow principal
 
 import os
 
-from pricing_BS import OptionContract
-from portfolio import Portfolio, OptionPosition, StockPosition
 from anomaly_detector import AnomalyDetector, create_snapshot
-from risk_history import RiskHistory
 from llm_explainer import LLMExplainer
+from portfolio import OptionPosition, Portfolio, StockPosition
+from pricing_BS import OptionContract
+from risk_history import RiskHistory
 
 
 def update_portfolio_market(

@@ -2,12 +2,11 @@
 ARIA - Diagnostic du projet
 """
 
-from pathlib import Path
 import importlib
 import os
+from pathlib import Path
 
 from dotenv import load_dotenv
-
 
 REQUIRED_FILES = [
     "streamlit_app.py",

@@ -9,7 +9,6 @@ from pathlib import Path
 
 from anomaly_detector import RiskSnapshot
 
-
 CSV_COLUMNS = [
     "timestamp",
     "spot",

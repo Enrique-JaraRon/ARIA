@@ -2,13 +2,13 @@
 Tests du module report_generator.py
 """
 
-from pricing_BS import OptionContract
+from hedging_analysis import calculate_delta_hedge
 from portfolio import Portfolio
+from pricing_BS import OptionContract
+from report_generator import generate_risk_report
+from risk_score import calculate_risk_score
 from scenario_analysis import run_standard_scenarios
 from var_analysis import calculate_var_es, parametric_var_estimate
-from hedging_analysis import calculate_delta_hedge
-from risk_score import calculate_risk_score
-from report_generator import generate_risk_report
 
 
 def create_test_portfolio() -> Portfolio:

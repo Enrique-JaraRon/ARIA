@@ -2,9 +2,9 @@
 Tests du module hedging_analysis.py
 """
 
-from pricing_BS import OptionContract
+from hedging_analysis import apply_delta_hedge, calculate_delta_hedge
 from portfolio import Portfolio
-from hedging_analysis import calculate_delta_hedge, apply_delta_hedge
+from pricing_BS import OptionContract
 
 
 def create_test_portfolio() -> Portfolio:
