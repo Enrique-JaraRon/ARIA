@@ -34,6 +34,7 @@ REQUIRED_FILES = [
     "requirements.txt",
     "README.md",
     ".gitignore",
+    "demo_portfolios.py"
 ]
 
 
@@ -53,6 +54,7 @@ PROJECT_MODULES = [
     "market_data",
     "report_generator",
     "llm_explainer",
+    "demo_portfolios",
     "aria_workflow"
 ]
 
