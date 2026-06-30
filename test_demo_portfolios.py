@@ -75,10 +75,13 @@ def test_portfolio_to_dataframe_matches_streamlit_columns():
     assert not data.empty
     assert list(data.columns) == [
         "Instrument",
+        "Sous-jacent",
         "Nom",
         "Type option",
         "QuantitÃ©",
         "Multiplicateur",
+        "Spot",
+        "Volatilite",
         "Strike",
         "MaturitÃ©",
     ]

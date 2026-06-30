@@ -16,6 +16,7 @@ class OptionPosition:
     quantity: int
     multiplier: int = 1
     name: str = ""
+    underlying: str = "SPY"
 
     def __post_init__(self) -> None:
         """Vérifie que la position est valide."""
@@ -83,6 +84,7 @@ class StockPosition:
     spot: float
     quantity: int
     name: str = "Sous-jacent"
+    underlying: str = "SPY"
 
     def __post_init__(self) -> None:
         """Vérifie que la position est valide."""
@@ -141,7 +143,8 @@ class Portfolio:
         contract: OptionContract,
         quantity: int,
         name: str = "",
-        multiplier: int = 1
+        multiplier: int = 1,
+        underlying: str = "SPY"
     ) -> None:
         """
         Ajoute une position sur option.
@@ -154,7 +157,8 @@ class Portfolio:
             contract=contract,
             quantity=quantity,
             multiplier=multiplier,
-            name=name
+            name=name,
+            underlying=underlying
         )
 
         self.positions.append(
@@ -165,14 +169,16 @@ class Portfolio:
         self,
         spot: float,
         quantity: int,
-        name: str = "Sous-jacent"
+        name: str = "Sous-jacent",
+        underlying: str = "SPY"
     ) -> None:
         """Ajoute une position sur le sous-jacent."""
 
         position = StockPosition(
             spot=spot,
             quantity=quantity,
-            name=name
+            name=name,
+            underlying=underlying
         )
 
         self.positions.append(
@@ -226,6 +232,48 @@ class Portfolio:
                 )
 
         return totals
+
+    def underlyings(self) -> list[str]:
+        """Return all underlyings represented in the portfolio."""
+
+        return sorted(
+            {
+                position.underlying
+                for position in self.positions
+            }
+        )
+
+    def exposure_by_underlying(self) -> dict[str, dict[str, float]]:
+        """Aggregate market value and Greeks by underlying."""
+
+        exposures: dict[str, dict[str, float]] = {}
+
+        for position in self.positions:
+            underlying = position.underlying
+
+            if underlying not in exposures:
+                exposures[underlying] = {
+                    "market_value": 0.0,
+                    "abs_market_value": 0.0,
+                    "delta": 0.0,
+                    "gamma": 0.0,
+                    "theta": 0.0,
+                    "vega": 0.0,
+                    "rho": 0.0,
+                    "vanna": 0.0,
+                    "volga": 0.0,
+                }
+
+            market_value = position.market_value()
+            exposures[underlying]["market_value"] += market_value
+            exposures[underlying]["abs_market_value"] += abs(
+                market_value
+            )
+
+            for greek, value in position.total_greeks().items():
+                exposures[underlying][greek] += value
+
+        return exposures
 
     def summary(self) -> None:
         """Affiche un résumé lisible du portefeuille."""

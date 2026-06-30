@@ -1,6 +1,8 @@
-"""
+﻿"""
 ARIA - Application Streamlit
 """
+
+from pathlib import Path
 
 import altair as alt
 import pandas as pd
@@ -32,7 +34,11 @@ from report_generator import generate_professional_pdf_report, generate_risk_rep
 from risk_history import RiskHistory
 from risk_score import calculate_risk_score
 from risk_surface import calculate_risk_surface, surface_to_dataframe
-from scenario_analysis import run_scenario, run_standard_scenarios
+from scenario_analysis import (
+    run_historical_scenarios,
+    run_scenario,
+    run_standard_scenarios,
+)
 from ui_components import (
     inject_custom_css,
     render_header,
@@ -46,45 +52,142 @@ from var_analysis import calculate_var_es, parametric_var_estimate
 
 st.set_page_config(
     page_title="ARIA Risk Agent",
-    page_icon="📊",
+    page_icon="ðŸ“Š",
     layout="wide"
 )
 
 
 def default_portfolio() -> pd.DataFrame:
-    """Crée le portefeuille affiché au premier lancement."""
+    """CrÃ©e le portefeuille affichÃ© au premier lancement."""
 
     return pd.DataFrame(
         [
             {
                 "Instrument": "Option",
-                "Nom": "Calls ATM achetés",
+                "Sous-jacent": "SPY",
+                "Nom": "Calls ATM achetÃ©s",
                 "Type option": "call",
-                "Quantité": 20,
+                "QuantitÃ©": 20,
                 "Multiplicateur": 100,
+                "Spot": 500.0,
+                "Volatilite": 0.20,
                 "Strike": 500.0,
-                "Maturité": 0.25
+                "MaturitÃ©": 0.25
             },
             {
                 "Instrument": "Option",
+                "Sous-jacent": "SPY",
                 "Nom": "Puts vendus",
                 "Type option": "put",
-                "Quantité": -10,
+                "QuantitÃ©": -10,
                 "Multiplicateur": 100,
+                "Spot": 500.0,
+                "Volatilite": 0.20,
                 "Strike": 470.0,
-                "Maturité": 0.25
+                "MaturitÃ©": 0.25
             },
             {
                 "Instrument": "Action",
+                "Sous-jacent": "SPY",
                 "Nom": "Couverture en actions",
                 "Type option": "call",
-                "Quantité": -5,
+                "QuantitÃ©": -5,
                 "Multiplicateur": 1,
+                "Spot": 500.0,
+                "Volatilite": 0.20,
                 "Strike": 500.0,
-                "Maturité": 0.25
+                "MaturitÃ©": 0.25
             }
         ]
     )
+
+
+def normalize_portfolio_table(
+    table: pd.DataFrame,
+    default_spot_value: float,
+    default_volatility_value: float
+) -> pd.DataFrame:
+    """Ensure portfolio tables have the professional multi-underlying schema."""
+
+    normalized = table.copy()
+
+    quantity_columns = [
+        column
+        for column in normalized.columns
+        if column.startswith("Quantit")
+    ]
+    maturity_columns = [
+        column
+        for column in normalized.columns
+        if column.startswith("Maturit")
+    ]
+
+    if "Quantite" not in normalized.columns:
+        normalized["Quantite"] = (
+            normalized[quantity_columns[0]]
+            if quantity_columns
+            else 1
+        )
+
+    if "Maturite" not in normalized.columns:
+        normalized["Maturite"] = (
+            normalized[maturity_columns[0]]
+            if maturity_columns
+            else 0.25
+        )
+
+    alias_columns = [
+        column
+        for column in quantity_columns + maturity_columns
+        if column not in {
+            "Quantite",
+            "Maturite"
+        }
+    ]
+    normalized = normalized.drop(
+        columns=alias_columns,
+        errors="ignore"
+    )
+
+    defaults = {
+        "Sous-jacent": "SPY",
+        "Spot": default_spot_value,
+        "Volatilite": default_volatility_value,
+        "Quantite": 1,
+        "Maturite": 0.25,
+    }
+
+    for column, value in defaults.items():
+        if column not in normalized.columns:
+            normalized[column] = value
+
+    desired_columns = [
+        "Instrument",
+        "Sous-jacent",
+        "Nom",
+        "Type option",
+        "Quantite",
+        "Multiplicateur",
+        "Spot",
+        "Volatilite",
+        "Strike",
+        "Maturite",
+    ]
+
+    existing_columns = [
+        column
+        for column in desired_columns
+        if column in normalized.columns
+    ]
+    other_columns = [
+        column
+        for column in normalized.columns
+        if column not in existing_columns
+    ]
+
+    return normalized[
+        existing_columns + other_columns
+    ]
 
 
 def build_portfolio_from_table(
@@ -96,6 +199,13 @@ def build_portfolio_from_table(
 ) -> Portfolio:
     """Transforme le tableau de l'application en portefeuille Python."""
 
+    def row_value(row, *names, default=None):
+        for name in names:
+            value = row.get(name)
+            if value is not None and not pd.isna(value):
+                return value
+        return default
+
     portfolio = Portfolio(
         name="Portefeuille ARIA"
     )
@@ -103,7 +213,14 @@ def build_portfolio_from_table(
     for index, row in portfolio_table.iterrows():
 
         instrument = row.get("Instrument")
-        quantity_value = row.get("Quantité")
+        quantity_value = row.get("QuantitÃ©")
+
+        if quantity_value is None or pd.isna(quantity_value):
+            quantity_value = row_value(
+                row,
+                "Quantite",
+                "QuantitÃƒÆ’Ã‚Â©"
+            )
 
         if pd.isna(instrument) or pd.isna(quantity_value):
             continue
@@ -118,32 +235,64 @@ def build_portfolio_from_table(
         if pd.isna(name) or not str(name).strip():
             name = f"Position {index + 1}"
 
+        underlying = str(
+            row_value(
+                row,
+                "Sous-jacent",
+                "Underlying",
+                default="SPY"
+            )
+        ).strip() or "SPY"
+
+        row_spot = float(
+            row_value(
+                row,
+                "Spot",
+                default=spot
+            )
+        )
+        row_volatility = float(
+            row_value(
+                row,
+                "Volatilite",
+                "VolatilitÃƒÂ©",
+                default=volatility
+            )
+        )
+
         if instrument == "Action":
             portfolio.add_stock(
-                spot=spot,
+                spot=row_spot,
                 quantity=quantity,
-                name=str(name)
+                name=str(name),
+                underlying=underlying
             )
 
         elif instrument == "Option":
             option_type = row.get("Type option")
             strike = row.get("Strike")
-            maturity = row.get("Maturité")
+            maturity = row.get("MaturitÃ©")
             multiplier_value = row.get("Multiplicateur")
+            if maturity is None or pd.isna(maturity):
+                maturity = row_value(
+                    row,
+                    "Maturite",
+                    "MaturitÃƒÆ’Ã‚Â©"
+                )
 
             if pd.isna(option_type):
                 raise ValueError(
-                    f"Le type d'option manque à la ligne {index + 1}."
+                    f"Le type d'option manque Ã  la ligne {index + 1}."
                 )
 
             if pd.isna(strike) or float(strike) <= 0:
                 raise ValueError(
-                    f"Le strike est invalide à la ligne {index + 1}."
+                    f"Le strike est invalide Ã  la ligne {index + 1}."
                 )
 
             if pd.isna(maturity) or float(maturity) <= 0:
                 raise ValueError(
-                    f"La maturité est invalide à la ligne {index + 1}."
+                    f"La maturitÃ© est invalide Ã  la ligne {index + 1}."
                 )
 
             if pd.isna(multiplier_value):
@@ -153,15 +302,15 @@ def build_portfolio_from_table(
 
             if multiplier <= 0:
                 raise ValueError(
-                    f"Le multiplicateur est invalide à la ligne {index + 1}."
+                    f"Le multiplicateur est invalide Ã  la ligne {index + 1}."
                 )
 
             contract = OptionContract(
-                S=spot,
+                S=row_spot,
                 K=float(strike),
                 T=float(maturity),
                 r=rate,
-                sigma=volatility,
+                sigma=row_volatility,
                 option_type=str(option_type),
                 q=dividend
             )
@@ -170,12 +319,13 @@ def build_portfolio_from_table(
                 contract=contract,
                 quantity=quantity,
                 multiplier=multiplier,
-                name=str(name)
+                name=str(name),
+                underlying=underlying
             )
 
         else:
             raise ValueError(
-                f"Instrument inconnu à la ligne {index + 1}."
+                f"Instrument inconnu Ã  la ligne {index + 1}."
             )
 
     if not portfolio.positions:
@@ -189,14 +339,14 @@ def build_portfolio_from_table(
 def create_stress_chart(
     scenario_results
 ) -> alt.Chart:
-    """Crée un graphique des profits et pertes par scénario."""
+    """CrÃ©e un graphique des profits et pertes par scÃ©nario."""
 
     chart_data = pd.DataFrame(
         [
             {
-                "Scénario": result.name,
+                "ScÃ©nario": result.name,
                 "Profit / Perte": result.profit_and_loss,
-                "Résultat": (
+                "RÃ©sultat": (
                     "Gain"
                     if result.profit_and_loss >= 0
                     else "Perte"
@@ -213,7 +363,7 @@ def create_stress_chart(
         size=32
     ).encode(
         y=alt.Y(
-            "Scénario:N",
+            "ScÃ©nario:N",
             sort=None,
             title=None
         ),
@@ -222,7 +372,7 @@ def create_stress_chart(
             title="Profit / Perte du portefeuille"
         ),
         color=alt.Color(
-            "Résultat:N",
+            "RÃ©sultat:N",
             scale=alt.Scale(
                 domain=[
                     "Gain",
@@ -240,8 +390,8 @@ def create_stress_chart(
         ),
         tooltip=[
             alt.Tooltip(
-                "Scénario:N",
-                title="Scénario"
+                "ScÃ©nario:N",
+                title="ScÃ©nario"
             ),
             alt.Tooltip(
                 "Profit / Perte:Q",
@@ -261,7 +411,7 @@ def create_stress_chart(
         fontWeight="bold"
     ).encode(
         y=alt.Y(
-            "Scénario:N",
+            "ScÃ©nario:N",
             sort=None
         ),
         x=alt.X(
@@ -300,8 +450,8 @@ def create_stress_chart(
     ).properties(
         height=360,
         title=alt.TitleParams(
-            text="Impact des scénarios sur le portefeuille",
-            subtitle="À droite : gain potentiel — À gauche : perte potentielle",
+            text="Impact des scÃ©narios sur le portefeuille",
+            subtitle="Ã€ droite : gain potentiel â€” Ã€ gauche : perte potentielle",
             fontSize=20,
             subtitleFontSize=13,
             anchor="start",
@@ -310,16 +460,16 @@ def create_stress_chart(
     ).configure_view(
         strokeWidth=0
     ).configure_axis(
-        labelColor="#C8D3E0",
-        titleColor="#D5E2F2",
-        gridColor="rgba(213, 226, 242, 0.12)",
+        labelColor="#475569",
+        titleColor="#334155",
+        gridColor="rgba(100, 116, 139, 0.18)",
         domainColor="rgba(0, 213, 255, 0.28)"
     ).configure_title(
-        color="#F4F7FB",
-        subtitleColor="#9CA9BA"
+        color="#172033",
+        subtitleColor="#64748B"
     ).configure_legend(
-        labelColor="#C8D3E0",
-        titleColor="#D5E2F2"
+        labelColor="#475569",
+        titleColor="#334155"
     ).configure(
         background="transparent"
     )
@@ -330,11 +480,11 @@ def create_pnl_profile_chart(
     current_spot: float,
     breakeven_spots: list[float]
 ) -> alt.Chart:
-    """Crée une courbe de P&L selon le niveau du spot."""
+    """CrÃ©e une courbe de P&L selon le niveau du spot."""
 
     chart_data = pnl_data.copy()
 
-    chart_data["Résultat"] = chart_data[
+    chart_data["RÃ©sultat"] = chart_data[
         "Profit / Perte"
     ].apply(
         lambda value: (
@@ -351,7 +501,7 @@ def create_pnl_profile_chart(
         color="#2563EB"
     ).encode(
         x=alt.X(
-            "Spot stressé:Q",
+            "Spot stressÃ©:Q",
             title="Niveau du spot"
         ),
         y=alt.Y(
@@ -360,7 +510,7 @@ def create_pnl_profile_chart(
         ),
         tooltip=[
             alt.Tooltip(
-                "Spot stressé:Q",
+                "Spot stressÃ©:Q",
                 title="Spot",
                 format=",.2f"
             ),
@@ -382,10 +532,10 @@ def create_pnl_profile_chart(
     ).mark_circle(
         size=45
     ).encode(
-        x="Spot stressé:Q",
+        x="Spot stressÃ©:Q",
         y="Profit / Perte:Q",
         color=alt.Color(
-            "Résultat:N",
+            "RÃ©sultat:N",
             scale=alt.Scale(
                 domain=[
                     "Gain",
@@ -464,7 +614,7 @@ def create_pnl_profile_chart(
         height=420,
         title=alt.TitleParams(
             text="Profil de P&L selon le niveau du spot",
-            subtitle="Ligne noire : spot actuel — ligne orange : point mort approximatif",
+            subtitle="Ligne noire : spot actuel â€” ligne orange : point mort approximatif",
             fontSize=20,
             subtitleFontSize=13,
             anchor="start",
@@ -473,16 +623,16 @@ def create_pnl_profile_chart(
     ).configure_view(
         strokeWidth=0
     ).configure_axis(
-        labelColor="#C8D3E0",
-        titleColor="#D5E2F2",
-        gridColor="rgba(213, 226, 242, 0.12)",
+        labelColor="#475569",
+        titleColor="#334155",
+        gridColor="rgba(100, 116, 139, 0.18)",
         domainColor="rgba(0, 213, 255, 0.28)"
     ).configure_title(
-        color="#F4F7FB",
-        subtitleColor="#9CA9BA"
+        color="#172033",
+        subtitleColor="#64748B"
     ).configure_legend(
-        labelColor="#C8D3E0",
-        titleColor="#D5E2F2"
+        labelColor="#475569",
+        titleColor="#334155"
     ).configure(
         background="transparent"
     )
@@ -493,11 +643,11 @@ def create_greeks_profile_chart(
     current_spot: float,
     selected_greeks: list[str]
 ) -> alt.Chart:
-    """Crée une courbe des Greeks selon le niveau du spot."""
+    """CrÃ©e une courbe des Greeks selon le niveau du spot."""
 
     chart_data = greeks_data[
         [
-            "Spot stressé",
+            "Spot stressÃ©",
             "Variation spot"
         ]
         + selected_greeks
@@ -505,7 +655,7 @@ def create_greeks_profile_chart(
 
     long_data = chart_data.melt(
         id_vars=[
-            "Spot stressé",
+            "Spot stressÃ©",
             "Variation spot"
         ],
         value_vars=selected_greeks,
@@ -519,7 +669,7 @@ def create_greeks_profile_chart(
         strokeWidth=3
     ).encode(
         x=alt.X(
-            "Spot stressé:Q",
+            "Spot stressÃ©:Q",
             title="Niveau du spot"
         ),
         y=alt.Y(
@@ -539,7 +689,7 @@ def create_greeks_profile_chart(
                 title="Greek"
             ),
             alt.Tooltip(
-                "Spot stressé:Q",
+                "Spot stressÃ©:Q",
                 title="Spot",
                 format=",.2f"
             ),
@@ -578,7 +728,7 @@ def create_greeks_profile_chart(
         height=420,
         title=alt.TitleParams(
             text="Profil des Greeks selon le niveau du spot",
-            subtitle="La volatilité reste constante. La ligne noire indique le spot actuel.",
+            subtitle="La volatilitÃ© reste constante. La ligne noire indique le spot actuel.",
             fontSize=20,
             subtitleFontSize=13,
             anchor="start",
@@ -587,16 +737,16 @@ def create_greeks_profile_chart(
     ).configure_view(
         strokeWidth=0
     ).configure_axis(
-        labelColor="#C8D3E0",
-        titleColor="#D5E2F2",
-        gridColor="rgba(213, 226, 242, 0.12)",
+        labelColor="#475569",
+        titleColor="#334155",
+        gridColor="rgba(100, 116, 139, 0.18)",
         domainColor="rgba(0, 213, 255, 0.28)"
     ).configure_title(
-        color="#F4F7FB",
-        subtitleColor="#9CA9BA"
+        color="#172033",
+        subtitleColor="#64748B"
     ).configure_legend(
-        labelColor="#C8D3E0",
-        titleColor="#D5E2F2"
+        labelColor="#475569",
+        titleColor="#334155"
     ).configure(
         background="transparent"
     )
@@ -606,7 +756,7 @@ def create_history_chart(
     history_data: pd.DataFrame,
     metric: str
 ) -> alt.Chart:
-    """Crée une courbe historique pour une métrique donnée."""
+    """CrÃ©e une courbe historique pour une mÃ©trique donnÃ©e."""
 
     chart_data = history_data.copy()
 
@@ -665,7 +815,7 @@ def create_history_chart(
         height=380,
         title=alt.TitleParams(
             text=f"Historique de {metric}",
-            subtitle="Évolution des snapshots sauvegardés par ARIA",
+            subtitle="Ã‰volution des snapshots sauvegardÃ©s par ARIA",
             fontSize=20,
             subtitleFontSize=13,
             anchor="start",
@@ -674,13 +824,13 @@ def create_history_chart(
     ).configure_view(
         strokeWidth=0
     ).configure_axis(
-        labelColor="#C8D3E0",
-        titleColor="#D5E2F2",
-        gridColor="rgba(213, 226, 242, 0.12)",
+        labelColor="#475569",
+        titleColor="#334155",
+        gridColor="rgba(100, 116, 139, 0.18)",
         domainColor="rgba(0, 213, 255, 0.28)"
     ).configure_title(
-        color="#F4F7FB",
-        subtitleColor="#9CA9BA"
+        color="#172033",
+        subtitleColor="#64748B"
     ).configure(
         background="transparent"
     )
@@ -691,7 +841,7 @@ def create_var_distribution_chart(
     var_amount: float,
     expected_shortfall: float
 ) -> alt.Chart:
-    """Crée un histogramme des pertes simulées."""
+    """CrÃ©e un histogramme des pertes simulÃ©es."""
 
     chart_data = simulations_data.copy()
 
@@ -705,7 +855,7 @@ def create_var_distribution_chart(
             bin=alt.Bin(
                 maxbins=50
             ),
-            title="Perte simulée"
+            title="Perte simulÃ©e"
         ),
         y=alt.Y(
             "count():Q",
@@ -766,8 +916,8 @@ def create_var_distribution_chart(
     ).properties(
         height=380,
         title=alt.TitleParams(
-            text="Distribution des pertes simulées",
-            subtitle="Ligne rouge : VaR — ligne violette : Expected Shortfall",
+            text="Distribution des pertes simulÃ©es",
+            subtitle="Ligne rouge : VaR â€” ligne violette : Expected Shortfall",
             fontSize=20,
             subtitleFontSize=13,
             anchor="start",
@@ -776,13 +926,13 @@ def create_var_distribution_chart(
     ).configure_view(
         strokeWidth=0
     ).configure_axis(
-        labelColor="#C8D3E0",
-        titleColor="#D5E2F2",
-        gridColor="rgba(213, 226, 242, 0.12)",
+        labelColor="#475569",
+        titleColor="#334155",
+        gridColor="rgba(100, 116, 139, 0.18)",
         domainColor="rgba(0, 213, 255, 0.28)"
     ).configure_title(
-        color="#F4F7FB",
-        subtitleColor="#9CA9BA"
+        color="#172033",
+        subtitleColor="#64748B"
     ).configure(
         background="transparent"
     )
@@ -801,11 +951,11 @@ render_header(
 
 
 st.sidebar.header(
-    "Données de marché"
+    "DonnÃ©es de marchÃ©"
 )
 
 market_source = st.sidebar.selectbox(
-    "Source de données de marché",
+    "Source de donnÃ©es de marchÃ©",
     options=[
         "Manuel",
         "Yahoo Finance",
@@ -872,7 +1022,7 @@ if market_source in {
 
 
 st.sidebar.header(
-    "Marché"
+    "MarchÃ©"
 )
 
 current_spot = st.sidebar.number_input(
@@ -883,7 +1033,7 @@ current_spot = st.sidebar.number_input(
 )
 
 current_volatility_percent = st.sidebar.number_input(
-    "Volatilité utilisée en %",
+    "VolatilitÃ© utilisÃ©e en %",
     min_value=0.01,
     value=float(default_volatility_percent),
     step=1.0
@@ -958,7 +1108,7 @@ spot_move_limit_percent = st.sidebar.number_input(
 )
 
 volatility_move_limit_percent = st.sidebar.number_input(
-    "Variation maximale de volatilité en points",
+    "Variation maximale de volatilitÃ© en points",
     min_value=0.1,
     value=5.0,
     step=0.5
@@ -973,7 +1123,7 @@ z_score_limit = st.sidebar.number_input(
 
 
 st.sidebar.header(
-    "Scénario personnalisé"
+    "ScÃ©nario personnalisÃ©"
 )
 
 custom_spot_change_percent = st.sidebar.number_input(
@@ -983,7 +1133,7 @@ custom_spot_change_percent = st.sidebar.number_input(
 )
 
 custom_volatility_change_points = st.sidebar.number_input(
-    "Choc de volatilité en points",
+    "Choc de volatilitÃ© en points",
     value=15.0,
     step=1.0
 )
@@ -1032,6 +1182,12 @@ if "portfolio_data" not in st.session_state:
         default_portfolio()
     )
 
+st.session_state.portfolio_data = normalize_portfolio_table(
+    st.session_state.portfolio_data,
+    default_spot_value=current_spot,
+    default_volatility_value=current_volatility
+)
+
 
 render_section_title(
     "Composition du portefeuille",
@@ -1074,6 +1230,54 @@ if load_demo_portfolio:
 
     st.rerun()
 
+portfolio_file_path = st.text_input(
+    "Fichier portefeuille CSV",
+    value="data/portfolios/current_portfolio.csv"
+)
+
+portfolio_action_col_1, portfolio_action_col_2 = st.columns(
+    2
+)
+
+if portfolio_action_col_1.button(
+    "Sauvegarder le portefeuille",
+    width="stretch"
+):
+    portfolio_path = Path(
+        portfolio_file_path
+    )
+    portfolio_path.parent.mkdir(
+        parents=True,
+        exist_ok=True
+    )
+    st.session_state.portfolio_data.to_csv(
+        portfolio_path,
+        index=False
+    )
+    st.success(
+        f"Portefeuille sauvegarde : {portfolio_file_path}"
+    )
+
+if portfolio_action_col_2.button(
+    "Charger le portefeuille",
+    width="stretch"
+):
+    loaded_portfolio = pd.read_csv(
+        portfolio_file_path
+    )
+    st.session_state.portfolio_data = normalize_portfolio_table(
+        loaded_portfolio,
+        default_spot_value=current_spot,
+        default_volatility_value=current_volatility
+    )
+
+    if "portfolio_editor" in st.session_state:
+        del st.session_state[
+            "portfolio_editor"
+        ]
+
+    st.rerun()
+
 render_info_card(
     "Lecture des quantites",
     (
@@ -1085,7 +1289,7 @@ render_info_card(
 )
 
 if st.button(
-    "Réinitialiser le portefeuille"
+    "RÃ©initialiser le portefeuille"
 ):
     st.session_state.portfolio_data = (
         default_portfolio()
@@ -1114,6 +1318,9 @@ edited_portfolio = st.data_editor(
             ],
             required=True
         ),
+        "Sous-jacent": st.column_config.TextColumn(
+            "Sous-jacent"
+        ),
         "Nom": st.column_config.TextColumn(
             "Nom de la position"
         ),
@@ -1124,8 +1331,13 @@ edited_portfolio = st.data_editor(
                 "put"
             ]
         ),
-        "Quantité": st.column_config.NumberColumn(
-            "Quantité",
+        "QuantitÃ©": st.column_config.NumberColumn(
+            "QuantitÃ©",
+            step=1,
+            format="%d"
+        ),
+        "Quantite": st.column_config.NumberColumn(
+            "Quantite",
             step=1,
             format="%d"
         ),
@@ -1135,13 +1347,30 @@ edited_portfolio = st.data_editor(
             step=1,
             format="%d"
         ),
+        "Spot": st.column_config.NumberColumn(
+            "Spot",
+            min_value=0.01,
+            step=1.0
+        ),
+        "Volatilite": st.column_config.NumberColumn(
+            "Volatilite",
+            min_value=0.0001,
+            step=0.01,
+            format="%.2f"
+        ),
         "Strike": st.column_config.NumberColumn(
             "Strike",
             min_value=0.01,
             step=1.0
         ),
-        "Maturité": st.column_config.NumberColumn(
-            "Maturité en années",
+        "MaturitÃ©": st.column_config.NumberColumn(
+            "MaturitÃ© en annÃ©es",
+            min_value=0.001,
+            step=0.05,
+            format="%.3f"
+        ),
+        "Maturite": st.column_config.NumberColumn(
+            "Maturite en annees",
             min_value=0.001,
             step=0.05,
             format="%.3f"
@@ -1245,9 +1474,15 @@ if analyse_button:
         portfolio
     )
 
+    scenario_results.extend(
+        run_historical_scenarios(
+            portfolio
+        )
+    )
+
     custom_result = run_scenario(
         portfolio=portfolio,
-        name="Scénario personnalisé",
+        name="ScÃ©nario personnalisÃ©",
         spot_change_percent=(
             custom_spot_change_percent / 100
         ),
@@ -1258,6 +1493,23 @@ if analyse_button:
 
     scenario_results.append(
         custom_result
+    )
+
+    alerts.extend(
+        detector.detect_concentration(
+            portfolio
+        )
+    )
+    alerts.extend(
+        detector.detect_correlation_risk(
+            portfolio
+        )
+    )
+    alerts.extend(
+        detector.detect_scenario_loss(
+            scenario_results=scenario_results,
+            portfolio_value=current_snapshot.portfolio_value
+        )
     )
 
     risk_score_result = calculate_risk_score(
@@ -1288,7 +1540,7 @@ if analyse_button:
 
     overview_tab, stress_tab, profiles_tab, history_tab, alerts_tab = st.tabs(
         [
-            "Vue générale",
+            "Vue gÃ©nÃ©rale",
             "Stress tests",
             "Profils de risque",
             "Historique",
@@ -1300,7 +1552,7 @@ if analyse_button:
 
         render_section_title(
             "Risk Score ARIA",
-            "Synthese du niveau de risque agrégé par ARIA."
+            "Synthese du niveau de risque agrÃ©gÃ© par ARIA."
         )
 
         render_risk_badge(
@@ -1354,7 +1606,7 @@ if analyse_button:
         if market_snapshot is not None:
 
             render_section_title(
-                "Données de marché utilisées",
+                "DonnÃ©es de marchÃ© utilisÃ©es",
                 "Contexte de prix, volatilite et source active."
             )
 
@@ -1401,8 +1653,8 @@ if analyse_button:
             )
 
         render_section_title(
-            "Résumé du portefeuille",
-            "Valeur, paramètres de marché et taille de l'univers analyse."
+            "RÃ©sumÃ© du portefeuille",
+            "Valeur, paramÃ¨tres de marchÃ© et taille de l'univers analyse."
         )
 
         render_metric_row(
@@ -1428,7 +1680,7 @@ if analyse_button:
 
         render_section_title(
             "Greeks du portefeuille",
-            "Expositions agregées aux principaux facteurs de risque."
+            "Expositions agregÃ©es aux principaux facteurs de risque."
         )
 
         greek_1, greek_2, greek_3 = (
@@ -1496,7 +1748,7 @@ if analyse_button:
         )
 
         hedge_col_3.metric(
-            "Quantité sous-jacent",
+            "QuantitÃ© sous-jacent",
             f"{abs(hedge_result.hedge_quantity):,.0f}"
         )
 
@@ -1510,7 +1762,7 @@ if analyse_button:
         )
 
         render_section_title(
-            "Positions analysées",
+            "Positions analysÃ©es",
             "Inventaire des lignes retenues dans le moteur de risque."
         )
 
@@ -1528,14 +1780,14 @@ if analyse_button:
                         "Instrument": (
                             position.contract.option_type.upper()
                         ),
-                        "Quantité": position.quantity,
+                        "QuantitÃ©": position.quantity,
                         "Multiplicateur": position.multiplier,
                         "Exposition": (
                             position.quantity
                             * position.multiplier
                         ),
                         "Strike": position.contract.K,
-                        "Maturité": position.contract.T,
+                        "MaturitÃ©": position.contract.T,
                         "Valeur": position.market_value()
                     }
                 )
@@ -1545,11 +1797,11 @@ if analyse_button:
                     {
                         "Nom": position.name,
                         "Instrument": "ACTION",
-                        "Quantité": position.quantity,
+                        "QuantitÃ©": position.quantity,
                         "Multiplicateur": 1,
                         "Exposition": position.quantity,
                         "Strike": None,
-                        "Maturité": None,
+                        "MaturitÃ©": None,
                         "Valeur": position.market_value()
                     }
                 )
@@ -1584,13 +1836,13 @@ if analyse_button:
         )
 
         best_column.metric(
-            "Meilleur scénario",
+            "Meilleur scÃ©nario",
             best_scenario.name,
             f"{best_scenario.profit_and_loss:+,.2f}"
         )
 
         worst_column.metric(
-            "Scénario le plus défavorable",
+            "ScÃ©nario le plus dÃ©favorable",
             worst_scenario.name,
             f"{worst_scenario.profit_and_loss:+,.2f}"
         )
@@ -1607,29 +1859,48 @@ if analyse_button:
         scenario_table = pd.DataFrame(
             [
                 {
-                    "Scénario": result.name,
+                    "ScÃ©nario": result.name,
                     "Variation spot": (
                         f"{result.spot_change_percent:+.1%}"
                     ),
-                    "Variation volatilité": (
+                    "Variation volatilitÃ©": (
                         f"{result.volatility_change_points:+.1%}"
                     ),
+                    "Choc taux": (
+                        f"{result.rate_change_points:+.1%}"
+                    ),
+                    "Choc correlation": (
+                        f"{result.correlation_shock:+.1%}"
+                    ),
                     "Valeur initiale": result.initial_value,
-                    "Valeur stressée": result.stressed_value,
+                    "Valeur stressÃ©e": result.stressed_value,
                     "Profit / Perte": result.profit_and_loss,
-                    "Delta stressé": result.stressed_delta,
-                    "Gamma stressé": result.stressed_gamma,
-                    "Vega stressé": result.stressed_vega
+                    "Delta stressÃ©": result.stressed_delta,
+                    "Gamma stressÃ©": result.stressed_gamma,
+                    "Vega stressÃ©": result.stressed_vega
                 }
                 for result in scenario_results
             ]
         )
 
         with st.expander(
-            "Voir le détail complet des stress tests"
+            "Voir le dÃ©tail complet des stress tests"
         ):
             st.dataframe(
                 scenario_table,
+                hide_index=True,
+                width="stretch"
+            )
+
+        if worst_scenario.top_contributors:
+            render_section_title(
+                "Top contributeurs au pire stress",
+                "Positions qui expliquent le plus la perte du scenario le plus defavorable."
+            )
+            st.dataframe(
+                pd.DataFrame(
+                    worst_scenario.top_contributors
+                ).head(8),
                 hide_index=True,
                 width="stretch"
             )
@@ -1668,7 +1939,7 @@ if analyse_button:
         )
 
         risk_matrix = surface_data.pivot(
-            index="Variation volatilité",
+            index="Variation volatilitÃ©",
             columns="Variation spot",
             values="Profit / Perte"
         )
@@ -1732,12 +2003,12 @@ if analyse_button:
         )
 
         var_col_3.metric(
-            "Pire perte simulée",
+            "Pire perte simulÃ©e",
             f"{var_result.worst_loss:,.2f}"
         )
 
         var_col_4.metric(
-            "VaR paramétrique",
+            "VaR paramÃ©trique",
             f"{parametric_var:,.2f}"
         )
 
@@ -1808,14 +2079,14 @@ if analyse_button:
         )
 
         pnl_column_1.metric(
-            "Meilleur spot testé",
-            f"{best_pnl_point['Spot stressé']:,.2f}",
+            "Meilleur spot testÃ©",
+            f"{best_pnl_point['Spot stressÃ©']:,.2f}",
             f"{best_pnl_point['Profit / Perte']:+,.2f}"
         )
 
         pnl_column_2.metric(
-            "Pire spot testé",
-            f"{worst_pnl_point['Spot stressé']:,.2f}",
+            "Pire spot testÃ©",
+            f"{worst_pnl_point['Spot stressÃ©']:,.2f}",
             f"{worst_pnl_point['Profit / Perte']:+,.2f}"
         )
 
@@ -1828,7 +2099,7 @@ if analyse_button:
             breakeven_text = "Aucun dans l'intervalle"
 
         pnl_column_3.metric(
-            "Point mort estimé",
+            "Point mort estimÃ©",
             breakeven_text
         )
 
@@ -1840,7 +2111,7 @@ if analyse_button:
         )
 
         selected_greeks = st.multiselect(
-            "Greeks à afficher",
+            "Greeks Ã  afficher",
             options=[
                 "Delta",
                 "Gamma",
@@ -1905,7 +2176,7 @@ if analyse_button:
             )
 
             hist_col_2.metric(
-                "Dernière valeur",
+                "DerniÃ¨re valeur",
                 (
                     f"{history_summary['latest_portfolio_value']:,.2f}"
                     if history_summary["latest_portfolio_value"] is not None
@@ -1949,7 +2220,7 @@ if analyse_button:
             ]
 
             selected_metric = st.selectbox(
-                "Métrique à afficher",
+                "MÃ©trique Ã  afficher",
                 available_metrics
             )
 
@@ -1985,18 +2256,18 @@ if analyse_button:
 
         if not alerts:
             st.success(
-                "Aucune anomalie détectée."
+                "Aucune anomalie dÃ©tectÃ©e."
             )
 
         else:
             st.warning(
-                f"{len(alerts)} anomalie(s) détectée(s)."
+                f"{len(alerts)} anomalie(s) dÃ©tectÃ©e(s)."
             )
 
             for alert in alerts:
 
                 alert_text = (
-                    f"**{alert.name}** — "
+                    f"**{alert.name}** â€” "
                     f"{alert.message}\n\n"
                     f"Valeur actuelle : "
                     f"`{alert.current_value:.6f}`"
@@ -2004,7 +2275,7 @@ if analyse_button:
 
                 if alert.reference_value is not None:
                     alert_text += (
-                        "\n\nValeur de référence : "
+                        "\n\nValeur de rÃ©fÃ©rence : "
                         f"`{alert.reference_value:.6f}`"
                     )
 
@@ -2019,7 +2290,7 @@ if analyse_button:
                         alert_text
                     )
 
-                elif alert.severity == "ÉLEVÉE":
+                elif alert.severity == "Ã‰LEVÃ‰E":
                     st.warning(
                         alert_text
                     )
@@ -2041,7 +2312,7 @@ if analyse_button:
 
         if enable_llm_commentary:
             with st.spinner(
-                "ARIA génère l'explication..."
+                "ARIA gÃ©nÃ¨re l'explication..."
             ):
                 llm_analysis = generate_llm_analysis(
                     snapshot=current_snapshot,
@@ -2067,14 +2338,14 @@ if analyse_button:
 
         else:
             llm_analysis = (
-                "### Synthèse ARIA\n\n"
-                "Le commentaire LLM est désactivé pour cette analyse. "
-                "Les métriques quantitatives, alertes, stress tests, VaR "
+                "### SynthÃ¨se ARIA\n\n"
+                "Le commentaire LLM est dÃ©sactivÃ© pour cette analyse. "
+                "Les mÃ©triques quantitatives, alertes, stress tests, VaR "
                 "et recommandations de couverture restent disponibles. "
-                "Active le commentaire LLM dans la sidebar pour générer "
-                "une analyse narrative à partir des chiffres produits par ARIA, "
-                "avec des pistes pour réduire le risque et améliorer le rendement "
-                "ajusté du risque."
+                "Active le commentaire LLM dans la sidebar pour gÃ©nÃ©rer "
+                "une analyse narrative Ã  partir des chiffres produits par ARIA, "
+                "avec des pistes pour rÃ©duire le risque et amÃ©liorer le rendement "
+                "ajustÃ© du risque."
             )
 
             llm_analysis_en = (
@@ -2146,7 +2417,7 @@ if analyse_button:
         )
 
         report_download_col_1.download_button(
-            label="Télécharger le rapport Markdown",
+            label="TÃ©lÃ©charger le rapport Markdown",
             data=report_text,
             file_name="rapport_risque_aria.md",
             mime="text/markdown",
@@ -2155,7 +2426,7 @@ if analyse_button:
         )
 
         report_download_col_2.download_button(
-            label="Télécharger le rapport PDF",
+            label="TÃ©lÃ©charger le rapport PDF",
             data=report_pdf_fr,
             file_name="rapport_risque_aria_fr.pdf",
             mime="application/pdf",
@@ -2174,9 +2445,10 @@ if analyse_button:
 
         st.caption(
             "Le rapport est disponible en Markdown, PDF francais et PDF anglais. "
-            "Il mentionne clairement que le projet a été développé par Enrique Jara Ron."
+            "Il mentionne clairement que le projet a Ã©tÃ© dÃ©veloppÃ© par Enrique Jara Ron."
         )
 
     st.success(
-        "Le snapshot actuel a été ajouté à l'historique."
+        "Le snapshot actuel a Ã©tÃ© ajoutÃ© Ã  l'historique."
     )
+

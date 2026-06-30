@@ -23,6 +23,11 @@ and keeps the Streamlit app focused on orchestration and visualization.
 - Delta, Gamma, Theta, Vega, Rho, Vanna and Volga aggregation.
 - Long and short option / stock positions with contract multipliers.
 - Standard and custom stress scenarios.
+- Stylized historical crisis stress scenarios inspired by 2008, Covid,
+  yen-carry unwind, inflation shock, rates shock, tech sell-off, volatility
+  spike and banking stress.
+- Multi-underlying portfolio tables with per-line spot and volatility.
+- Portfolio CSV save / load workflow for reusable books.
 - Spot / volatility risk surface.
 - P&L profile and breakeven estimation.
 - Greeks profile across spot levels.
@@ -31,8 +36,12 @@ and keeps the Streamlit app focused on orchestration and visualization.
 - ARIA Risk Score from 0 to 100.
 - Quantitative anomaly detection on Greeks, market moves and historical z-scores.
 - Delta hedge recommendation.
+- Institutional alerts for concentration, scenario loss, drawdown and
+  correlation convergence risk.
 - Modular market data providers: Manual, Yahoo Finance, CSV and optional Bloomberg.
-- Demo option strategies ready to load in the dashboard.
+- Demo option strategies and realistic books ready to load in the dashboard:
+  tech options book, hedged equity portfolio, volatility book and
+  crisis-sensitive portfolio.
 - Downloadable executive Markdown and PDF risk reports.
 - Optional LLM-based risk commentary.
 - Automated tests, Ruff linting and project diagnostics.

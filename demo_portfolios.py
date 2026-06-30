@@ -377,6 +377,218 @@ def create_covered_call(
     return portfolio
 
 
+def create_tech_options_book(
+    rate: float = 0.045,
+    volatility: float = 0.28,
+) -> Portfolio:
+    """Create a multi-name technology options book."""
+
+    portfolio = Portfolio(
+        name="Tech Options Book"
+    )
+    names = [
+        (
+            "AAPL",
+            195.0
+        ),
+        (
+            "MSFT",
+            430.0
+        ),
+        (
+            "NVDA",
+            125.0
+        ),
+    ]
+
+    for ticker, spot in names:
+        portfolio.add_stock(
+            spot=spot,
+            quantity=80,
+            name=f"{ticker} cash equity",
+            underlying=ticker,
+        )
+        portfolio.add_option(
+            contract=create_put_option(
+                spot=spot,
+                strike=spot * 0.92,
+                maturity=0.35,
+                rate=rate,
+                volatility=volatility + 0.04,
+            ),
+            quantity=2,
+            multiplier=100,
+            name=f"{ticker} protective puts",
+            underlying=ticker,
+        )
+        portfolio.add_option(
+            contract=create_call_option(
+                spot=spot,
+                strike=spot * 1.10,
+                maturity=0.35,
+                rate=rate,
+                volatility=volatility,
+            ),
+            quantity=-1,
+            multiplier=100,
+            name=f"{ticker} overwrite calls",
+            underlying=ticker,
+        )
+
+    return portfolio
+
+
+def create_hedged_equity_portfolio(
+    rate: float = 0.045,
+    volatility: float = 0.22,
+) -> Portfolio:
+    """Create an institutional hedged equity portfolio."""
+
+    portfolio = Portfolio(
+        name="Hedged Equity Portfolio"
+    )
+
+    equity_lines = [
+        (
+            "SPY",
+            520.0,
+            160
+        ),
+        (
+            "IWM",
+            210.0,
+            120
+        ),
+        (
+            "EFA",
+            82.0,
+            180
+        ),
+    ]
+
+    for ticker, spot, quantity in equity_lines:
+        portfolio.add_stock(
+            spot=spot,
+            quantity=quantity,
+            name=f"{ticker} equity allocation",
+            underlying=ticker,
+        )
+
+    portfolio.add_option(
+        contract=create_put_option(
+            spot=520.0,
+            strike=485.0,
+            maturity=0.50,
+            rate=rate,
+            volatility=volatility + 0.03,
+        ),
+        quantity=3,
+        multiplier=100,
+        name="SPY index hedge puts",
+        underlying="SPY",
+    )
+
+    return portfolio
+
+
+def create_volatility_book(
+    rate: float = 0.045,
+) -> Portfolio:
+    """Create a volatility-sensitive options book."""
+
+    portfolio = Portfolio(
+        name="Volatility Book"
+    )
+
+    for ticker, spot, vol in [
+        (
+            "SPY",
+            520.0,
+            0.24
+        ),
+        (
+            "QQQ",
+            455.0,
+            0.30
+        ),
+    ]:
+        portfolio.add_option(
+            contract=create_call_option(
+                spot=spot,
+                strike=spot,
+                maturity=0.25,
+                rate=rate,
+                volatility=vol,
+            ),
+            quantity=4,
+            multiplier=100,
+            name=f"{ticker} ATM calls long vega",
+            underlying=ticker,
+        )
+        portfolio.add_option(
+            contract=create_put_option(
+                spot=spot,
+                strike=spot,
+                maturity=0.25,
+                rate=rate,
+                volatility=vol,
+            ),
+            quantity=4,
+            multiplier=100,
+            name=f"{ticker} ATM puts long vega",
+            underlying=ticker,
+        )
+
+    return portfolio
+
+
+def create_crisis_sensitive_portfolio(
+    rate: float = 0.045,
+    volatility: float = 0.24,
+) -> Portfolio:
+    """Create a portfolio intentionally vulnerable to crisis shocks."""
+
+    portfolio = Portfolio(
+        name="Crisis-sensitive Portfolio"
+    )
+
+    for ticker, spot in [
+        (
+            "SPY",
+            520.0
+        ),
+        (
+            "QQQ",
+            455.0
+        ),
+        (
+            "KRE",
+            52.0
+        ),
+    ]:
+        portfolio.add_stock(
+            spot=spot,
+            quantity=200,
+            name=f"{ticker} long risk",
+            underlying=ticker,
+        )
+        portfolio.add_option(
+            contract=create_put_option(
+                spot=spot,
+                strike=spot * 0.90,
+                maturity=0.20,
+                rate=rate,
+                volatility=volatility,
+            ),
+            quantity=-2,
+            multiplier=100,
+            name=f"{ticker} short downside puts",
+            underlying=ticker,
+        )
+
+    return portfolio
+
+
 def get_demo_portfolio_names() -> list[str]:
     """Renvoie la liste des portefeuilles de démonstration disponibles."""
 
@@ -387,6 +599,10 @@ def get_demo_portfolio_names() -> list[str]:
         "Bear Put Spread",
         "Protective Put",
         "Covered Call",
+        "Tech Options Book",
+        "Hedged Equity Portfolio",
+        "Volatility Book",
+        "Crisis-sensitive Portfolio",
     ]
 
 
@@ -453,6 +669,29 @@ def create_demo_portfolio(
             volatility=volatility,
         )
 
+    if name == "Tech Options Book":
+        return create_tech_options_book(
+            rate=rate,
+            volatility=volatility,
+        )
+
+    if name == "Hedged Equity Portfolio":
+        return create_hedged_equity_portfolio(
+            rate=rate,
+            volatility=volatility,
+        )
+
+    if name == "Volatility Book":
+        return create_volatility_book(
+            rate=rate,
+        )
+
+    if name == "Crisis-sensitive Portfolio":
+        return create_crisis_sensitive_portfolio(
+            rate=rate,
+            volatility=volatility,
+        )
+
     raise ValueError(
         f"Portefeuille de démonstration inconnu : {name}"
     )
@@ -475,10 +714,13 @@ def portfolio_to_dataframe(
             rows.append(
                 {
                     "Instrument": "Option",
+                    "Sous-jacent": position.underlying,
                     "Nom": position.name,
                     "Type option": position.contract.option_type,
                     "QuantitÃ©": position.quantity,
                     "Multiplicateur": position.multiplier,
+                    "Spot": position.contract.S,
+                    "Volatilite": position.contract.sigma,
                     "Strike": position.contract.K,
                     "MaturitÃ©": position.contract.T,
                 }
@@ -488,10 +730,13 @@ def portfolio_to_dataframe(
             rows.append(
                 {
                     "Instrument": "Action",
+                    "Sous-jacent": position.underlying,
                     "Nom": position.name,
                     "Type option": "call",
                     "QuantitÃ©": position.quantity,
                     "Multiplicateur": 1,
+                    "Spot": position.spot,
+                    "Volatilite": 0.20,
                     "Strike": position.spot,
                     "MaturitÃ©": 0.25,
                 }
@@ -501,10 +746,13 @@ def portfolio_to_dataframe(
         rows,
         columns=[
             "Instrument",
+            "Sous-jacent",
             "Nom",
             "Type option",
             "QuantitÃ©",
             "Multiplicateur",
+            "Spot",
+            "Volatilite",
             "Strike",
             "MaturitÃ©",
         ],

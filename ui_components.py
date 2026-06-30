@@ -527,6 +527,148 @@ def inject_custom_css() -> str:
             font-size: 1.72rem;
         }
     }
+
+    /* Institutional premium theme overrides */
+    :root {
+        --aria-bg: #F5F7FA;
+        --aria-bg-2: #FFFFFF;
+        --aria-panel: #FFFFFF;
+        --aria-panel-2: #F8FAFC;
+        --aria-panel-3: #EEF2F6;
+        --aria-ink: #172033;
+        --aria-muted: #64748B;
+        --aria-soft: #334155;
+        --aria-line: #D9E1EA;
+        --aria-line-strong: #B8C4D2;
+        --aria-cyan: #0B4F71;
+        --aria-green: #0F766E;
+        --aria-amber: #B7791F;
+        --aria-red: #B42318;
+        --aria-violet: #4C566A;
+        --aria-shadow: rgba(15, 23, 42, 0.08);
+    }
+
+    html,
+    body,
+    [data-testid="stAppViewContainer"] {
+        background: #F5F7FA;
+        color: var(--aria-ink);
+        font-family: "Inter", "Segoe UI", Arial, sans-serif;
+    }
+
+    [data-testid="stAppViewContainer"]::before {
+        display: none;
+    }
+
+    .block-container {
+        max-width: 1440px;
+        padding-top: 1.5rem;
+    }
+
+    [data-testid="stSidebar"] {
+        background: #FFFFFF;
+        border-right: 1px solid #D9E1EA;
+        box-shadow: 8px 0 28px rgba(15, 23, 42, 0.05);
+    }
+
+    [data-testid="stSidebar"] * {
+        color: #334155;
+    }
+
+    [data-testid="stSidebar"] h2,
+    [data-testid="stSidebar"] h3 {
+        color: #172033;
+        border-bottom: 1px solid #D9E1EA;
+    }
+
+    .aria-header {
+        background: #FFFFFF;
+        border: 1px solid #D9E1EA;
+        box-shadow: 0 18px 45px rgba(15, 23, 42, 0.08);
+    }
+
+    .aria-header::before {
+        display: none;
+    }
+
+    .aria-eyebrow,
+    .aria-pill {
+        color: #0B4F71;
+        background: #EEF6FA;
+        border-color: #B8D7E5;
+        box-shadow: none;
+    }
+
+    .aria-title {
+        color: #172033;
+        text-shadow: none;
+    }
+
+    .aria-subtitle,
+    .aria-card-help,
+    .aria-info-card {
+        color: #475569;
+    }
+
+    .aria-author {
+        color: #0B4F71;
+    }
+
+    .aria-system-cell,
+    .aria-card,
+    .aria-info-card,
+    [data-testid="stMetric"],
+    [data-testid="stAlert"] {
+        background: #FFFFFF;
+        border: 1px solid #D9E1EA;
+        box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
+    }
+
+    .aria-card::after {
+        background: #0B4F71;
+        opacity: 1;
+    }
+
+    .aria-section-title::before {
+        background: #0B4F71;
+        box-shadow: none;
+    }
+
+    .stTabs [data-baseweb="tab-list"] {
+        background: #FFFFFF;
+        border: 1px solid #D9E1EA;
+    }
+
+    .stTabs [data-baseweb="tab"] {
+        color: #64748B;
+    }
+
+    .stTabs [aria-selected="true"] {
+        background: #EEF6FA;
+        color: #172033;
+        border: 1px solid #B8D7E5;
+    }
+
+    .stButton button,
+    .stDownloadButton button {
+        background: #0B4F71 !important;
+        border: 1px solid #0B4F71 !important;
+        color: #FFFFFF !important;
+        box-shadow: 0 10px 22px rgba(11, 79, 113, 0.16);
+    }
+
+    .stButton button:hover,
+    .stDownloadButton button:hover {
+        background: #08384F !important;
+        border-color: #08384F !important;
+        box-shadow: 0 12px 26px rgba(11, 79, 113, 0.20);
+    }
+
+    div[data-testid="stDataFrame"],
+    div[data-testid="stDataEditor"] {
+        border: 1px solid #D9E1EA;
+        box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
+    }
 </style>
 """
 

@@ -285,11 +285,171 @@ class AnomalyDetector:
 
         return alerts
 
+    def detect_concentration(
+        self,
+        portfolio: Portfolio,
+        concentration_limit: float = 0.55
+    ) -> list[Alert]:
+        """Detect excessive single-underlying concentration."""
+
+        exposures = portfolio.exposure_by_underlying()
+        gross_exposure = sum(
+            exposure["abs_market_value"]
+            for exposure in exposures.values()
+        )
+
+        if gross_exposure <= 0:
+            return []
+
+        alerts = []
+
+        for underlying, exposure in exposures.items():
+            concentration = (
+                exposure["abs_market_value"]
+                / gross_exposure
+            )
+
+            if concentration > concentration_limit:
+                alerts.append(
+                    Alert(
+                        name="Concentration excessive",
+                        severity="ÉLEVÉE",
+                        message=(
+                            f"L'exposition brute est trop concentrée sur {underlying}. "
+                            "Une banque attendrait une justification, une limite ou une couverture dédiée."
+                        ),
+                        current_value=concentration,
+                        reference_value=concentration_limit
+                    )
+                )
+
+        return alerts
+
+    def detect_scenario_loss(
+        self,
+        scenario_results,
+        portfolio_value: float,
+        loss_limit_percent: float = 0.08
+    ) -> list[Alert]:
+        """Detect large losses under stress scenarios."""
+
+        if portfolio_value == 0:
+            return []
+
+        alerts = []
+
+        for result in scenario_results:
+            loss_ratio = (
+                -result.profit_and_loss
+                / abs(portfolio_value)
+            )
+
+            if loss_ratio > loss_limit_percent:
+                severity = (
+                    "CRITIQUE"
+                    if loss_ratio >= 2 * loss_limit_percent
+                    else "ÉLEVÉE"
+                )
+                alerts.append(
+                    Alert(
+                        name="Perte sous scénario",
+                        severity=severity,
+                        message=(
+                            f"Le scénario '{result.name}' génère une perte importante. "
+                            "Il faut analyser les lignes contributrices et tester une réduction de risque."
+                        ),
+                        current_value=loss_ratio,
+                        reference_value=loss_limit_percent
+                    )
+                )
+
+        return alerts
+
+    def detect_correlation_risk(
+        self,
+        portfolio: Portfolio,
+        minimum_underlyings: int = 3
+    ) -> list[Alert]:
+        """Flag portfolios exposed to correlation convergence risk."""
+
+        exposures = portfolio.exposure_by_underlying()
+
+        if len(exposures) < minimum_underlyings:
+            return []
+
+        directional_exposures = [
+            exposure["delta"]
+            for exposure in exposures.values()
+            if abs(
+                exposure["delta"]
+            ) > self.delta_limit * 0.35
+        ]
+
+        if len(directional_exposures) >= minimum_underlyings:
+            return [
+                Alert(
+                    name="Risque de corrélation",
+                    severity="ÉLEVÉE",
+                    message=(
+                        "Plusieurs sous-jacents portent une exposition directionnelle significative. "
+                        "En crise, les corrélations peuvent converger et réduire la diversification."
+                    ),
+                    current_value=float(
+                        len(directional_exposures)
+                    ),
+                    reference_value=float(
+                        minimum_underlyings
+                    )
+                )
+            ]
+
+        return []
+
+    def detect_drawdown(
+        self,
+        current: RiskSnapshot,
+        history: list[RiskSnapshot],
+        drawdown_limit: float = 0.08
+    ) -> list[Alert]:
+        """Detect portfolio drawdown versus historical peak value."""
+
+        if not history:
+            return []
+
+        peak_value = max(
+            snapshot.portfolio_value
+            for snapshot in history
+        )
+
+        if peak_value <= 0:
+            return []
+
+        drawdown = (
+            peak_value - current.portfolio_value
+        ) / peak_value
+
+        if drawdown > drawdown_limit:
+            return [
+                Alert(
+                    name="Drawdown portefeuille",
+                    severity="ÉLEVÉE",
+                    message=(
+                        "La valeur du portefeuille est en drawdown significatif par rapport au pic historique."
+                    ),
+                    current_value=drawdown,
+                    reference_value=drawdown_limit
+                )
+            ]
+
+        return []
+
     def detect_all(
         self,
         current: RiskSnapshot,
         history: list[RiskSnapshot] | None = None,
-        previous: RiskSnapshot | None = None
+        previous: RiskSnapshot | None = None,
+        portfolio: Portfolio | None = None,
+        scenario_results=None
     ) -> list[Alert]:
         """Lance toutes les méthodes de détection disponibles."""
 
@@ -312,6 +472,33 @@ class AnomalyDetector:
                 self.detect_historical_anomalies(
                     current=current,
                     history=history
+                )
+            )
+
+            alerts.extend(
+                self.detect_drawdown(
+                    current=current,
+                    history=history
+                )
+            )
+
+        if portfolio is not None:
+            alerts.extend(
+                self.detect_concentration(
+                    portfolio
+                )
+            )
+            alerts.extend(
+                self.detect_correlation_risk(
+                    portfolio
+                )
+            )
+
+        if scenario_results is not None:
+            alerts.extend(
+                self.detect_scenario_loss(
+                    scenario_results=scenario_results,
+                    portfolio_value=current.portfolio_value
                 )
             )
 
