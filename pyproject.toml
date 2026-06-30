@@ -30,6 +30,7 @@ dependencies = [
     "numpy",
     "scipy",
     "matplotlib",
+    "reportlab",
     "altair",
     "openai",
     "python-dotenv",

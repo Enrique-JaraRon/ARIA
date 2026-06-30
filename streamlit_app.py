@@ -28,7 +28,7 @@ from pnl_profile import (
 )
 from portfolio import Portfolio
 from pricing_BS import OptionContract
-from report_generator import generate_pdf_report, generate_risk_report
+from report_generator import generate_professional_pdf_report, generate_risk_report
 from risk_history import RiskHistory
 from risk_score import calculate_risk_score
 from risk_surface import calculate_risk_surface, surface_to_dataframe
@@ -2037,6 +2037,7 @@ if analyse_button:
         )
 
         llm_analysis = None
+        llm_analysis_en = None
 
         if enable_llm_commentary:
             with st.spinner(
@@ -2049,7 +2050,19 @@ if analyse_button:
                     scenario_results=scenario_results,
                     var_result=var_result,
                     hedge_result=hedge_result,
-                    market_snapshot=market_snapshot
+                    market_snapshot=market_snapshot,
+                    language="fr"
+                )
+
+                llm_analysis_en = generate_llm_analysis(
+                    snapshot=current_snapshot,
+                    alerts=alerts,
+                    risk_score_result=risk_score_result,
+                    scenario_results=scenario_results,
+                    var_result=var_result,
+                    hedge_result=hedge_result,
+                    market_snapshot=market_snapshot,
+                    language="en"
                 )
 
         else:
@@ -2062,6 +2075,15 @@ if analyse_button:
                 "une analyse narrative à partir des chiffres produits par ARIA, "
                 "avec des pistes pour réduire le risque et améliorer le rendement "
                 "ajusté du risque."
+            )
+
+            llm_analysis_en = (
+                "### ARIA Summary\n\n"
+                "LLM commentary is disabled for this analysis. "
+                "The quantitative metrics, alerts, stress tests, VaR and hedge "
+                "recommendations remain available. Enable LLM commentary in the "
+                "sidebar to generate a narrative analysis from ARIA outputs, with "
+                "ideas to reduce risk and improve risk-adjusted return."
             )
 
         st.markdown(
@@ -2089,12 +2111,38 @@ if analyse_button:
             llm_analysis=llm_analysis
         )
 
-        report_pdf = generate_pdf_report(
-            report_text
+        report_pdf_fr = generate_professional_pdf_report(
+            portfolio=portfolio,
+            spot=current_spot,
+            volatility=current_volatility,
+            alerts=alerts,
+            scenario_results=scenario_results,
+            var_result=var_result,
+            parametric_var=parametric_var,
+            hedge_result=hedge_result,
+            risk_score_result=risk_score_result,
+            market_snapshot=market_snapshot,
+            llm_analysis=llm_analysis,
+            language="fr"
         )
 
-        report_download_col_1, report_download_col_2 = st.columns(
-            2
+        report_pdf_en = generate_professional_pdf_report(
+            portfolio=portfolio,
+            spot=current_spot,
+            volatility=current_volatility,
+            alerts=alerts,
+            scenario_results=scenario_results,
+            var_result=var_result,
+            parametric_var=parametric_var,
+            hedge_result=hedge_result,
+            risk_score_result=risk_score_result,
+            market_snapshot=market_snapshot,
+            llm_analysis=llm_analysis_en,
+            language="en"
+        )
+
+        report_download_col_1, report_download_col_2, report_download_col_3 = st.columns(
+            3
         )
 
         report_download_col_1.download_button(
@@ -2108,15 +2156,24 @@ if analyse_button:
 
         report_download_col_2.download_button(
             label="Télécharger le rapport PDF",
-            data=report_pdf,
-            file_name="rapport_risque_aria.pdf",
+            data=report_pdf_fr,
+            file_name="rapport_risque_aria_fr.pdf",
             mime="application/pdf",
             type="primary",
             width="stretch"
         )
 
+        report_download_col_3.download_button(
+            label="Download EN PDF",
+            data=report_pdf_en,
+            file_name="aria_risk_report_en.pdf",
+            mime="application/pdf",
+            type="secondary",
+            width="stretch"
+        )
+
         st.caption(
-            "Le rapport est disponible en Markdown et en PDF. "
+            "Le rapport est disponible en Markdown, PDF francais et PDF anglais. "
             "Il mentionne clairement que le projet a été développé par Enrique Jara Ron."
         )
 

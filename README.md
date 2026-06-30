@@ -82,7 +82,9 @@ Finance or CSV data.
 
 ## Executive Risk Report
 
-The downloadable Markdown / PDF report is structured as an internal-style risk note:
+The downloadable Markdown / PDF report is structured as a professional
+internal-style risk note. Streamlit provides three exports: Markdown, French
+PDF and English PDF.
 
 - Executive Summary
 - Market Context
@@ -94,9 +96,11 @@ The downloadable Markdown / PDF report is structured as an internal-style risk n
 - Delta Hedging Recommendation
 - Key Risk Drivers
 - Quantitative Alerts
-- LLM Risk Commentary
+- LLM Risk Commentary at the beginning of the PDF
+- Concrete risk-management action plan with model-based quantities when
+  available
 - Limitations and Model Assumptions
-- Recommended Next Actions
+- Appendix with the key figures to remember
 
 The LLM does not calculate risk metrics and must not invent figures. It only
 comments on ARIA outputs and includes model limitations.
@@ -167,15 +171,45 @@ Never commit `.env` or real API keys.
 
 ## Run the App
 
-```powershell
-& C:/Users/enriq/OneDrive/Bureau/ARIA/ARIA/.venv/Scripts/python.exe -m streamlit run streamlit_app.py
-```
-
-or:
+Easiest local launch on Windows:
 
 ```powershell
 start_aria.bat
 ```
+
+The launcher starts Streamlit on port `8502`, prints the computer URL and prints
+the phone URL for the same Wi-Fi network:
+
+- Computer: `http://localhost:8502`
+- Phone: `http://<your-computer-ip>:8502`
+
+For phone presentation, keep the computer and phone on the same Wi-Fi, allow
+Python/Streamlit through Windows Firewall if prompted, then open the printed
+phone URL in the mobile browser.
+
+Equivalent manual command:
+
+```powershell
+& C:/Users/enriq/OneDrive/Bureau/ARIA/ARIA/.venv/Scripts/python.exe -m streamlit run streamlit_app.py --server.address 0.0.0.0 --server.port 8502 --server.headless true
+```
+
+You can change the port before launching:
+
+```powershell
+$env:ARIA_STREAMLIT_PORT="8503"
+start_aria.bat
+```
+
+LLM / API mode works when `.env` contains `OPENAI_API_KEY` and
+`ARIA_LLM_MODEL`, then the LLM commentary is enabled from the Streamlit sidebar.
+
+## Present as an Application
+
+For a simple portfolio or interview demo, run `start_aria.bat` and present the
+browser tab in full screen on the computer or phone. For a real hosted web app,
+deploy the repository to Streamlit Community Cloud or another Python hosting
+service, install `requirements.txt`, and configure secrets there instead of
+committing `.env`.
 
 ## Run Tests
 
@@ -207,7 +241,6 @@ The quality check runs:
 
 ## Possible Improvements
 
-- Add PDF export for the risk report.
 - Add historical backtesting workflows.
 - Add richer CSV schemas with bid / ask and implied volatility.
 - Add an implemented Bloomberg adapter for an environment with Bloomberg access.

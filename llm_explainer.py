@@ -31,7 +31,8 @@ class LLMExplainer:
         scenario_results=None,
         var_result=None,
         hedge_result=None,
-        market_snapshot=None
+        market_snapshot=None,
+        language: str = "fr"
     ) -> str:
         """Prépare les informations envoyées au LLM."""
 
@@ -141,6 +142,18 @@ class LLMExplainer:
                 "supplementaire n'a ete fourni."
             )
 
+        if language.lower() == "en":
+            language_instruction = (
+                "Output language: English only. Use clear professional English "
+                "section titles. If an original field name is French, translate "
+                "the explanation around it."
+            )
+
+        else:
+            language_instruction = (
+                "Langue de sortie : francais uniquement."
+            )
+
         return f"""
 Tu es l'assistant d'analyse des risques d'ARIA.
 
@@ -184,12 +197,18 @@ Réponds en français avec cette structure :
 
 Si une information numérique n'est pas fournie, indique qu'elle n'est pas disponible.
 Dans le plan d'action, sois concret :
+- si une quantite de hedge est fournie, cite clairement une action indicative du type acheter/vendre environ cette quantite de sous-jacent pour reduire le delta ;
+- si une exposition semble trop concentree, propose une action a etudier : reduire la taille, transformer une position optionnelle nue en spread, decaler un strike, modifier une maturite ou compenser une exposition grecque ;
 - si le delta domine, explique comment une couverture delta ou une réduction directionnelle peut réduire le risque ;
 - si le gamma domine, explique comment réduire la convexité instable ou ajuster les strikes / maturités ;
 - si la vega domine, explique comment réduire ou rééquilibrer l'exposition volatilité ;
 - si la VaR ou les stress tests dominent, explique comment réduire les pertes extrêmes ;
 - explique toujours le compromis attendu entre réduction du risque, coût de couverture et potentiel de rendement.
 Précise que les couvertures proposées doivent être vérifiées avant toute décision.
+Ne recommande pas un achat ou une vente directionnelle speculative non justifiee par les chiffres fournis.
+Termine par un avertissement clair : ces pistes sont une aide a la decision de gestion du risque, pas une certitude de performance ni un conseil financier personnalise, et elles doivent etre verifiees avant toute decision.
+
+{language_instruction}
 """.strip()
 
     def explain(
@@ -200,7 +219,8 @@ Précise que les couvertures proposées doivent être vérifiées avant toute d�
         scenario_results=None,
         var_result=None,
         hedge_result=None,
-        market_snapshot=None
+        market_snapshot=None,
+        language: str = "fr"
     ) -> str:
         """Envoie les alertes au LLM et récupère son explication."""
 
@@ -211,7 +231,8 @@ Précise que les couvertures proposées doivent être vérifiées avant toute d�
             scenario_results=scenario_results,
             var_result=var_result,
             hedge_result=hedge_result,
-            market_snapshot=market_snapshot
+            market_snapshot=market_snapshot,
+            language=language
         )
 
         response = self.client.responses.create(

@@ -2,13 +2,24 @@
 ARIA - Executive risk report generation.
 """
 
-import textwrap
 from datetime import datetime
 from io import BytesIO
 from typing import Any
+from xml.sax.saxutils import escape
 
-import matplotlib.pyplot as plt
-from matplotlib.backends.backend_pdf import PdfPages
+from reportlab.lib import colors
+from reportlab.lib.enums import TA_CENTER, TA_LEFT
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+from reportlab.lib.units import cm
+from reportlab.platypus import (
+    PageBreak,
+    Paragraph,
+    SimpleDocTemplate,
+    Spacer,
+    Table,
+    TableStyle,
+)
 
 from portfolio import Portfolio
 
@@ -774,14 +785,1189 @@ def _clean_markdown_for_pdf(
     return cleaned.strip()
 
 
+PDF_ACCENT = colors.HexColor(
+    "#10B981"
+)
+PDF_DARK = colors.HexColor(
+    "#111827"
+)
+PDF_MUTED = colors.HexColor(
+    "#6B7280"
+)
+PDF_LIGHT = colors.HexColor(
+    "#F3F7F6"
+)
+PDF_BORDER = colors.HexColor(
+    "#D7E2DF"
+)
+
+
+def _as_text(
+    value: Any,
+    default: str = "N/A"
+) -> str:
+    """Convert a report value to a display string."""
+
+    if value is None:
+        return default
+
+    return str(
+        value
+    )
+
+
+def _pdf_styles() -> dict[str, ParagraphStyle]:
+    """Return professional PDF styles."""
+
+    base_styles = getSampleStyleSheet()
+
+    styles = {
+        "cover_title": ParagraphStyle(
+            "CoverTitle",
+            parent=base_styles["Title"],
+            fontName="Helvetica-Bold",
+            fontSize=28,
+            leading=32,
+            textColor=PDF_DARK,
+            alignment=TA_LEFT,
+            spaceAfter=12,
+        ),
+        "cover_subtitle": ParagraphStyle(
+            "CoverSubtitle",
+            parent=base_styles["BodyText"],
+            fontName="Helvetica",
+            fontSize=11,
+            leading=16,
+            textColor=PDF_MUTED,
+            alignment=TA_LEFT,
+            spaceAfter=18,
+        ),
+        "section": ParagraphStyle(
+            "Section",
+            parent=base_styles["Heading2"],
+            fontName="Helvetica-Bold",
+            fontSize=15,
+            leading=19,
+            textColor=PDF_DARK,
+            spaceBefore=14,
+            spaceAfter=8,
+        ),
+        "subsection": ParagraphStyle(
+            "Subsection",
+            parent=base_styles["Heading3"],
+            fontName="Helvetica-Bold",
+            fontSize=11,
+            leading=14,
+            textColor=PDF_DARK,
+            spaceBefore=8,
+            spaceAfter=5,
+        ),
+        "body": ParagraphStyle(
+            "Body",
+            parent=base_styles["BodyText"],
+            fontName="Helvetica",
+            fontSize=9,
+            leading=13,
+            textColor=colors.HexColor("#1F2937"),
+            alignment=TA_LEFT,
+            spaceAfter=6,
+        ),
+        "small": ParagraphStyle(
+            "Small",
+            parent=base_styles["BodyText"],
+            fontName="Helvetica",
+            fontSize=7.5,
+            leading=10,
+            textColor=PDF_MUTED,
+            alignment=TA_LEFT,
+            spaceAfter=4,
+        ),
+        "callout": ParagraphStyle(
+            "Callout",
+            parent=base_styles["BodyText"],
+            fontName="Helvetica-Bold",
+            fontSize=9,
+            leading=13,
+            textColor=PDF_DARK,
+            backColor=PDF_LIGHT,
+            borderColor=PDF_BORDER,
+            borderWidth=0.7,
+            borderPadding=8,
+            spaceAfter=10,
+        ),
+        "footer": ParagraphStyle(
+            "Footer",
+            parent=base_styles["BodyText"],
+            fontName="Helvetica",
+            fontSize=7,
+            leading=9,
+            textColor=PDF_MUTED,
+            alignment=TA_CENTER,
+        ),
+    }
+
+    return styles
+
+
+def _p(
+    text: str,
+    style: ParagraphStyle
+) -> Paragraph:
+    """Create an escaped ReportLab paragraph."""
+
+    return Paragraph(
+        escape(
+            text
+        ).replace(
+            "\n",
+            "<br/>"
+        ),
+        style
+    )
+
+
+def _section(
+    story: list[Any],
+    title: str,
+    styles: dict[str, ParagraphStyle]
+) -> None:
+    """Append a section title to a story."""
+
+    story.append(
+        Paragraph(
+            escape(
+                title
+            ),
+            styles["section"]
+        )
+    )
+
+
+def _table(
+    rows: list[list[Any]],
+    widths: list[float] | None = None,
+    header: bool = True
+) -> Table:
+    """Create a consistent PDF table."""
+
+    table_data = [
+        [
+            Paragraph(
+                escape(
+                    _as_text(
+                        cell
+                    )
+                ),
+                _pdf_styles()["body"]
+            )
+            for cell in row
+        ]
+        for row in rows
+    ]
+
+    table = Table(
+        table_data,
+        colWidths=widths,
+        hAlign="LEFT",
+        repeatRows=1 if header else 0,
+    )
+
+    style_commands = [
+        (
+            "GRID",
+            (
+                0,
+                0
+            ),
+            (
+                -1,
+                -1
+            ),
+            0.35,
+            PDF_BORDER,
+        ),
+        (
+            "VALIGN",
+            (
+                0,
+                0
+            ),
+            (
+                -1,
+                -1
+            ),
+            "TOP",
+        ),
+        (
+            "LEFTPADDING",
+            (
+                0,
+                0
+            ),
+            (
+                -1,
+                -1
+            ),
+            6,
+        ),
+        (
+            "RIGHTPADDING",
+            (
+                0,
+                0
+            ),
+            (
+                -1,
+                -1
+            ),
+            6,
+        ),
+        (
+            "TOPPADDING",
+            (
+                0,
+                0
+            ),
+            (
+                -1,
+                -1
+            ),
+            5,
+        ),
+        (
+            "BOTTOMPADDING",
+            (
+                0,
+                0
+            ),
+            (
+                -1,
+                -1
+            ),
+            5,
+        ),
+    ]
+
+    if header:
+        style_commands.extend(
+            [
+                (
+                    "BACKGROUND",
+                    (
+                        0,
+                        0
+                    ),
+                    (
+                        -1,
+                        0
+                    ),
+                    colors.HexColor(
+                        "#E8F7F2"
+                    ),
+                ),
+                (
+                    "TEXTCOLOR",
+                    (
+                        0,
+                        0
+                    ),
+                    (
+                        -1,
+                        0
+                    ),
+                    PDF_DARK,
+                ),
+            ]
+        )
+
+    table.setStyle(
+        TableStyle(
+            style_commands
+        )
+    )
+
+    return table
+
+
+def _add_paragraph_block(
+    story: list[Any],
+    text: str | None,
+    styles: dict[str, ParagraphStyle]
+) -> None:
+    """Append a multiline block as readable paragraphs."""
+
+    if not text:
+        return
+
+    for block in text.split(
+        "\n"
+    ):
+        cleaned = _clean_markdown_for_pdf(
+            block
+        )
+
+        if not cleaned:
+            story.append(
+                Spacer(
+                    1,
+                    4
+                )
+            )
+            continue
+
+        story.append(
+            _p(
+                cleaned,
+                styles["body"]
+            )
+        )
+
+
+def _hedge_action_text(
+    hedge_result: Any,
+    language: str
+) -> str:
+    """Return a concrete but cautious delta hedge action."""
+
+    quantity = abs(
+        hedge_result.hedge_quantity
+    )
+
+    if hedge_result.hedge_quantity > 0:
+        verb = "Acheter" if language == "fr" else "Buy"
+
+    elif hedge_result.hedge_quantity < 0:
+        verb = "Vendre" if language == "fr" else "Sell"
+
+    else:
+        return (
+            "Aucune couverture delta immediate n'est suggeree par le modele."
+            if language == "fr"
+            else "No immediate delta hedge is suggested by the model."
+        )
+
+    if language == "fr":
+        return (
+            f"{verb} environ {format_number(quantity, 0)} unites du sous-jacent "
+            "pour rapprocher le delta de zero selon le modele ARIA."
+        )
+
+    return (
+        f"{verb} about {format_number(quantity, 0)} units of the underlying "
+        "to move model delta closer to zero."
+    )
+
+
+def _build_action_rows(
+    alerts: list[Any],
+    scenario_results: list[Any],
+    var_result: Any,
+    hedge_result: Any,
+    risk_score_result: Any,
+    language: str
+) -> list[list[str]]:
+    """Build concrete risk-management actions for the PDF."""
+
+    _, worst_scenario = _scenario_extremes(
+        scenario_results
+    )
+
+    rows = [
+        [
+            "Priorite" if language == "fr" else "Priority",
+            "Action indicative" if language == "fr" else "Indicative action",
+            "Objectif" if language == "fr" else "Objective",
+        ],
+        [
+            "1",
+            _hedge_action_text(
+                hedge_result,
+                language
+            ),
+            (
+                "Reduire l'exposition directionnelle immediate tout en conservant une partie du potentiel optionnel."
+                if language == "fr"
+                else "Reduce immediate directional exposure while retaining part of the optionality."
+            ),
+        ],
+    ]
+
+    if risk_score_result.score >= 60:
+        rows.append(
+            [
+                "2",
+                (
+                    "Reduire ou transformer les positions qui contribuent au score de risque: taille plus faible, spread optionnel, ou maturites moins concentrees."
+                    if language == "fr"
+                    else "Reduce or reshape positions driving the risk score: smaller size, option spread, or less concentrated maturities."
+                ),
+                (
+                    "Diminuer le risque de queue sans supprimer toute l'exposition au rendement."
+                    if language == "fr"
+                    else "Lower tail risk without eliminating all return exposure."
+                ),
+            ]
+        )
+
+    if worst_scenario is not None:
+        rows.append(
+            [
+                "3",
+                (
+                    f"Tester une reduction des lignes responsables du scenario le plus defavorable: {worst_scenario.name}, P&L {format_number(worst_scenario.profit_and_loss)}."
+                    if language == "fr"
+                    else f"Test reducing lines responsible for the worst scenario: {worst_scenario.name}, P&L {format_number(worst_scenario.profit_and_loss)}."
+                ),
+                (
+                    "Ramener la perte de stress dans une zone acceptable avant d'augmenter le risque."
+                    if language == "fr"
+                    else "Bring stress loss into an acceptable zone before adding risk."
+                ),
+            ]
+        )
+
+    rows.append(
+        [
+            "4",
+            (
+                f"Comparer la VaR {format_number(var_result.var_amount)} et l'Expected Shortfall {format_number(var_result.expected_shortfall)} apres chaque ajustement."
+                if language == "fr"
+                else f"Compare VaR {format_number(var_result.var_amount)} and Expected Shortfall {format_number(var_result.expected_shortfall)} after each adjustment."
+            ),
+            (
+                "Optimiser le rendement ajuste du risque, pas seulement reduire l'exposition brute."
+                if language == "fr"
+                else "Optimize risk-adjusted return, not only gross exposure."
+            ),
+        ]
+    )
+
+    if alerts:
+        rows.append(
+            [
+                "5",
+                (
+                    "Traiter d'abord les alertes critiques et elevees, puis relancer le rapport apres modification."
+                    if language == "fr"
+                    else "Address critical and high alerts first, then rerun the report after changes."
+                ),
+                (
+                    "Verifier que les actions reduisent vraiment les facteurs de risque signales."
+                    if language == "fr"
+                    else "Check that the actions really reduce the flagged risk drivers."
+                ),
+            ]
+        )
+
+    return rows
+
+
+def _key_metric_rows(
+    portfolio: Portfolio,
+    spot: float,
+    volatility: float,
+    scenario_results: list[Any],
+    var_result: Any,
+    parametric_var: float,
+    hedge_result: Any,
+    risk_score_result: Any,
+    language: str
+) -> list[list[str]]:
+    """Build appendix key metrics."""
+
+    greeks = portfolio.total_greeks()
+    best_scenario, worst_scenario = _scenario_extremes(
+        scenario_results
+    )
+    rows = [
+        [
+            "Indicateur" if language == "fr" else "Metric",
+            "Valeur" if language == "fr" else "Value",
+        ],
+        [
+            "Valeur du portefeuille" if language == "fr" else "Portfolio value",
+            format_number(
+                portfolio.total_market_value()
+            ),
+        ],
+        [
+            "Spot",
+            format_number(
+                spot
+            ),
+        ],
+        [
+            "Volatilite" if language == "fr" else "Volatility",
+            format_percent(
+                volatility
+            ),
+        ],
+        [
+            "Risk Score",
+            f"{risk_score_result.score}/100 - {risk_score_result.label}",
+        ],
+        [
+            "Delta",
+            format_number(
+                greeks["delta"],
+                6
+            ),
+        ],
+        [
+            "Gamma",
+            format_number(
+                greeks["gamma"],
+                6
+            ),
+        ],
+        [
+            "Vega",
+            format_number(
+                greeks["vega"],
+                6
+            ),
+        ],
+        [
+            "Theta",
+            format_number(
+                greeks["theta"],
+                6
+            ),
+        ],
+        [
+            "VaR",
+            format_number(
+                var_result.var_amount
+            ),
+        ],
+        [
+            "Expected Shortfall",
+            format_number(
+                var_result.expected_shortfall
+            ),
+        ],
+        [
+            "VaR parametrique" if language == "fr" else "Parametric VaR",
+            format_number(
+                parametric_var
+            ),
+        ],
+        [
+            "Quantite hedge" if language == "fr" else "Hedge quantity",
+            format_number(
+                hedge_result.hedge_quantity,
+                0
+            ),
+        ],
+    ]
+
+    if worst_scenario is not None:
+        rows.append(
+            [
+                "Pire stress" if language == "fr" else "Worst stress",
+                f"{worst_scenario.name}: {format_number(worst_scenario.profit_and_loss)}",
+            ]
+        )
+
+    if best_scenario is not None:
+        rows.append(
+            [
+                "Meilleur stress" if language == "fr" else "Best stress",
+                f"{best_scenario.name}: {format_number(best_scenario.profit_and_loss)}",
+            ]
+        )
+
+    return rows
+
+
+def _market_rows(
+    market_snapshot: Any | None,
+    language: str
+) -> list[list[str]]:
+    """Build market context rows."""
+
+    rows = [
+        [
+            "Donnee" if language == "fr" else "Data",
+            "Valeur" if language == "fr" else "Value",
+        ]
+    ]
+
+    if market_snapshot is None:
+        rows.append(
+            [
+                "Source",
+                "Manuelle / non disponible" if language == "fr" else "Manual / not available",
+            ]
+        )
+        return rows
+
+    rows.extend(
+        [
+            [
+                "Source",
+                _as_text(
+                    getattr(
+                        market_snapshot,
+                        "source",
+                        None
+                    )
+                ),
+            ],
+            [
+                "Ticker",
+                _as_text(
+                    getattr(
+                        market_snapshot,
+                        "ticker",
+                        None
+                    )
+                ),
+            ],
+            [
+                "Dernier prix" if language == "fr" else "Last price",
+                format_number(
+                    market_snapshot.last_price
+                ),
+            ],
+            [
+                "Rendement journalier" if language == "fr" else "Daily return",
+                format_percent(
+                    market_snapshot.daily_return
+                ),
+            ],
+            [
+                "Volatilite annualisee" if language == "fr" else "Annualized volatility",
+                format_percent(
+                    market_snapshot.annualized_volatility
+                ),
+            ],
+        ]
+    )
+
+    return rows
+
+
+def _draw_pdf_page(
+    canvas,
+    doc,
+    title: str,
+    author_name: str
+) -> None:
+    """Draw repeated professional header/footer."""
+
+    width, height = A4
+    canvas.saveState()
+    canvas.setFillColor(
+        PDF_ACCENT
+    )
+    canvas.rect(
+        0,
+        height - 0.35 * cm,
+        width,
+        0.35 * cm,
+        fill=1,
+        stroke=0,
+    )
+    canvas.setFillColor(
+        PDF_DARK
+    )
+    canvas.setFont(
+        "Helvetica-Bold",
+        8.5
+    )
+    canvas.drawString(
+        doc.leftMargin,
+        height - 0.9 * cm,
+        title
+    )
+    canvas.setFillColor(
+        PDF_MUTED
+    )
+    canvas.setFont(
+        "Helvetica",
+        7.5
+    )
+    canvas.drawRightString(
+        width - doc.rightMargin,
+        height - 0.9 * cm,
+        f"Developed by {author_name}"
+    )
+    canvas.drawRightString(
+        width - doc.rightMargin,
+        0.55 * cm,
+        f"Page {doc.page}"
+    )
+    canvas.restoreState()
+
+
+def generate_professional_pdf_report(
+    portfolio: Portfolio,
+    spot: float,
+    volatility: float,
+    alerts: list[Any],
+    scenario_results: list[Any],
+    var_result: Any,
+    parametric_var: float,
+    hedge_result: Any,
+    risk_score_result: Any,
+    market_snapshot: Any | None = None,
+    llm_analysis: str | None = None,
+    language: str = "fr",
+    author_name: str = AUTHOR_NAME
+) -> bytes:
+    """Generate a polished FR/EN PDF risk report."""
+
+    language = language.lower()
+    if language not in {
+        "fr",
+        "en"
+    }:
+        raise ValueError(
+            "language must be 'fr' or 'en'"
+        )
+
+    styles = _pdf_styles()
+    buffer = BytesIO()
+    doc_title = (
+        "Rapport professionnel de risque ARIA"
+        if language == "fr"
+        else "ARIA Professional Risk Report"
+    )
+    report_date = datetime.now().strftime(
+        "%Y-%m-%d %H:%M"
+    )
+
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        rightMargin=1.4 * cm,
+        leftMargin=1.4 * cm,
+        topMargin=1.35 * cm,
+        bottomMargin=1.2 * cm,
+        title=doc_title,
+        author=author_name,
+    )
+
+    story: list[Any] = []
+
+    story.append(
+        Spacer(
+            1,
+            1.0 * cm
+        )
+    )
+    story.append(
+        Paragraph(
+            escape(
+                doc_title
+            ),
+            styles["cover_title"]
+        )
+    )
+    story.append(
+        _p(
+            (
+                f"Prepare par {author_name} | Genere le {report_date}"
+                if language == "fr"
+                else f"Prepared by {author_name} | Generated on {report_date}"
+            ),
+            styles["cover_subtitle"]
+        )
+    )
+    story.append(
+        _table(
+            _key_metric_rows(
+                portfolio=portfolio,
+                spot=spot,
+                volatility=volatility,
+                scenario_results=scenario_results,
+                var_result=var_result,
+                parametric_var=parametric_var,
+                hedge_result=hedge_result,
+                risk_score_result=risk_score_result,
+                language=language
+            )[:8],
+            widths=[
+                7.2 * cm,
+                8.8 * cm
+            ],
+        )
+    )
+    story.append(
+        Spacer(
+            1,
+            12
+        )
+    )
+    story.append(
+        _p(
+            (
+                "Ce document presente une analyse de risque, des pistes d'ajustement chiffrees et les limites du modele. "
+                "Les actions indiquees sont des pistes de risk management a valider, pas une garantie de rendement."
+                if language == "fr"
+                else "This document presents risk analysis, quantified adjustment ideas and model limits. "
+                "The listed actions are risk-management ideas to validate, not a guarantee of performance."
+            ),
+            styles["callout"]
+        )
+    )
+
+    _section(
+        story,
+        "Analyse LLM et lecture executive" if language == "fr" else "LLM Analysis and Executive Read",
+        styles
+    )
+
+    if llm_analysis:
+        _add_paragraph_block(
+            story,
+            llm_analysis,
+            styles
+        )
+
+    else:
+        story.append(
+            _p(
+                (
+                    "Aucune analyse LLM n'a ete generee. Les recommandations ci-dessous sont construites uniquement a partir des metriques ARIA."
+                    if language == "fr"
+                    else "No LLM analysis was generated. The recommendations below are built only from ARIA metrics."
+                ),
+                styles["body"]
+            )
+        )
+
+    _section(
+        story,
+        "Plan d'action: diminuer le risque et optimiser le rendement ajuste du risque"
+        if language == "fr"
+        else "Action Plan: Reduce Risk and Optimize Risk-Adjusted Return",
+        styles
+    )
+    story.append(
+        _table(
+            _build_action_rows(
+                alerts=alerts,
+                scenario_results=scenario_results,
+                var_result=var_result,
+                hedge_result=hedge_result,
+                risk_score_result=risk_score_result,
+                language=language
+            ),
+            widths=[
+                1.6 * cm,
+                8.6 * cm,
+                5.8 * cm
+            ],
+        )
+    )
+    story.append(
+        PageBreak()
+    )
+
+    _section(
+        story,
+        "Contexte de marche et score de risque" if language == "fr" else "Market Context and Risk Score",
+        styles
+    )
+    story.append(
+        _table(
+            _market_rows(
+                market_snapshot,
+                language
+            ),
+            widths=[
+                7.2 * cm,
+                8.8 * cm
+            ],
+        )
+    )
+    story.append(
+        Spacer(
+            1,
+            8
+        )
+    )
+    story.append(
+        _p(
+            (
+                f"Risk Score ARIA: {risk_score_result.score}/100 - {risk_score_result.label}. {risk_score_result.explanation}"
+            ),
+            styles["body"]
+        )
+    )
+
+    _section(
+        story,
+        "Stress tests, VaR et Expected Shortfall" if language == "fr" else "Stress Tests, VaR and Expected Shortfall",
+        styles
+    )
+    stress_rows = [
+        [
+            "Scenario" if language == "fr" else "Scenario",
+            "Variation spot" if language == "fr" else "Spot move",
+            "Variation vol" if language == "fr" else "Vol move",
+            "P&L",
+        ]
+    ]
+    for result in scenario_results:
+        stress_rows.append(
+            [
+                result.name,
+                format_percent(
+                    result.spot_change_percent
+                ),
+                format_percent(
+                    result.volatility_change_points
+                ),
+                format_number(
+                    result.profit_and_loss
+                ),
+            ]
+        )
+    story.append(
+        _table(
+            stress_rows,
+            widths=[
+                5.8 * cm,
+                3.2 * cm,
+                3.2 * cm,
+                3.8 * cm
+            ],
+        )
+    )
+    story.append(
+        Spacer(
+            1,
+            8
+        )
+    )
+    story.append(
+        _table(
+            [
+                [
+                    "Mesure" if language == "fr" else "Measure",
+                    "Valeur" if language == "fr" else "Value",
+                ],
+                [
+                    "VaR",
+                    format_number(
+                        var_result.var_amount
+                    ),
+                ],
+                [
+                    "Expected Shortfall",
+                    format_number(
+                        var_result.expected_shortfall
+                    ),
+                ],
+                [
+                    "Pire perte simulee" if language == "fr" else "Worst simulated loss",
+                    format_number(
+                        var_result.worst_loss
+                    ),
+                ],
+                [
+                    "VaR parametrique" if language == "fr" else "Parametric VaR",
+                    format_number(
+                        parametric_var
+                    ),
+                ],
+            ],
+            widths=[
+                7.2 * cm,
+                8.8 * cm
+            ],
+        )
+    )
+
+    _section(
+        story,
+        "Greeks et couverture" if language == "fr" else "Greeks and Hedging",
+        styles
+    )
+    greeks = portfolio.total_greeks()
+    story.append(
+        _table(
+            [
+                [
+                    "Greek",
+                    "Valeur" if language == "fr" else "Value",
+                ],
+                [
+                    "Delta",
+                    format_number(
+                        greeks["delta"],
+                        6
+                    ),
+                ],
+                [
+                    "Gamma",
+                    format_number(
+                        greeks["gamma"],
+                        6
+                    ),
+                ],
+                [
+                    "Vega",
+                    format_number(
+                        greeks["vega"],
+                        6
+                    ),
+                ],
+                [
+                    "Theta",
+                    format_number(
+                        greeks["theta"],
+                        6
+                    ),
+                ],
+                [
+                    "Rho",
+                    format_number(
+                        greeks["rho"],
+                        6
+                    ),
+                ],
+            ],
+            widths=[
+                7.2 * cm,
+                8.8 * cm
+            ],
+        )
+    )
+    story.append(
+        Spacer(
+            1,
+            8
+        )
+    )
+    story.append(
+        _p(
+            _hedge_action_text(
+                hedge_result,
+                language
+            ),
+            styles["callout"]
+        )
+    )
+
+    _section(
+        story,
+        "Limites et avertissement" if language == "fr" else "Limits and Disclaimer",
+        styles
+    )
+    story.append(
+        _p(
+            (
+                "Les resultats dependent du modele Black-Scholes, des hypotheses de volatilite, des scenarios, de la liquidite et des couts de transaction. "
+                "Les actions proposees sont des pistes d'analyse et de gestion du risque. Elles ne constituent pas une recommandation financiere personnalisee, "
+                "ne sont pas une certitude de performance et doivent etre verifiees avant toute decision reelle."
+                if language == "fr"
+                else "Results depend on Black-Scholes assumptions, volatility inputs, scenarios, liquidity and transaction costs. "
+                "The proposed actions are risk-analysis and risk-management ideas. They are not personalized financial advice, "
+                "are not a certainty of performance, and must be validated before any real decision."
+            ),
+            styles["body"]
+        )
+    )
+
+    story.append(
+        PageBreak()
+    )
+    _section(
+        story,
+        "Annexe - chiffres importants a retenir" if language == "fr" else "Appendix - Key Figures to Remember",
+        styles
+    )
+    story.append(
+        _table(
+            _key_metric_rows(
+                portfolio=portfolio,
+                spot=spot,
+                volatility=volatility,
+                scenario_results=scenario_results,
+                var_result=var_result,
+                parametric_var=parametric_var,
+                hedge_result=hedge_result,
+                risk_score_result=risk_score_result,
+                language=language
+            ),
+            widths=[
+                7.2 * cm,
+                8.8 * cm
+            ],
+        )
+    )
+
+    story.append(
+        Spacer(
+            1,
+            12
+        )
+    )
+    story.append(
+        _p(
+            (
+                f"Document genere par ARIA. Developpe par {author_name}."
+                if language == "fr"
+                else f"Document generated by ARIA. Developed by {author_name}."
+            ),
+            styles["small"]
+        )
+    )
+
+    doc.build(
+        story,
+        onFirstPage=lambda canvas, document: _draw_pdf_page(
+            canvas,
+            document,
+            doc_title,
+            author_name
+        ),
+        onLaterPages=lambda canvas, document: _draw_pdf_page(
+            canvas,
+            document,
+            doc_title,
+            author_name
+        ),
+    )
+    buffer.seek(
+        0
+    )
+
+    return buffer.getvalue()
+
+
 def generate_pdf_report(
     report_text: str,
     author_name: str = AUTHOR_NAME
 ) -> bytes:
-    """Generate a real PDF document from a Markdown risk report."""
+    """Generate a simple PDF document from a Markdown risk report."""
 
+    styles = _pdf_styles()
     buffer = BytesIO()
-    wrapped_lines = []
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        rightMargin=1.4 * cm,
+        leftMargin=1.4 * cm,
+        topMargin=1.35 * cm,
+        bottomMargin=1.2 * cm,
+        title="ARIA Executive Risk Report",
+        author=author_name,
+    )
+    story: list[Any] = [
+        Paragraph(
+            "ARIA Executive Risk Report",
+            styles["cover_title"]
+        ),
+        _p(
+            f"Developed by {author_name}",
+            styles["cover_subtitle"]
+        ),
+    ]
 
     for raw_line in report_text.splitlines():
         clean_line = _clean_markdown_for_pdf(
@@ -789,124 +1975,50 @@ def generate_pdf_report(
         )
 
         if not clean_line:
-            wrapped_lines.append(
-                ""
+            story.append(
+                Spacer(
+                    1,
+                    4
+                )
             )
             continue
 
-        wrapped_lines.extend(
-            textwrap.wrap(
-                clean_line,
-                width=96
-            )
-        )
-
-    page_lines = 42
-
-    with PdfPages(
-        buffer
-    ) as pdf:
-        for page_number, start in enumerate(
-            range(
-                0,
-                len(wrapped_lines),
-                page_lines
-            ),
-            start=1
+        if raw_line.startswith(
+            "## "
+        ) or raw_line.startswith(
+            "# "
         ):
-            page_content = wrapped_lines[
-                start:start + page_lines
-            ]
-
-            fig = plt.figure(
-                figsize=(
-                    8.27,
-                    11.69
+            story.append(
+                Paragraph(
+                    escape(
+                        clean_line
+                    ),
+                    styles["section"]
                 )
             )
-            fig.patch.set_facecolor(
-                "white"
-            )
-            fig.text(
-                0.08,
-                0.965,
-                "ARIA Executive Risk Report",
-                fontsize=15,
-                fontweight="bold",
-                color="#111827",
-            )
-            fig.text(
-                0.08,
-                0.94,
-                f"Developed by {author_name}",
-                fontsize=9,
-                color="#4B5563",
-            )
-            fig.text(
-                0.92,
-                0.94,
-                f"Page {page_number}",
-                fontsize=9,
-                color="#4B5563",
-                ha="right",
-            )
-
-            y_position = 0.905
-
-            for line in page_content:
-                if line.startswith(
-                    "Executive Summary"
-                ) or line.startswith(
-                    "Market Context"
-                ) or line.startswith(
-                    "Portfolio Overview"
-                ) or line.startswith(
-                    "Risk Score"
-                ) or line.startswith(
-                    "Greeks Exposure"
-                ) or line.startswith(
-                    "Stress Test"
-                ) or line.startswith(
-                    "VaR / Expected"
-                ) or line.startswith(
-                    "Delta Hedging"
-                ) or line.startswith(
-                    "Key Risk"
-                ) or line.startswith(
-                    "Quantitative Alerts"
-                ) or line.startswith(
-                    "LLM Risk"
-                ) or line.startswith(
-                    "Limitations"
-                ) or line.startswith(
-                    "Recommended"
-                ):
-                    font_size = 11
-                    font_weight = "bold"
-                    color = "#0F172A"
-                else:
-                    font_size = 8.5
-                    font_weight = "normal"
-                    color = "#1F2937"
-
-                fig.text(
-                    0.08,
-                    y_position,
-                    line,
-                    fontsize=font_size,
-                    fontweight=font_weight,
-                    color=color,
-                    family="DejaVu Sans",
+        else:
+            story.append(
+                _p(
+                    clean_line,
+                    styles["body"]
                 )
-                y_position -= 0.019
+            )
 
-            pdf.savefig(
-                fig,
-                bbox_inches="tight"
-            )
-            plt.close(
-                fig
-            )
+    doc.build(
+        story,
+        onFirstPage=lambda canvas, document: _draw_pdf_page(
+            canvas,
+            document,
+            "ARIA Executive Risk Report",
+            author_name
+        ),
+        onLaterPages=lambda canvas, document: _draw_pdf_page(
+            canvas,
+            document,
+            "ARIA Executive Risk Report",
+            author_name
+        ),
+    )
 
     buffer.seek(
         0

@@ -86,7 +86,8 @@ def generate_llm_analysis(
     scenario_results=None,
     var_result=None,
     hedge_result=None,
-    market_snapshot=None
+    market_snapshot=None,
+    language: str = "fr"
 ) -> str:
     """Demande au LLM d'expliquer les alertes détectées."""
 
@@ -95,6 +96,22 @@ def generate_llm_analysis(
     model = os.getenv("ARIA_LLM_MODEL")
 
     if not model:
+        if language.lower() == "en":
+            if not alerts:
+                return (
+                    "### ARIA Summary\n\n"
+                    "No major quantitative anomaly was detected. "
+                    "The portfolio should still be monitored through its Greeks, "
+                    "VaR, Expected Shortfall and stress tests. "
+                    "This reading relies on simplified ARIA model assumptions and "
+                    "is not personalized financial advice."
+                )
+
+            return (
+                "The LLM model is not configured. "
+                "Add the ARIA_LLM_MODEL environment variable."
+            )
+
         if not alerts:
             return (
                 "### Synthèse ARIA\n\n"
@@ -122,7 +139,8 @@ def generate_llm_analysis(
             scenario_results=scenario_results,
             var_result=var_result,
             hedge_result=hedge_result,
-            market_snapshot=market_snapshot
+            market_snapshot=market_snapshot,
+            language=language
         )
 
     except Exception as error:

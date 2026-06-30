@@ -47,6 +47,7 @@ REQUIRED_MODULES = [
     "numpy",
     "scipy",
     "altair",
+    "reportlab",
     "openai",
     "dotenv",
     "pytest",
