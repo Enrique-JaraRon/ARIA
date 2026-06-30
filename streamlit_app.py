@@ -309,6 +309,19 @@ def create_stress_chart(
         )
     ).configure_view(
         strokeWidth=0
+    ).configure_axis(
+        labelColor="#C8D3E0",
+        titleColor="#D5E2F2",
+        gridColor="rgba(213, 226, 242, 0.12)",
+        domainColor="rgba(0, 213, 255, 0.28)"
+    ).configure_title(
+        color="#F4F7FB",
+        subtitleColor="#9CA9BA"
+    ).configure_legend(
+        labelColor="#C8D3E0",
+        titleColor="#D5E2F2"
+    ).configure(
+        background="transparent"
     )
 
 
@@ -459,6 +472,19 @@ def create_pnl_profile_chart(
         )
     ).configure_view(
         strokeWidth=0
+    ).configure_axis(
+        labelColor="#C8D3E0",
+        titleColor="#D5E2F2",
+        gridColor="rgba(213, 226, 242, 0.12)",
+        domainColor="rgba(0, 213, 255, 0.28)"
+    ).configure_title(
+        color="#F4F7FB",
+        subtitleColor="#9CA9BA"
+    ).configure_legend(
+        labelColor="#C8D3E0",
+        titleColor="#D5E2F2"
+    ).configure(
+        background="transparent"
     )
 
 
@@ -560,6 +586,19 @@ def create_greeks_profile_chart(
         )
     ).configure_view(
         strokeWidth=0
+    ).configure_axis(
+        labelColor="#C8D3E0",
+        titleColor="#D5E2F2",
+        gridColor="rgba(213, 226, 242, 0.12)",
+        domainColor="rgba(0, 213, 255, 0.28)"
+    ).configure_title(
+        color="#F4F7FB",
+        subtitleColor="#9CA9BA"
+    ).configure_legend(
+        labelColor="#C8D3E0",
+        titleColor="#D5E2F2"
+    ).configure(
+        background="transparent"
     )
 
 
@@ -634,6 +673,16 @@ def create_history_chart(
         )
     ).configure_view(
         strokeWidth=0
+    ).configure_axis(
+        labelColor="#C8D3E0",
+        titleColor="#D5E2F2",
+        gridColor="rgba(213, 226, 242, 0.12)",
+        domainColor="rgba(0, 213, 255, 0.28)"
+    ).configure_title(
+        color="#F4F7FB",
+        subtitleColor="#9CA9BA"
+    ).configure(
+        background="transparent"
     )
 
 
@@ -726,6 +775,16 @@ def create_var_distribution_chart(
         )
     ).configure_view(
         strokeWidth=0
+    ).configure_axis(
+        labelColor="#C8D3E0",
+        titleColor="#D5E2F2",
+        gridColor="rgba(213, 226, 242, 0.12)",
+        domainColor="rgba(0, 213, 255, 0.28)"
+    ).configure_title(
+        color="#F4F7FB",
+        subtitleColor="#9CA9BA"
+    ).configure(
+        background="transparent"
     )
 
 
@@ -956,6 +1015,15 @@ var_simulations = st.sidebar.number_input(
     max_value=10000,
     value=1000,
     step=100
+)
+
+st.sidebar.header(
+    "LLM"
+)
+
+enable_llm_commentary = st.sidebar.checkbox(
+    "Activer le commentaire LLM",
+    value=False
 )
 
 
@@ -1401,8 +1469,9 @@ if analyse_button:
             f"{greeks['volga']:.6f}"
         )
 
-        st.subheader(
-            "Couverture delta indicative"
+        render_section_title(
+            "Couverture delta indicative",
+            "Action instantanee theorique pour neutraliser le delta courant."
         )
 
         if hedge_result.hedge_quantity > 0:
@@ -1440,8 +1509,9 @@ if analyse_button:
             hedge_result.explanation
         )
 
-        st.subheader(
-            "Positions analysées"
+        render_section_title(
+            "Positions analysées",
+            "Inventaire des lignes retenues dans le moteur de risque."
         )
 
         positions_summary = []
@@ -1494,8 +1564,9 @@ if analyse_button:
 
     with stress_tab:
 
-        st.subheader(
-            "Stress tests"
+        render_section_title(
+            "Stress tests",
+            "Lecture des pertes et gains sous scenarios de marche."
         )
 
         best_scenario = max(
@@ -1565,8 +1636,9 @@ if analyse_button:
 
         st.divider()
 
-        st.subheader(
-            "Matrice de risque"
+        render_section_title(
+            "Matrice de risque",
+            "Carte spot / volatilite pour reperer les zones de fragilite."
         )
 
         spot_changes = [
@@ -1640,8 +1712,9 @@ if analyse_button:
 
         st.divider()
 
-        st.subheader(
-            "VaR / Expected Shortfall"
+        render_section_title(
+            "VaR / Expected Shortfall",
+            "Estimation simplifiee de la perte de queue par simulation."
         )
 
         var_col_1, var_col_2, var_col_3, var_col_4 = (
@@ -1690,8 +1763,9 @@ if analyse_button:
 
     with profiles_tab:
 
-        st.subheader(
-            "Profil de P&L"
+        render_section_title(
+            "Profil de P&L",
+            "Projection du resultat sur une grille de niveaux du sous-jacent."
         )
 
         pnl_points = calculate_pnl_profile(
@@ -1760,8 +1834,9 @@ if analyse_button:
 
         st.divider()
 
-        st.subheader(
-            "Profil des Greeks"
+        render_section_title(
+            "Profil des Greeks",
+            "Evolution des sensibilites lorsque le spot est stresse."
         )
 
         selected_greeks = st.multiselect(
@@ -1809,8 +1884,9 @@ if analyse_button:
 
     with history_tab:
 
-        st.subheader(
-            "Historique des snapshots"
+        render_section_title(
+            "Historique des snapshots",
+            "Memoire locale des observations de risque sauvegardees."
         )
 
         if updated_history.empty:
@@ -1902,8 +1978,9 @@ if analyse_button:
 
     with alerts_tab:
 
-        st.subheader(
-            "Alertes quantitatives"
+        render_section_title(
+            "Alertes quantitatives",
+            "Signaux issus des limites, mouvements de marche et z-scores."
         )
 
         if not alerts:
@@ -1954,18 +2031,30 @@ if analyse_button:
 
         st.divider()
 
-        st.subheader(
-            "Analyse du LLM"
+        render_section_title(
+            "Analyse du LLM",
+            "Commentaire prudent base uniquement sur les resultats ARIA."
         )
 
         llm_analysis = None
 
-        with st.spinner(
-            "ARIA génère l'explication..."
-        ):
-            llm_analysis = generate_llm_analysis(
-                snapshot=current_snapshot,
-                alerts=alerts
+        if enable_llm_commentary:
+            with st.spinner(
+                "ARIA génère l'explication..."
+            ):
+                llm_analysis = generate_llm_analysis(
+                    snapshot=current_snapshot,
+                    alerts=alerts
+                )
+
+        else:
+            llm_analysis = (
+                "### Synthèse ARIA\n\n"
+                "Le commentaire LLM est désactivé pour cette analyse. "
+                "Les métriques quantitatives, alertes, stress tests, VaR "
+                "et recommandations de couverture restent disponibles. "
+                "Active le commentaire LLM dans la sidebar pour générer "
+                "une analyse narrative à partir des chiffres produits par ARIA."
             )
 
         st.markdown(
@@ -1974,8 +2063,9 @@ if analyse_button:
 
         st.divider()
 
-        st.subheader(
-            "Rapport de risque"
+        render_section_title(
+            "Rapport de risque",
+            "Export Markdown structure comme une note de risk management."
         )
 
         report_text = generate_risk_report(

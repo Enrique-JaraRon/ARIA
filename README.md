@@ -37,8 +37,6 @@ and keeps the Streamlit app focused on orchestration and visualization.
 
 ## Screenshots / Usage
 
-Screenshots will be added after final UI polishing.
-
 ### Dashboard Overview
 
 ![Dashboard Overview](docs/screenshots/dashboard_overview.png)
@@ -100,6 +98,10 @@ The downloadable Markdown report is structured as an internal-style risk note:
 
 The LLM does not calculate risk metrics and must not invent figures. It only
 comments on ARIA outputs and includes model limitations.
+
+LLM commentary is controlled from the Streamlit sidebar. By default, ARIA keeps
+the dashboard in local commentary mode to avoid unwanted API calls during tests
+or demonstrations.
 
 ## Project Structure
 
@@ -197,7 +199,6 @@ The quality check runs:
 
 ## Possible Improvements
 
-- Add real screenshots after UI polishing.
 - Add PDF export for the risk report.
 - Add historical backtesting workflows.
 - Add richer CSV schemas with bid / ask and implied volatility.
