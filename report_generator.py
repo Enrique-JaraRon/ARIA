@@ -2,10 +2,17 @@
 ARIA - Executive risk report generation.
 """
 
+import textwrap
 from datetime import datetime
+from io import BytesIO
 from typing import Any
 
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_pdf import PdfPages
+
 from portfolio import Portfolio
+
+AUTHOR_NAME = "Enrique Jara Ron"
 
 
 def format_number(
@@ -593,6 +600,8 @@ def generate_recommended_actions_section(
         "- Monitor delta, gamma and vega against the configured limits.",
         "- Compare the worst stress scenario with the VaR / Expected Shortfall tail metrics.",
         "- Re-run the report after material market moves or portfolio changes.",
+        "- Study whether the same market view can be expressed with lower Greek concentration, lower tail loss or tighter downside definition.",
+        "- Compare hedge cost against retained upside to improve the risk-adjusted return profile rather than only reducing gross exposure.",
     ]
 
     if alerts:
@@ -607,7 +616,7 @@ def generate_recommended_actions_section(
 
     if risk_score_result.score >= 60:
         lines.append(
-            "- Consider reducing concentrated exposures or tightening monitoring frequency."
+            "- Consider reducing concentrated exposures, using option spreads, or trimming positions that contribute most to downside stress losses."
         )
 
     lines.append(
@@ -642,6 +651,8 @@ def generate_risk_report(
 
     lines = [
         "# ARIA Executive Risk Report",
+        "",
+        f"Developed by: **{AUTHOR_NAME}**",
         "",
         f"Generated at: **{report_date}**",
         "",
@@ -728,6 +739,180 @@ def generate_executive_risk_report(
         market_snapshot=market_snapshot,
         llm_analysis=llm_analysis
     )
+
+
+def _clean_markdown_for_pdf(
+    line: str
+) -> str:
+    """Convert a simple Markdown line to plain text for PDF rendering."""
+
+    cleaned = line.replace(
+        "**",
+        ""
+    )
+    cleaned = cleaned.replace(
+        "|",
+        "  "
+    )
+    cleaned = cleaned.replace(
+        "---",
+        ""
+    )
+    cleaned = cleaned.replace(
+        "# ",
+        ""
+    )
+    cleaned = cleaned.replace(
+        "## ",
+        ""
+    )
+    cleaned = cleaned.replace(
+        "- ",
+        "* "
+    )
+
+    return cleaned.strip()
+
+
+def generate_pdf_report(
+    report_text: str,
+    author_name: str = AUTHOR_NAME
+) -> bytes:
+    """Generate a real PDF document from a Markdown risk report."""
+
+    buffer = BytesIO()
+    wrapped_lines = []
+
+    for raw_line in report_text.splitlines():
+        clean_line = _clean_markdown_for_pdf(
+            raw_line
+        )
+
+        if not clean_line:
+            wrapped_lines.append(
+                ""
+            )
+            continue
+
+        wrapped_lines.extend(
+            textwrap.wrap(
+                clean_line,
+                width=96
+            )
+        )
+
+    page_lines = 42
+
+    with PdfPages(
+        buffer
+    ) as pdf:
+        for page_number, start in enumerate(
+            range(
+                0,
+                len(wrapped_lines),
+                page_lines
+            ),
+            start=1
+        ):
+            page_content = wrapped_lines[
+                start:start + page_lines
+            ]
+
+            fig = plt.figure(
+                figsize=(
+                    8.27,
+                    11.69
+                )
+            )
+            fig.patch.set_facecolor(
+                "white"
+            )
+            fig.text(
+                0.08,
+                0.965,
+                "ARIA Executive Risk Report",
+                fontsize=15,
+                fontweight="bold",
+                color="#111827",
+            )
+            fig.text(
+                0.08,
+                0.94,
+                f"Developed by {author_name}",
+                fontsize=9,
+                color="#4B5563",
+            )
+            fig.text(
+                0.92,
+                0.94,
+                f"Page {page_number}",
+                fontsize=9,
+                color="#4B5563",
+                ha="right",
+            )
+
+            y_position = 0.905
+
+            for line in page_content:
+                if line.startswith(
+                    "Executive Summary"
+                ) or line.startswith(
+                    "Market Context"
+                ) or line.startswith(
+                    "Portfolio Overview"
+                ) or line.startswith(
+                    "Risk Score"
+                ) or line.startswith(
+                    "Greeks Exposure"
+                ) or line.startswith(
+                    "Stress Test"
+                ) or line.startswith(
+                    "VaR / Expected"
+                ) or line.startswith(
+                    "Delta Hedging"
+                ) or line.startswith(
+                    "Key Risk"
+                ) or line.startswith(
+                    "Quantitative Alerts"
+                ) or line.startswith(
+                    "LLM Risk"
+                ) or line.startswith(
+                    "Limitations"
+                ) or line.startswith(
+                    "Recommended"
+                ):
+                    font_size = 11
+                    font_weight = "bold"
+                    color = "#0F172A"
+                else:
+                    font_size = 8.5
+                    font_weight = "normal"
+                    color = "#1F2937"
+
+                fig.text(
+                    0.08,
+                    y_position,
+                    line,
+                    fontsize=font_size,
+                    fontweight=font_weight,
+                    color=color,
+                    family="DejaVu Sans",
+                )
+                y_position -= 0.019
+
+            pdf.savefig(
+                fig,
+                bbox_inches="tight"
+            )
+            plt.close(
+                fig
+            )
+
+    buffer.seek(
+        0
+    )
+
+    return buffer.getvalue()
 
 
 if __name__ == "__main__":

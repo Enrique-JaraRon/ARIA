@@ -81,7 +81,12 @@ def build_demo_portfolio() -> Portfolio:
 
 def generate_llm_analysis(
     snapshot,
-    alerts
+    alerts,
+    risk_score_result=None,
+    scenario_results=None,
+    var_result=None,
+    hedge_result=None,
+    market_snapshot=None
 ) -> str:
     """Demande au LLM d'expliquer les alertes détectées."""
 
@@ -112,7 +117,12 @@ def generate_llm_analysis(
 
         return explainer.explain(
             snapshot=snapshot,
-            alerts=alerts
+            alerts=alerts,
+            risk_score_result=risk_score_result,
+            scenario_results=scenario_results,
+            var_result=var_result,
+            hedge_result=hedge_result,
+            market_snapshot=market_snapshot
         )
 
     except Exception as error:

@@ -26,7 +26,12 @@ class LLMExplainer:
     def build_prompt(
         self,
         snapshot: RiskSnapshot,
-        alerts: list[Alert]
+        alerts: list[Alert],
+        risk_score_result=None,
+        scenario_results=None,
+        var_result=None,
+        hedge_result=None,
+        market_snapshot=None
     ) -> str:
         """Prépare les informations envoyées au LLM."""
 
@@ -58,6 +63,84 @@ class LLMExplainer:
                 "Aucune alerte quantitative n'a ete detectee par ARIA."
             )
 
+        context_lines = []
+
+        if risk_score_result is not None:
+            context_lines.extend(
+                [
+                    f"- Risk Score : {risk_score_result.score}/100",
+                    f"- Niveau de risque : {risk_score_result.label}",
+                    (
+                        "- Facteurs de risque principaux : "
+                        + ", ".join(risk_score_result.main_drivers)
+                    ),
+                ]
+            )
+
+        if scenario_results:
+            worst_scenario = min(
+                scenario_results,
+                key=lambda result: result.profit_and_loss
+            )
+            best_scenario = max(
+                scenario_results,
+                key=lambda result: result.profit_and_loss
+            )
+            context_lines.extend(
+                [
+                    (
+                        f"- Pire stress test : {worst_scenario.name} | "
+                        f"P&L : {worst_scenario.profit_and_loss:.2f}"
+                    ),
+                    (
+                        f"- Meilleur stress test : {best_scenario.name} | "
+                        f"P&L : {best_scenario.profit_and_loss:.2f}"
+                    ),
+                ]
+            )
+
+        if var_result is not None:
+            context_lines.extend(
+                [
+                    f"- VaR : {var_result.var_amount:.2f}",
+                    f"- Expected Shortfall : {var_result.expected_shortfall:.2f}",
+                    f"- Pire perte simulée : {var_result.worst_loss:.2f}",
+                ]
+            )
+
+        if hedge_result is not None:
+            context_lines.extend(
+                [
+                    f"- Delta actuel : {hedge_result.current_delta:.6f}",
+                    f"- Quantité indicative de hedge : {hedge_result.hedge_quantity:.2f}",
+                    f"- Delta après hedge : {hedge_result.hedged_delta:.6f}",
+                ]
+            )
+
+        if market_snapshot is not None:
+            context_lines.extend(
+                [
+                    f"- Source market data : {market_snapshot.source}",
+                    f"- Dernier prix : {market_snapshot.last_price:.2f}",
+                    f"- Rendement journalier : {market_snapshot.daily_return:.2%}",
+                    (
+                        "- Volatilité historique annualisée : "
+                        f"{market_snapshot.annualized_volatility:.2%}"
+                    ),
+                ]
+            )
+
+        if context_lines:
+            extended_context = "\n".join(
+                context_lines
+            )
+
+        else:
+            extended_context = (
+                "Aucun contexte VaR, stress test, hedge ou market data "
+                "supplementaire n'a ete fourni."
+            )
+
         return f"""
 Tu es l'assistant d'analyse des risques d'ARIA.
 
@@ -65,6 +148,10 @@ Tu reçois uniquement des résultats déjà calculés par un moteur quantitatif.
 Tu ne dois pas inventer de données ni prétendre prédire le marché.
 Tu ne dois pas donner de conseil financier personnalisé.
 Tu dois rester prudent et rappeler que l'analyse dépend des hypothèses du modèle.
+Tu dois expliquer clairement quelles actions peuvent être étudiées pour diminuer
+le risque tout en préservant ou en améliorant le couple rendement / risque.
+Ces actions doivent être formulées comme des pistes de risk management à valider,
+pas comme des ordres d'achat ou de vente.
 
 État actuel :
 - Spot : {snapshot.spot}
@@ -79,6 +166,9 @@ Tu dois rester prudent et rappeler que l'analyse dépend des hypothèses du mod�
 Alertes détectées :
 {alerts_text}
 
+Contexte de risque complémentaire :
+{extended_context}
+
 Réponds en français avec cette structure :
 
 1. Résumé exécutif
@@ -87,24 +177,41 @@ Réponds en français avec cette structure :
 4. Lecture des Greeks
 5. Lecture des stress tests si les données sont disponibles
 6. Lecture VaR / Expected Shortfall si les données sont disponibles
-7. Couverture et actions possibles à étudier
-8. Points à surveiller
-9. Limites du modèle
+7. Plan d'action pour réduire le risque et optimiser le rendement ajusté du risque
+8. Couverture et arbitrages possibles à étudier
+9. Points à surveiller
+10. Limites du modèle
 
 Si une information numérique n'est pas fournie, indique qu'elle n'est pas disponible.
+Dans le plan d'action, sois concret :
+- si le delta domine, explique comment une couverture delta ou une réduction directionnelle peut réduire le risque ;
+- si le gamma domine, explique comment réduire la convexité instable ou ajuster les strikes / maturités ;
+- si la vega domine, explique comment réduire ou rééquilibrer l'exposition volatilité ;
+- si la VaR ou les stress tests dominent, explique comment réduire les pertes extrêmes ;
+- explique toujours le compromis attendu entre réduction du risque, coût de couverture et potentiel de rendement.
 Précise que les couvertures proposées doivent être vérifiées avant toute décision.
 """.strip()
 
     def explain(
         self,
         snapshot: RiskSnapshot,
-        alerts: list[Alert]
+        alerts: list[Alert],
+        risk_score_result=None,
+        scenario_results=None,
+        var_result=None,
+        hedge_result=None,
+        market_snapshot=None
     ) -> str:
         """Envoie les alertes au LLM et récupère son explication."""
 
         prompt = self.build_prompt(
             snapshot=snapshot,
-            alerts=alerts
+            alerts=alerts,
+            risk_score_result=risk_score_result,
+            scenario_results=scenario_results,
+            var_result=var_result,
+            hedge_result=hedge_result,
+            market_snapshot=market_snapshot
         )
 
         response = self.client.responses.create(

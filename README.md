@@ -5,6 +5,8 @@ portfolios. It is designed as a clean educational prototype of a trading-floor
 risk monitoring tool: transparent enough to study, but structured enough to be
 presented in a GitHub portfolio, CV or quantitative finance interview.
 
+Developed by **Enrique Jara Ron**.
+
 ## Overview
 
 ARIA lets a user build an option portfolio, price positions with Black-Scholes,
@@ -31,7 +33,7 @@ and keeps the Streamlit app focused on orchestration and visualization.
 - Delta hedge recommendation.
 - Modular market data providers: Manual, Yahoo Finance, CSV and optional Bloomberg.
 - Demo option strategies ready to load in the dashboard.
-- Downloadable executive Markdown risk report.
+- Downloadable executive Markdown and PDF risk reports.
 - Optional LLM-based risk commentary.
 - Automated tests, Ruff linting and project diagnostics.
 
@@ -80,7 +82,7 @@ Finance or CSV data.
 
 ## Executive Risk Report
 
-The downloadable Markdown report is structured as an internal-style risk note:
+The downloadable Markdown / PDF report is structured as an internal-style risk note:
 
 - Executive Summary
 - Market Context
@@ -102,6 +104,12 @@ comments on ARIA outputs and includes model limitations.
 LLM commentary is controlled from the Streamlit sidebar. By default, ARIA keeps
 the dashboard in local commentary mode to avoid unwanted API calls during tests
 or demonstrations.
+
+When enabled, the LLM is instructed to clearly explain actions that could be
+studied to reduce risk while improving the risk-adjusted return profile, such as
+delta hedging, reducing concentrated Greeks, rebalancing volatility exposure or
+using option spreads. These outputs remain risk-management commentary, not
+personalized financial advice.
 
 ## Project Structure
 

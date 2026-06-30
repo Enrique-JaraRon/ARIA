@@ -5,7 +5,11 @@ Tests du module report_generator.py
 from hedging_analysis import calculate_delta_hedge
 from portfolio import Portfolio
 from pricing_BS import OptionContract
-from report_generator import generate_executive_risk_report, generate_risk_report
+from report_generator import (
+    generate_executive_risk_report,
+    generate_pdf_report,
+    generate_risk_report,
+)
 from risk_score import calculate_risk_score
 from scenario_analysis import run_standard_scenarios
 from var_analysis import calculate_var_es, parametric_var_estimate
@@ -133,6 +137,7 @@ def test_generate_risk_report_contains_executive_sections():
 
     expected_sections = [
         "# ARIA Executive Risk Report",
+        "Developed by: **Enrique Jara Ron**",
         "## Executive Summary",
         "## Market Context",
         "## Portfolio Overview",
@@ -182,3 +187,26 @@ def test_generate_executive_risk_report_alias_matches_main_report():
     )
 
     assert report.splitlines()[0] == executive_report.splitlines()[0]
+
+
+def test_generate_pdf_report_returns_pdf_bytes():
+    """Verifie que le rapport PDF est un vrai fichier PDF."""
+
+    report = generate_risk_report(
+        **build_report_inputs()
+    )
+
+    pdf_report = generate_pdf_report(
+        report
+    )
+
+    assert isinstance(
+        pdf_report,
+        bytes
+    )
+    assert pdf_report.startswith(
+        b"%PDF"
+    )
+    assert len(
+        pdf_report
+    ) > 1000

@@ -346,6 +346,13 @@ def inject_custom_css() -> str:
         line-height: 1.55;
     }
 
+    .aria-author {
+        color: var(--aria-cyan);
+        font-size: 0.92rem;
+        font-weight: 760;
+        margin-top: 0.7rem;
+    }
+
     .aria-header-status {
         display: flex;
         justify-content: flex-end;
@@ -523,6 +530,7 @@ def render_header(
         "Adaptive Risk Intelligence Agent for equity and option portfolios."
     ),
     badge: str = "Risk Management Dashboard",
+    author: str = "Enrique Jara Ron",
 ) -> str:
     """Render the main application header."""
 
@@ -533,6 +541,7 @@ def render_header(
             <div class="aria-eyebrow">{escape(badge)}</div>
             <h1 class="aria-title">{escape(title)}</h1>
             <div class="aria-subtitle">{escape(subtitle)}</div>
+            <div class="aria-author">Developed by {escape(author)}</div>
         </div>
         <div class="aria-header-status">
             {render_status_pill("Production-style prototype", render=False)}

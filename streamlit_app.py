@@ -28,7 +28,7 @@ from pnl_profile import (
 )
 from portfolio import Portfolio
 from pricing_BS import OptionContract
-from report_generator import generate_risk_report
+from report_generator import generate_pdf_report, generate_risk_report
 from risk_history import RiskHistory
 from risk_score import calculate_risk_score
 from risk_surface import calculate_risk_surface, surface_to_dataframe
@@ -2044,7 +2044,12 @@ if analyse_button:
             ):
                 llm_analysis = generate_llm_analysis(
                     snapshot=current_snapshot,
-                    alerts=alerts
+                    alerts=alerts,
+                    risk_score_result=risk_score_result,
+                    scenario_results=scenario_results,
+                    var_result=var_result,
+                    hedge_result=hedge_result,
+                    market_snapshot=market_snapshot
                 )
 
         else:
@@ -2054,7 +2059,9 @@ if analyse_button:
                 "Les métriques quantitatives, alertes, stress tests, VaR "
                 "et recommandations de couverture restent disponibles. "
                 "Active le commentaire LLM dans la sidebar pour générer "
-                "une analyse narrative à partir des chiffres produits par ARIA."
+                "une analyse narrative à partir des chiffres produits par ARIA, "
+                "avec des pistes pour réduire le risque et améliorer le rendement "
+                "ajusté du risque."
             )
 
         st.markdown(
@@ -2065,7 +2072,7 @@ if analyse_button:
 
         render_section_title(
             "Rapport de risque",
-            "Export Markdown structure comme une note de risk management."
+            "Exports Markdown et PDF structures comme une note de risk management."
         )
 
         report_text = generate_risk_report(
@@ -2082,18 +2089,35 @@ if analyse_button:
             llm_analysis=llm_analysis
         )
 
-        st.download_button(
-            label="Télécharger le rapport ARIA",
+        report_pdf = generate_pdf_report(
+            report_text
+        )
+
+        report_download_col_1, report_download_col_2 = st.columns(
+            2
+        )
+
+        report_download_col_1.download_button(
+            label="Télécharger le rapport Markdown",
             data=report_text,
             file_name="rapport_risque_aria.md",
             mime="text/markdown",
+            type="secondary",
+            width="stretch"
+        )
+
+        report_download_col_2.download_button(
+            label="Télécharger le rapport PDF",
+            data=report_pdf,
+            file_name="rapport_risque_aria.pdf",
+            mime="application/pdf",
             type="primary",
             width="stretch"
         )
 
         st.caption(
-            "Le rapport est généré au format Markdown. "
-            "Il peut être ouvert dans VS Code, Notion, GitHub ou converti ensuite en PDF."
+            "Le rapport est disponible en Markdown et en PDF. "
+            "Il mentionne clairement que le projet a été développé par Enrique Jara Ron."
         )
 
     st.success(
