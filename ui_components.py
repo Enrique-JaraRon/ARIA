@@ -669,6 +669,78 @@ def inject_custom_css() -> str:
         border: 1px solid #D9E1EA;
         box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
     }
+
+    /* Streamlit widget readability fixes */
+    [data-testid="stSidebar"] input,
+    [data-testid="stSidebar"] textarea,
+    [data-testid="stSidebar"] select,
+    [data-testid="stSidebar"] [data-baseweb="input"],
+    [data-testid="stSidebar"] [data-baseweb="select"] > div,
+    [data-testid="stSidebar"] [data-baseweb="textarea"],
+    [data-testid="stAppViewContainer"] input,
+    [data-testid="stAppViewContainer"] textarea,
+    [data-testid="stAppViewContainer"] select,
+    [data-testid="stAppViewContainer"] [data-baseweb="input"],
+    [data-testid="stAppViewContainer"] [data-baseweb="select"] > div,
+    [data-testid="stAppViewContainer"] [data-baseweb="textarea"] {
+        background: #FFFFFF !important;
+        color: #172033 !important;
+        border-color: #C9D4E2 !important;
+        box-shadow: none !important;
+    }
+
+    [data-testid="stSidebar"] input::placeholder,
+    [data-testid="stAppViewContainer"] input::placeholder {
+        color: #94A3B8 !important;
+        opacity: 1 !important;
+    }
+
+    [data-baseweb="select"] span,
+    [data-baseweb="input"] input,
+    [data-baseweb="textarea"] textarea,
+    [data-testid="stNumberInput"] input,
+    [data-testid="stTextInput"] input {
+        color: #172033 !important;
+        -webkit-text-fill-color: #172033 !important;
+    }
+
+    [data-testid="stNumberInput"] button {
+        background: #F1F5F9 !important;
+        color: #334155 !important;
+        border-color: #C9D4E2 !important;
+    }
+
+    [role="listbox"],
+    [data-baseweb="popover"] {
+        background: #FFFFFF !important;
+        color: #172033 !important;
+    }
+
+    [role="option"] {
+        color: #172033 !important;
+        background: #FFFFFF !important;
+    }
+
+    [role="option"]:hover {
+        background: #EEF6FA !important;
+    }
+
+    div[data-testid="stDataFrame"],
+    div[data-testid="stDataEditor"],
+    div[data-testid="stDataEditor"] iframe {
+        background: #FFFFFF !important;
+    }
+
+    div[data-testid="stDataFrame"] *,
+    div[data-testid="stDataEditor"] * {
+        color-scheme: light !important;
+    }
+
+    .st-emotion-cache-ue6h4q,
+    .st-emotion-cache-1r6slb0,
+    .st-emotion-cache-1kyxreq {
+        color: #172033 !important;
+    }
 </style>
 """
 

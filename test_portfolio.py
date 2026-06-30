@@ -267,3 +267,40 @@ def test_empty_portfolio_greeks_are_zero():
     assert totals["rho"] == 0
     assert totals["vanna"] == 0
     assert totals["volga"] == 0
+
+
+def test_exposure_by_underlying_handles_multiple_underlyings(
+    call_option,
+    put_option
+):
+    portfolio = Portfolio()
+
+    portfolio.add_option(
+        contract=call_option,
+        quantity=10,
+        underlying="SPY"
+    )
+    portfolio.add_option(
+        contract=put_option,
+        quantity=-5,
+        underlying="QQQ"
+    )
+    portfolio.add_stock(
+        spot=500,
+        quantity=3,
+        underlying="SPY"
+    )
+
+    exposures = portfolio.exposure_by_underlying()
+
+    assert portfolio.underlyings() == [
+        "QQQ",
+        "SPY"
+    ]
+    assert set(exposures) == {
+        "SPY",
+        "QQQ"
+    }
+    assert exposures["SPY"]["delta"] != exposures["QQQ"]["delta"]
+    assert exposures["SPY"]["abs_market_value"] > 0
+    assert exposures["QQQ"]["abs_market_value"] > 0

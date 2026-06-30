@@ -1938,8 +1938,16 @@ if analyse_button:
             surface_points
         )
 
+        volatility_surface_column = next(
+            column
+            for column in surface_data.columns
+            if column.startswith(
+                "Variation vol"
+            )
+        )
+
         risk_matrix = surface_data.pivot(
-            index="Variation volatilitÃ©",
+            index=volatility_surface_column,
             columns="Variation spot",
             values="Profit / Perte"
         )
