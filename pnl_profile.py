@@ -12,12 +12,43 @@ from scenario_analysis import run_scenario
 
 @dataclass
 class PnLPoint:
-    """Représente un point de la courbe de P&L."""
+    """Represente un point de la courbe de P&L."""
 
     spot_change_percent: float
     stressed_spot: float
     profit_and_loss: float
     stressed_value: float
+
+
+def normalize_pnl_columns(
+    pnl_data: pd.DataFrame
+) -> pd.DataFrame:
+    """
+    Normalise les noms de colonnes du profil de P&L.
+
+    Objectif :
+    - eviter les bugs d'encodage avec les accents ;
+    - accepter les anciens noms comme "Spot stressé" ;
+    - utiliser en interne uniquement des noms ASCII.
+    """
+
+    column_aliases = {
+        "Spot stressé": "Spot stresse",
+        "Spot stressÃ©": "Spot stresse",
+        "Spot stresse": "Spot stresse",
+
+        "Valeur stressée": "Valeur stressee",
+        "Valeur stressÃ©e": "Valeur stressee",
+        "Valeur stressee": "Valeur stressee",
+
+        "Résultat": "Resultat",
+        "RÃ©sultat": "Resultat",
+        "Resultat": "Resultat",
+    }
+
+    return pnl_data.rename(
+        columns=column_aliases
+    )
 
 
 def calculate_pnl_profile(
@@ -30,12 +61,12 @@ def calculate_pnl_profile(
     """
     Calcule le P&L pour plusieurs niveaux du spot.
 
-    La volatilité reste constante.
+    La volatilite reste constante.
     """
 
     if current_spot <= 0:
         raise ValueError(
-            "Le spot actuel doit être strictement positif."
+            "Le spot actuel doit etre strictement positif."
         )
 
     if number_of_points < 2:
@@ -85,15 +116,21 @@ def calculate_pnl_profile(
 def pnl_profile_to_dataframe(
     points: list[PnLPoint]
 ) -> pd.DataFrame:
-    """Transforme le profil de P&L en tableau."""
+    """
+    Transforme le profil de P&L en tableau.
+
+    Important :
+    les noms de colonnes internes sont volontairement sans accents.
+    Cela evite les erreurs de type KeyError avec pandas.
+    """
 
     return pd.DataFrame(
         [
             {
                 "Variation spot": point.spot_change_percent,
-                "Spot stressé": point.stressed_spot,
+                "Spot stresse": point.stressed_spot,
                 "Profit / Perte": point.profit_and_loss,
-                "Valeur stressée": point.stressed_value
+                "Valeur stressee": point.stressed_value
             }
             for point in points
         ]
@@ -104,15 +141,37 @@ def find_breakeven_spots(
     pnl_data: pd.DataFrame
 ) -> list[float]:
     """
-    Trouve les spots où le P&L traverse zéro.
+    Trouve les spots ou le P&L traverse zero.
 
-    La méthode utilise une interpolation linéaire entre deux points.
+    La methode utilise une interpolation lineaire entre deux points.
     """
+
+    pnl_data = normalize_pnl_columns(
+        pnl_data
+    )
+
+    required_columns = [
+        "Spot stresse",
+        "Profit / Perte"
+    ]
+
+    missing_columns = [
+        column
+        for column in required_columns
+        if column not in pnl_data.columns
+    ]
+
+    if missing_columns:
+        raise KeyError(
+            "Colonnes manquantes dans le profil de P&L : "
+            f"{missing_columns}. "
+            f"Colonnes disponibles : {list(pnl_data.columns)}"
+        )
 
     breakeven_spots = []
 
     sorted_data = pnl_data.sort_values(
-        "Spot stressé"
+        "Spot stresse"
     ).reset_index(
         drop=True
     )
@@ -123,12 +182,12 @@ def find_breakeven_spots(
 
         spot_1 = sorted_data.loc[
             index,
-            "Spot stressé"
+            "Spot stresse"
         ]
 
         spot_2 = sorted_data.loc[
             index + 1,
-            "Spot stressé"
+            "Spot stresse"
         ]
 
         pnl_1 = sorted_data.loc[
@@ -182,7 +241,7 @@ if __name__ == "__main__":
         contract=call,
         quantity=10,
         multiplier=100,
-        name="Calls achetés"
+        name="Calls achetes"
     )
 
     points = calculate_pnl_profile(
@@ -208,9 +267,9 @@ if __name__ == "__main__":
     if breakevens:
         for spot in breakevens:
             print(
-                f"Spot ≈ {spot:.2f}"
+                f"Spot environ {spot:.2f}"
             )
     else:
         print(
-            "Aucun point mort trouvé dans l'intervalle testé."
+            "Aucun point mort trouve dans l'intervalle teste."
         )
