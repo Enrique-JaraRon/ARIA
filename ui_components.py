@@ -315,6 +315,7 @@ def inject_custom_css() -> str:
         grid-template-columns: minmax(0, 1fr) auto;
         gap: 1rem;
         align-items: start;
+        padding-top: 0.75rem;
         z-index: 1;
     }
 
@@ -332,7 +333,8 @@ def inject_custom_css() -> str:
         font-weight: 700;
         letter-spacing: 0;
         text-transform: uppercase;
-        margin-bottom: 0.55rem;
+        margin-top: 0.4rem;
+        margin-bottom: 0.8rem;
     }
 
     .aria-title {
@@ -363,7 +365,7 @@ def inject_custom_css() -> str:
         display: flex;
         justify-content: flex-end;
         align-items: center;
-        margin-top: 0.18rem;
+        margin-top: 0.4rem;
     }
 
     .aria-system-strip {
