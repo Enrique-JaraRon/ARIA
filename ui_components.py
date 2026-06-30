@@ -287,7 +287,7 @@ def inject_custom_css() -> str:
     .aria-header {
         position: relative;
         overflow: hidden;
-        padding: 1.25rem 1.35rem 1.1rem;
+        padding: 1.8rem 1.35rem 1.15rem;
         margin-bottom: 1.1rem;
         background:
             linear-gradient(90deg, rgba(0, 213, 255, 0.10), transparent 44%),
@@ -321,12 +321,18 @@ def inject_custom_css() -> str:
     .aria-eyebrow {
         display: inline-flex;
         align-items: center;
+        width: fit-content;
+        min-height: 1.7rem;
+        padding: 0.22rem 0.62rem;
+        background: rgba(8, 12, 16, 0.72);
+        border: 1px solid rgba(0, 213, 255, 0.24);
+        border-radius: 999px;
         color: var(--aria-cyan);
         font-size: 0.78rem;
         font-weight: 700;
         letter-spacing: 0;
         text-transform: uppercase;
-        margin-bottom: 0.25rem;
+        margin-bottom: 0.55rem;
     }
 
     .aria-title {
@@ -357,6 +363,7 @@ def inject_custom_css() -> str:
         display: flex;
         justify-content: flex-end;
         align-items: center;
+        margin-top: 0.18rem;
     }
 
     .aria-system-strip {
