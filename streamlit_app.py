@@ -8,6 +8,11 @@ import streamlit as st
 
 from anomaly_detector import AnomalyDetector, create_snapshot
 from aria_workflow import generate_llm_analysis
+from demo_portfolios import (
+    create_demo_portfolio,
+    get_demo_portfolio_names,
+    portfolio_to_dataframe,
+)
 from greeks_profile import calculate_greeks_profile, greeks_profile_to_dataframe
 from hedging_analysis import calculate_delta_hedge
 from history_analytics import (
@@ -15,7 +20,7 @@ from history_analytics import (
     get_history_summary,
     load_history_dataframe,
 )
-from market_data import get_market_snapshot
+from market_data import ManualMarketDataProvider, get_provider
 from pnl_profile import (
     calculate_pnl_profile,
     find_breakeven_spots,
@@ -28,6 +33,15 @@ from risk_history import RiskHistory
 from risk_score import calculate_risk_score
 from risk_surface import calculate_risk_surface, surface_to_dataframe
 from scenario_analysis import run_scenario, run_standard_scenarios
+from ui_components import (
+    inject_custom_css,
+    render_header,
+    render_info_card,
+    render_metric_row,
+    render_risk_badge,
+    render_section_title,
+    render_status_pill,
+)
 from var_analysis import calculate_var_es, parametric_var_estimate
 
 st.set_page_config(
@@ -715,13 +729,15 @@ def create_var_distribution_chart(
     )
 
 
-st.title(
-    "ARIA - Adaptive Risk Intelligence Agent"
-)
+inject_custom_css()
 
-st.write(
-    "Construis ton portefeuille, modifie les conditions de marché "
-    "et lance une analyse complète des risques."
+render_header(
+    title="ARIA - Adaptive Risk Intelligence Agent",
+    subtitle=(
+        "Dashboard Python / Streamlit pour le suivi du risque de "
+        "portefeuilles actions-options : pricing, Greeks, stress tests, "
+        "VaR, alertes quantitatives et reporting LLM."
+    ),
 )
 
 
@@ -729,9 +745,15 @@ st.sidebar.header(
     "Données de marché"
 )
 
-use_market_data = st.sidebar.checkbox(
-    "Utiliser Yahoo Finance",
-    value=False
+market_source = st.sidebar.selectbox(
+    "Source de données de marché",
+    options=[
+        "Manuel",
+        "Yahoo Finance",
+        "CSV local",
+        "Bloomberg optionnel"
+    ],
+    index=0
 )
 
 market_ticker = st.sidebar.text_input(
@@ -739,14 +761,32 @@ market_ticker = st.sidebar.text_input(
     value="SPY"
 )
 
+csv_market_data_path = None
+
+if market_source == "CSV local":
+    csv_market_data_path = st.sidebar.text_input(
+        "Chemin du CSV local",
+        value="data/market_data.csv"
+    )
+
 market_snapshot = None
+market_data_status = "Manual Mode"
 default_spot = 500.0
 default_volatility_percent = 20.0
 
-if use_market_data:
+if market_source in {
+    "Yahoo Finance",
+    "CSV local",
+    "Bloomberg optionnel"
+}:
 
     try:
-        market_snapshot = get_market_snapshot(
+        provider = get_provider(
+            source=market_source,
+            csv_path=csv_market_data_path
+        )
+
+        market_snapshot = provider.get_market_snapshot(
             ticker=market_ticker
         )
 
@@ -755,13 +795,19 @@ if use_market_data:
             market_snapshot.annualized_volatility
             * 100
         )
+        market_data_status = market_snapshot.status
 
         st.sidebar.success(
-            f"Données chargées pour {market_snapshot.ticker}"
+            f"{market_snapshot.source} - {market_snapshot.ticker}"
         )
 
     except Exception as error:
-        st.sidebar.error(
+        market_data_status = (
+            "Bloomberg Unavailable"
+            if market_source == "Bloomberg optionnel"
+            else "Source unavailable"
+        )
+        st.sidebar.info(
             str(error)
         )
 
@@ -808,6 +854,16 @@ risk_free_rate = (
 dividend_yield = (
     dividend_yield_percent / 100
 )
+
+if market_source == "Manuel":
+    manual_provider = ManualMarketDataProvider(
+        spot=current_spot,
+        volatility=current_volatility
+    )
+    market_snapshot = manual_provider.get_market_snapshot(
+        ticker=market_ticker
+    )
+    market_data_status = market_snapshot.status
 
 
 st.sidebar.header(
@@ -909,18 +965,55 @@ if "portfolio_data" not in st.session_state:
     )
 
 
-st.subheader(
-    "Composition du portefeuille"
+render_section_title(
+    "Composition du portefeuille",
+    "Charge une strategie de demonstration ou ajuste manuellement les positions."
 )
 
-st.write(
-    "Une quantité positive correspond à une position achetée. "
-    "Une quantité négative correspond à une position vendue."
+demo_col_1, demo_col_2 = st.columns(
+    [
+        3,
+        1
+    ]
 )
 
-st.caption(
-    "Pour une option, l'exposition réelle est égale à "
-    "quantité × multiplicateur."
+selected_demo_portfolio = demo_col_1.selectbox(
+    "Portefeuille de demonstration",
+    options=get_demo_portfolio_names()
+)
+
+load_demo_portfolio = demo_col_2.button(
+    "Charger",
+    width="stretch"
+)
+
+if load_demo_portfolio:
+    demo_portfolio = create_demo_portfolio(
+        name=selected_demo_portfolio,
+        spot=current_spot,
+        maturity=0.25,
+        rate=risk_free_rate,
+        volatility=current_volatility
+    )
+    st.session_state.portfolio_data = portfolio_to_dataframe(
+        demo_portfolio
+    )
+
+    if "portfolio_editor" in st.session_state:
+        del st.session_state[
+            "portfolio_editor"
+        ]
+
+    st.rerun()
+
+render_info_card(
+    "Lecture des quantites",
+    (
+        "Une quantite positive correspond a une position achetee. "
+        "Une quantite negative correspond a une position vendue. "
+        "Pour une option, l'exposition reelle est egale a quantite "
+        "multipliee par multiplicateur."
+    )
 )
 
 if st.button(
@@ -1137,8 +1230,13 @@ if analyse_button:
 
     with overview_tab:
 
-        st.subheader(
-            "Risk Score ARIA"
+        render_section_title(
+            "Risk Score ARIA",
+            "Synthese du niveau de risque agrégé par ARIA."
+        )
+
+        render_risk_badge(
+            risk_score_result.label
         )
 
         score_col_1, score_col_2 = st.columns(
@@ -1187,64 +1285,82 @@ if analyse_button:
 
         if market_snapshot is not None:
 
-            st.subheader(
-                "Données de marché utilisées"
+            render_section_title(
+                "Données de marché utilisées",
+                "Contexte de prix, volatilite et source active."
             )
 
-            market_col_1, market_col_2, market_col_3, market_col_4 = (
-                st.columns(4)
+            render_status_pill(
+                market_data_status
             )
 
-            market_col_1.metric(
-                "Ticker",
-                market_snapshot.ticker
+            render_metric_row(
+                [
+                    {
+                        "label": "Source",
+                        "value": market_snapshot.source,
+                        "helper": market_snapshot.status,
+                    },
+                    {
+                        "label": "Ticker",
+                        "value": market_snapshot.ticker,
+                    },
+                    {
+                        "label": "Dernier prix",
+                        "value": f"{market_snapshot.last_price:,.2f}",
+                    },
+                    {
+                        "label": "Prix precedent",
+                        "value": f"{market_snapshot.previous_price:,.2f}",
+                    },
+                    {
+                        "label": "Rendement journalier",
+                        "value": f"{market_snapshot.daily_return:+.2%}",
+                    },
+                    {
+                        "label": "Volatilite historique",
+                        "value": f"{market_snapshot.annualized_volatility:.2%}",
+                    },
+                    {
+                        "label": "Observations",
+                        "value": market_snapshot.number_of_observations,
+                    },
+                    {
+                        "label": "Timestamp",
+                        "value": market_snapshot.timestamp or "N/A",
+                    },
+                ]
             )
 
-            market_col_2.metric(
-                "Dernier prix",
-                f"{market_snapshot.last_price:,.2f}"
-            )
-
-            market_col_3.metric(
-                "Rendement journalier",
-                f"{market_snapshot.daily_return:+.2%}"
-            )
-
-            market_col_4.metric(
-                "Volatilité historique",
-                f"{market_snapshot.annualized_volatility:.2%}"
-            )
-
-        st.subheader(
-            "Résumé du portefeuille"
+        render_section_title(
+            "Résumé du portefeuille",
+            "Valeur, paramètres de marché et taille de l'univers analyse."
         )
 
-        column_1, column_2, column_3, column_4 = (
-            st.columns(4)
+        render_metric_row(
+            [
+                {
+                    "label": "Valeur du portefeuille",
+                    "value": f"{portfolio.total_market_value():,.2f}",
+                },
+                {
+                    "label": "Spot",
+                    "value": f"{current_spot:,.2f}",
+                },
+                {
+                    "label": "Volatilite utilisee",
+                    "value": f"{current_volatility:.2%}",
+                },
+                {
+                    "label": "Nombre de positions",
+                    "value": len(portfolio.positions),
+                },
+            ]
         )
 
-        column_1.metric(
-            "Valeur du portefeuille",
-            f"{portfolio.total_market_value():,.2f}"
-        )
-
-        column_2.metric(
-            "Spot",
-            f"{current_spot:,.2f}"
-        )
-
-        column_3.metric(
-            "Volatilité utilisée",
-            f"{current_volatility:.2%}"
-        )
-
-        column_4.metric(
-            "Nombre de positions",
-            len(portfolio.positions)
-        )
-
-        st.subheader(
-            "Greeks du portefeuille"
+        render_section_title(
+            "Greeks du portefeuille",
+            "Expositions agregées aux principaux facteurs de risque."
         )
 
         greek_1, greek_2, greek_3 = (
@@ -1844,25 +1960,17 @@ if analyse_button:
 
         llm_analysis = None
 
-        if alerts:
-
-            with st.spinner(
-                "ARIA génère l'explication..."
-            ):
-                llm_analysis = generate_llm_analysis(
-                    snapshot=current_snapshot,
-                    alerts=alerts
-                )
-
-            st.markdown(
-                llm_analysis
+        with st.spinner(
+            "ARIA génère l'explication..."
+        ):
+            llm_analysis = generate_llm_analysis(
+                snapshot=current_snapshot,
+                alerts=alerts
             )
 
-        else:
-            st.write(
-                "Aucune analyse LLM supplémentaire "
-                "n'est nécessaire."
-            )
+        st.markdown(
+            llm_analysis
+        )
 
         st.divider()
 

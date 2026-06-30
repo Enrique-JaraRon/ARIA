@@ -50,13 +50,21 @@ class LLMExplainer:
 
             alert_lines.append(line)
 
-        alerts_text = "\n".join(alert_lines)
+        if alert_lines:
+            alerts_text = "\n".join(alert_lines)
+
+        else:
+            alerts_text = (
+                "Aucune alerte quantitative n'a ete detectee par ARIA."
+            )
 
         return f"""
 Tu es l'assistant d'analyse des risques d'ARIA.
 
 Tu reçois uniquement des résultats déjà calculés par un moteur quantitatif.
 Tu ne dois pas inventer de données ni prétendre prédire le marché.
+Tu ne dois pas donner de conseil financier personnalisé.
+Tu dois rester prudent et rappeler que l'analyse dépend des hypothèses du modèle.
 
 État actuel :
 - Spot : {snapshot.spot}
@@ -73,12 +81,17 @@ Alertes détectées :
 
 Réponds en français avec cette structure :
 
-1. Résumé en deux phrases
-2. Risques principaux
-3. Explication financière simple
-4. Une ou deux couvertures possibles à étudier
-5. Limites de l'analyse
+1. Résumé exécutif
+2. Niveau de risque global
+3. Principaux facteurs de risque
+4. Lecture des Greeks
+5. Lecture des stress tests si les données sont disponibles
+6. Lecture VaR / Expected Shortfall si les données sont disponibles
+7. Couverture et actions possibles à étudier
+8. Points à surveiller
+9. Limites du modèle
 
+Si une information numérique n'est pas fournie, indique qu'elle n'est pas disponible.
 Précise que les couvertures proposées doivent être vérifiées avant toute décision.
 """.strip()
 
@@ -88,12 +101,6 @@ Précise que les couvertures proposées doivent être vérifiées avant toute d�
         alerts: list[Alert]
     ) -> str:
         """Envoie les alertes au LLM et récupère son explication."""
-
-        if not alerts:
-            return (
-                "Aucune anomalie n'a été détectée. "
-                "Aucune analyse LLM supplémentaire n'est nécessaire."
-            )
 
         prompt = self.build_prompt(
             snapshot=snapshot,

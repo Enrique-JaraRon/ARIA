@@ -5,14 +5,14 @@ Tests du module report_generator.py
 from hedging_analysis import calculate_delta_hedge
 from portfolio import Portfolio
 from pricing_BS import OptionContract
-from report_generator import generate_risk_report
+from report_generator import generate_executive_risk_report, generate_risk_report
 from risk_score import calculate_risk_score
 from scenario_analysis import run_standard_scenarios
 from var_analysis import calculate_var_es, parametric_var_estimate
 
 
 def create_test_portfolio() -> Portfolio:
-    """Crée un portefeuille simple pour tester le rapport."""
+    """Cree un portefeuille simple pour tester le rapport."""
 
     portfolio = Portfolio(
         name="Test Report"
@@ -55,8 +55,8 @@ def create_test_portfolio() -> Portfolio:
     return portfolio
 
 
-def test_generate_risk_report_returns_text():
-    """Vérifie que le rapport est bien généré sous forme de texte."""
+def build_report_inputs():
+    """Prepare shared report inputs."""
 
     portfolio = create_test_portfolio()
 
@@ -94,18 +94,26 @@ def test_generate_risk_report_returns_text():
         vega_limit=20
     )
 
+    return {
+        "portfolio": portfolio,
+        "spot": 500,
+        "volatility": 0.20,
+        "alerts": [],
+        "scenario_results": scenario_results,
+        "var_result": var_result,
+        "parametric_var": parametric_var,
+        "hedge_result": hedge_result,
+        "risk_score_result": risk_score_result,
+        "market_snapshot": None,
+        "llm_analysis": None,
+    }
+
+
+def test_generate_risk_report_returns_text():
+    """Verifie que le rapport est bien genere sous forme de texte."""
+
     report = generate_risk_report(
-        portfolio=portfolio,
-        spot=500,
-        volatility=0.20,
-        alerts=[],
-        scenario_results=scenario_results,
-        var_result=var_result,
-        parametric_var=parametric_var,
-        hedge_result=hedge_result,
-        risk_score_result=risk_score_result,
-        market_snapshot=None,
-        llm_analysis=None
+        **build_report_inputs()
     )
 
     assert isinstance(
@@ -116,126 +124,61 @@ def test_generate_risk_report_returns_text():
     assert len(report) > 0
 
 
-def test_generate_risk_report_contains_main_sections():
-    """Vérifie que le rapport contient les grandes sections attendues."""
-
-    portfolio = create_test_portfolio()
-
-    scenario_results = run_standard_scenarios(
-        portfolio
-    )
-
-    var_result, _ = calculate_var_es(
-        portfolio=portfolio,
-        annual_volatility=0.20,
-        confidence_level=0.95,
-        horizon_days=1,
-        number_of_simulations=500
-    )
-
-    parametric_var = parametric_var_estimate(
-        portfolio=portfolio,
-        annual_volatility=0.20,
-        confidence_level=0.95,
-        horizon_days=1
-    )
-
-    hedge_result = calculate_delta_hedge(
-        portfolio=portfolio,
-        current_spot=500
-    )
-
-    risk_score_result = calculate_risk_score(
-        portfolio=portfolio,
-        alerts=[],
-        var_result=var_result,
-        scenario_results=scenario_results,
-        delta_limit=10,
-        gamma_limit=1,
-        vega_limit=20
-    )
+def test_generate_risk_report_contains_executive_sections():
+    """Verifie que le rapport contient les grandes sections attendues."""
 
     report = generate_risk_report(
-        portfolio=portfolio,
-        spot=500,
-        volatility=0.20,
-        alerts=[],
-        scenario_results=scenario_results,
-        var_result=var_result,
-        parametric_var=parametric_var,
-        hedge_result=hedge_result,
-        risk_score_result=risk_score_result,
-        market_snapshot=None,
-        llm_analysis=None
+        **build_report_inputs()
     )
 
-    assert "# Rapport de risque ARIA" in report
-    assert "## Résumé général" in report
-    assert "## Risk Score ARIA" in report
-    assert "## Greeks du portefeuille" in report
-    assert "## Couverture delta indicative" in report
-    assert "## Stress tests" in report
-    assert "## VaR / Expected Shortfall" in report
-    assert "## Alertes quantitatives" in report
-    assert "## Positions du portefeuille" in report
+    expected_sections = [
+        "# ARIA Executive Risk Report",
+        "## Executive Summary",
+        "## Market Context",
+        "## Portfolio Overview",
+        "## Risk Score Interpretation",
+        "## Greeks Exposure",
+        "## Stress Test Analysis",
+        "## VaR / Expected Shortfall Analysis",
+        "## Delta Hedging Recommendation",
+        "## Key Risk Drivers",
+        "## Quantitative Alerts",
+        "## LLM Risk Commentary",
+        "## Limitations and Model Assumptions",
+        "## Recommended Next Actions",
+    ]
+
+    for section in expected_sections:
+        assert section in report
 
 
 def test_generate_risk_report_can_include_llm_analysis():
-    """Vérifie que l'analyse LLM peut être incluse dans le rapport."""
+    """Verifie que l'analyse LLM peut etre incluse dans le rapport."""
 
-    portfolio = create_test_portfolio()
-
-    scenario_results = run_standard_scenarios(
-        portfolio
-    )
-
-    var_result, _ = calculate_var_es(
-        portfolio=portfolio,
-        annual_volatility=0.20,
-        confidence_level=0.95,
-        horizon_days=1,
-        number_of_simulations=500
-    )
-
-    parametric_var = parametric_var_estimate(
-        portfolio=portfolio,
-        annual_volatility=0.20,
-        confidence_level=0.95,
-        horizon_days=1
-    )
-
-    hedge_result = calculate_delta_hedge(
-        portfolio=portfolio,
-        current_spot=500
-    )
-
-    risk_score_result = calculate_risk_score(
-        portfolio=portfolio,
-        alerts=[],
-        var_result=var_result,
-        scenario_results=scenario_results,
-        delta_limit=10,
-        gamma_limit=1,
-        vega_limit=20
-    )
-
+    inputs = build_report_inputs()
     llm_analysis = (
-        "Analyse test générée par le LLM."
+        "Analyse test generee par le LLM."
     )
+    inputs["llm_analysis"] = llm_analysis
 
     report = generate_risk_report(
-        portfolio=portfolio,
-        spot=500,
-        volatility=0.20,
-        alerts=[],
-        scenario_results=scenario_results,
-        var_result=var_result,
-        parametric_var=parametric_var,
-        hedge_result=hedge_result,
-        risk_score_result=risk_score_result,
-        market_snapshot=None,
-        llm_analysis=llm_analysis
+        **inputs
     )
 
-    assert "## Analyse LLM" in report
+    assert "## LLM Risk Commentary" in report
     assert llm_analysis in report
+
+
+def test_generate_executive_risk_report_alias_matches_main_report():
+    """Verifie que l'alias explicite produit le meme rapport."""
+
+    inputs = build_report_inputs()
+
+    report = generate_risk_report(
+        **inputs
+    )
+    executive_report = generate_executive_risk_report(
+        **inputs
+    )
+
+    assert report.splitlines()[0] == executive_report.splitlines()[0]

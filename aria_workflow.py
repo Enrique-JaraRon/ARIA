@@ -83,15 +83,19 @@ def generate_llm_analysis(
 ) -> str:
     """Demande au LLM d'expliquer les alertes détectées."""
 
-    if not alerts:
-        return (
-            "Aucune anomalie détectée. "
-            "L'analyse LLM n'est pas nécessaire."
-        )
-
     model = os.getenv("ARIA_LLM_MODEL")
 
     if not model:
+        if not alerts:
+            return (
+                "### Synthèse ARIA\n\n"
+                "Aucune anomalie quantitative majeure n'a été détectée. "
+                "Le portefeuille doit néanmoins être suivi sur ses Greeks, "
+                "sa VaR, son Expected Shortfall et ses stress tests. "
+                "Cette lecture repose sur les hypothèses simplifiées du "
+                "modèle ARIA et ne constitue pas un conseil financier."
+            )
+
         return (
             "Le modèle LLM n'est pas défini. "
             "Ajoute la variable ARIA_LLM_MODEL."

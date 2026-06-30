@@ -458,6 +458,59 @@ def create_demo_portfolio(
     )
 
 
+def portfolio_to_dataframe(
+    portfolio: Portfolio
+):
+    """Convertit un portefeuille ARIA en DataFrame compatible Streamlit."""
+
+    import pandas as pd
+
+    rows = []
+
+    for position in portfolio.positions:
+        if hasattr(
+            position,
+            "contract",
+        ):
+            rows.append(
+                {
+                    "Instrument": "Option",
+                    "Nom": position.name,
+                    "Type option": position.contract.option_type,
+                    "QuantitÃ©": position.quantity,
+                    "Multiplicateur": position.multiplier,
+                    "Strike": position.contract.K,
+                    "MaturitÃ©": position.contract.T,
+                }
+            )
+
+        else:
+            rows.append(
+                {
+                    "Instrument": "Action",
+                    "Nom": position.name,
+                    "Type option": "call",
+                    "QuantitÃ©": position.quantity,
+                    "Multiplicateur": 1,
+                    "Strike": position.spot,
+                    "MaturitÃ©": 0.25,
+                }
+            )
+
+    return pd.DataFrame(
+        rows,
+        columns=[
+            "Instrument",
+            "Nom",
+            "Type option",
+            "QuantitÃ©",
+            "Multiplicateur",
+            "Strike",
+            "MaturitÃ©",
+        ],
+    )
+
+
 if __name__ == "__main__":
     for demo_name in get_demo_portfolio_names():
         demo_portfolio = create_demo_portfolio(

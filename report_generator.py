@@ -1,5 +1,5 @@
 """
-ARIA - Génération de rapport de risque
+ARIA - Executive risk report generation.
 """
 
 from datetime import datetime
@@ -12,7 +12,7 @@ def format_number(
     value: float,
     decimals: int = 2
 ) -> str:
-    """Formate un nombre de manière lisible."""
+    """Format a number for a Markdown risk report."""
 
     return f"{value:,.{decimals}f}"
 
@@ -21,48 +21,172 @@ def format_percent(
     value: float,
     decimals: int = 2
 ) -> str:
-    """Formate un pourcentage de manière lisible."""
+    """Format a decimal value as a percentage."""
 
     return f"{value:.{decimals}%}"
 
 
-def generate_positions_section(
-    portfolio: Portfolio
+def _market_value(
+    value: Any,
+    default: str = "N/A"
 ) -> str:
-    """Génère la section des positions."""
+    """Return a readable market-data value."""
 
-    lines = []
+    if value is None:
+        return default
 
-    lines.append(
-        "## Positions du portefeuille\n"
+    return str(
+        value
     )
 
-    if not portfolio.positions:
+
+def _scenario_extremes(
+    scenario_results: list[Any]
+) -> tuple[Any | None, Any | None]:
+    """Return best and worst stress scenarios."""
+
+    if not scenario_results:
+        return None, None
+
+    best_scenario = max(
+        scenario_results,
+        key=lambda result: result.profit_and_loss
+    )
+    worst_scenario = min(
+        scenario_results,
+        key=lambda result: result.profit_and_loss
+    )
+
+    return best_scenario, worst_scenario
+
+
+def generate_executive_summary_section(
+    portfolio: Portfolio,
+    spot: float,
+    volatility: float,
+    alerts: list[Any],
+    scenario_results: list[Any],
+    var_result: Any,
+    risk_score_result: Any
+) -> str:
+    """Generate the executive summary."""
+
+    best_scenario, worst_scenario = _scenario_extremes(
+        scenario_results
+    )
+
+    lines = [
+        "## Executive Summary",
+        "",
+        "| Metric | Value |",
+        "|---|---:|",
+        f"| Portfolio value | {format_number(portfolio.total_market_value())} |",
+        f"| Spot used | {format_number(spot)} |",
+        f"| Volatility used | {format_percent(volatility)} |",
+        f"| Number of positions | {len(portfolio.positions)} |",
+        f"| ARIA Risk Score | {risk_score_result.score}/100 - {risk_score_result.label} |",
+        f"| Quantitative alerts | {len(alerts)} |",
+        f"| VaR | {format_number(var_result.var_amount)} |",
+        f"| Expected Shortfall | {format_number(var_result.expected_shortfall)} |",
+    ]
+
+    if worst_scenario is not None:
         lines.append(
-            "Aucune position dans le portefeuille.\n"
+            f"| Worst stress scenario | {worst_scenario.name} "
+            f"({format_number(worst_scenario.profit_and_loss)}) |"
         )
 
+    if best_scenario is not None:
+        lines.append(
+            f"| Best stress scenario | {best_scenario.name} "
+            f"({format_number(best_scenario.profit_and_loss)}) |"
+        )
+
+    lines.extend(
+        [
+            "",
+            (
+                "This report summarizes risk metrics computed by ARIA. "
+                "It is intended for risk review and monitoring, not as "
+                "personalized investment advice."
+            ),
+            "",
+        ]
+    )
+
+    return "\n".join(
+        lines
+    )
+
+
+def generate_market_section(
+    market_snapshot: Any | None
+) -> str:
+    """Generate the market context section."""
+
+    lines = [
+        "## Market Context",
+        "",
+    ]
+
+    if market_snapshot is None:
+        lines.extend(
+            [
+                "No external market data snapshot was used.",
+                "",
+            ]
+        )
         return "\n".join(
             lines
         )
 
-    lines.append(
-        "| Nom | Instrument | Quantité | Multiplicateur | Strike | Maturité | Valeur |"
+    lines.extend(
+        [
+            "| Data | Value |",
+            "|---|---:|",
+            f"| Source | {_market_value(getattr(market_snapshot, 'source', None))} |",
+            f"| Status | {_market_value(getattr(market_snapshot, 'status', None))} |",
+            f"| Ticker | {market_snapshot.ticker} |",
+            f"| Last price | {format_number(market_snapshot.last_price)} |",
+            f"| Previous price | {format_number(market_snapshot.previous_price)} |",
+            f"| Daily return | {format_percent(market_snapshot.daily_return)} |",
+            (
+                "| Historical annualized volatility | "
+                f"{format_percent(market_snapshot.annualized_volatility)} |"
+            ),
+            (
+                "| Number of observations | "
+                f"{market_snapshot.number_of_observations} |"
+            ),
+            f"| Timestamp | {_market_value(getattr(market_snapshot, 'timestamp', None))} |",
+            "",
+        ]
     )
 
-    lines.append(
-        "|---|---:|---:|---:|---:|---:|---:|"
+    return "\n".join(
+        lines
     )
+
+
+def generate_positions_table(
+    portfolio: Portfolio
+) -> str:
+    """Generate a Markdown table of portfolio positions."""
+
+    if not portfolio.positions:
+        return "No position in the portfolio.\n"
+
+    lines = [
+        "| Name | Instrument | Quantity | Multiplier | Strike | Maturity | Value |",
+        "|---|---:|---:|---:|---:|---:|---:|",
+    ]
 
     for position in portfolio.positions:
-
         if hasattr(
             position,
             "contract"
         ):
-
             contract = position.contract
-
             lines.append(
                 "| "
                 f"{position.name} | "
@@ -78,7 +202,7 @@ def generate_positions_section(
             lines.append(
                 "| "
                 f"{position.name} | "
-                "ACTION | "
+                "STOCK | "
                 f"{position.quantity} | "
                 "1 | "
                 "- | "
@@ -95,40 +219,78 @@ def generate_positions_section(
     )
 
 
+def generate_portfolio_overview_section(
+    portfolio: Portfolio
+) -> str:
+    """Generate the portfolio overview section."""
+
+    return "\n".join(
+        [
+            "## Portfolio Overview",
+            "",
+            generate_positions_table(
+                portfolio
+            ),
+        ]
+    )
+
+
+def generate_risk_score_section(
+    risk_score_result: Any
+) -> str:
+    """Generate the risk score interpretation section."""
+
+    lines = [
+        "## Risk Score Interpretation",
+        "",
+        f"**Score:** {risk_score_result.score}/100",
+        "",
+        f"**Status:** {risk_score_result.label}",
+        "",
+        risk_score_result.explanation,
+        "",
+        (
+            "The ARIA Risk Score combines Greek limit breaches, "
+            "quantitative alerts, VaR / Expected Shortfall and stress-test "
+            "losses into a normalized 0-100 indicator."
+        ),
+        "",
+    ]
+
+    return "\n".join(
+        lines
+    )
+
+
 def generate_greeks_section(
     portfolio: Portfolio
 ) -> str:
-    """Génère la section des Greeks."""
+    """Generate the Greeks exposure section."""
 
     greeks = portfolio.total_greeks()
 
-    lines = []
+    lines = [
+        "## Greeks Exposure",
+        "",
+        "| Greek | Value | Interpretation |",
+        "|---|---:|---|",
+    ]
 
-    lines.append(
-        "## Greeks du portefeuille\n"
-    )
+    interpretations = {
+        "delta": "Directional exposure to the underlying.",
+        "gamma": "Convexity and sensitivity of delta to spot moves.",
+        "theta": "Time decay under the model assumptions.",
+        "vega": "Sensitivity to implied volatility changes.",
+        "rho": "Sensitivity to interest-rate changes.",
+        "vanna": "Cross-sensitivity between spot and volatility.",
+        "volga": "Convexity with respect to volatility.",
+    }
 
-    lines.append(
-        "| Greek | Valeur |"
-    )
-
-    lines.append(
-        "|---|---:|"
-    )
-
-    for greek_name in [
-        "delta",
-        "gamma",
-        "theta",
-        "vega",
-        "rho",
-        "vanna",
-        "volga"
-    ]:
-
+    for greek_name, interpretation in interpretations.items():
         lines.append(
             f"| {greek_name.capitalize()} | "
-            f"{format_number(greeks[greek_name], 6)} |"
+            f"{format_number(greeks[greek_name], 6)} | "
+            f"{interpretation} |"
         )
 
     lines.append(
@@ -143,63 +305,170 @@ def generate_greeks_section(
 def generate_stress_section(
     scenario_results: list[Any]
 ) -> str:
-    """Génère la section des stress tests."""
+    """Generate the stress-test analysis section."""
 
-    lines = []
-
-    lines.append(
-        "## Stress tests\n"
-    )
+    lines = [
+        "## Stress Test Analysis",
+        "",
+    ]
 
     if not scenario_results:
-        lines.append(
-            "Aucun stress test disponible.\n"
+        lines.extend(
+            [
+                "No stress-test result is available.",
+                "",
+            ]
         )
-
         return "\n".join(
             lines
         )
 
-    lines.append(
-        "| Scénario | Variation spot | Variation volatilité | P&L |"
-    )
-
-    lines.append(
-        "|---|---:|---:|---:|"
+    lines.extend(
+        [
+            "| Scenario | Spot move | Vol move | P&L | Stressed value |",
+            "|---|---:|---:|---:|---:|",
+        ]
     )
 
     for result in scenario_results:
-
         lines.append(
             "| "
             f"{result.name} | "
             f"{format_percent(result.spot_change_percent)} | "
             f"{format_percent(result.volatility_change_points)} | "
-            f"{format_number(result.profit_and_loss)} |"
+            f"{format_number(result.profit_and_loss)} | "
+            f"{format_number(result.stressed_value)} |"
         )
 
-    worst_scenario = min(
-        scenario_results,
-        key=lambda result: result.profit_and_loss
+    best_scenario, worst_scenario = _scenario_extremes(
+        scenario_results
     )
 
-    best_scenario = max(
-        scenario_results,
-        key=lambda result: result.profit_and_loss
+    lines.extend(
+        [
+            "",
+            (
+                f"Best scenario: **{best_scenario.name}** with P&L "
+                f"**{format_number(best_scenario.profit_and_loss)}**."
+            ),
+            (
+                f"Worst scenario: **{worst_scenario.name}** with P&L "
+                f"**{format_number(worst_scenario.profit_and_loss)}**."
+            ),
+            "",
+        ]
     )
+
+    return "\n".join(
+        lines
+    )
+
+
+def generate_var_section(
+    var_result: Any,
+    parametric_var: float
+) -> str:
+    """Generate the VaR / Expected Shortfall section."""
+
+    lines = [
+        "## VaR / Expected Shortfall Analysis",
+        "",
+        "| Measure | Value |",
+        "|---|---:|",
+        f"| Confidence level | {format_percent(var_result.confidence_level)} |",
+        f"| Horizon | {var_result.horizon_days} day(s) |",
+        f"| Simulations | {var_result.number_of_simulations} |",
+        f"| Portfolio value | {format_number(var_result.portfolio_value)} |",
+        f"| VaR | {format_number(var_result.var_amount)} |",
+        f"| Expected Shortfall | {format_number(var_result.expected_shortfall)} |",
+        f"| Worst simulated loss | {format_number(var_result.worst_loss)} |",
+        f"| Parametric VaR | {format_number(parametric_var)} |",
+        "",
+        (
+            "VaR estimates a loss threshold at the selected confidence "
+            "level. Expected Shortfall focuses on the average loss beyond "
+            "that threshold and is therefore more informative in tail events."
+        ),
+        "",
+    ]
+
+    return "\n".join(
+        lines
+    )
+
+
+def generate_hedge_section(
+    hedge_result: Any
+) -> str:
+    """Generate the delta-hedging recommendation section."""
+
+    if hedge_result.hedge_quantity > 0:
+        action = "Buy underlying"
+
+    elif hedge_result.hedge_quantity < 0:
+        action = "Sell underlying"
+
+    else:
+        action = "No delta action"
+
+    lines = [
+        "## Delta Hedging Recommendation",
+        "",
+        "| Measure | Value |",
+        "|---|---:|",
+        f"| Current delta | {format_number(hedge_result.current_delta, 6)} |",
+        f"| Indicative action | {action} |",
+        (
+            "| Underlying quantity | "
+            f"{format_number(abs(hedge_result.hedge_quantity), 0)} |"
+        ),
+        f"| Hedge market value | {format_number(hedge_result.hedge_market_value)} |",
+        f"| Delta after hedge | {format_number(hedge_result.hedged_delta, 6)} |",
+        "",
+        hedge_result.explanation,
+        "",
+        (
+            "This is an indicative instantaneous delta hedge. It does not "
+            "neutralize gamma, vega, liquidity, transaction costs or model risk."
+        ),
+        "",
+    ]
+
+    return "\n".join(
+        lines
+    )
+
+
+def generate_key_risk_drivers_section(
+    risk_score_result: Any,
+    scenario_results: list[Any],
+    var_result: Any
+) -> str:
+    """Generate the key risk drivers section."""
+
+    lines = [
+        "## Key Risk Drivers",
+        "",
+    ]
+
+    for driver in risk_score_result.main_drivers:
+        lines.append(
+            f"- {driver}"
+        )
+
+    _, worst_scenario = _scenario_extremes(
+        scenario_results
+    )
+
+    if worst_scenario is not None:
+        lines.append(
+            f"- Worst stress scenario: {worst_scenario.name} "
+            f"({format_number(worst_scenario.profit_and_loss)})"
+        )
 
     lines.append(
-        ""
-    )
-
-    lines.append(
-        f"Meilleur scénario : **{best_scenario.name}** "
-        f"avec un P&L de **{format_number(best_scenario.profit_and_loss)}**."
-    )
-
-    lines.append(
-        f"Pire scénario : **{worst_scenario.name}** "
-        f"avec un P&L de **{format_number(worst_scenario.profit_and_loss)}**."
+        f"- Tail loss indicator: Expected Shortfall "
+        f"{format_number(var_result.expected_shortfall)}"
     )
 
     lines.append(
@@ -214,28 +483,43 @@ def generate_stress_section(
 def generate_alerts_section(
     alerts: list[Any]
 ) -> str:
-    """Génère la section des alertes."""
+    """Generate the quantitative alerts section."""
 
-    lines = []
-
-    lines.append(
-        "## Alertes quantitatives\n"
-    )
+    lines = [
+        "## Quantitative Alerts",
+        "",
+    ]
 
     if not alerts:
-        lines.append(
-            "Aucune anomalie détectée.\n"
+        lines.extend(
+            [
+                "No quantitative anomaly was detected.",
+                "",
+            ]
         )
-
         return "\n".join(
             lines
         )
 
     for alert in alerts:
+        details = (
+            f"- **{alert.severity} - {alert.name}**: {alert.message} "
+            f"(current value: {format_number(alert.current_value, 6)}"
+        )
 
+        if alert.reference_value is not None:
+            details += (
+                f", reference: {format_number(alert.reference_value, 6)}"
+            )
+
+        if alert.z_score is not None:
+            details += (
+                f", z-score: {format_number(alert.z_score, 2)}"
+            )
+
+        details += ")"
         lines.append(
-            f"- **{alert.severity} — {alert.name}** : "
-            f"{alert.message}"
+            details
         )
 
     lines.append(
@@ -247,188 +531,24 @@ def generate_alerts_section(
     )
 
 
-def generate_var_section(
-    var_result: Any,
-    parametric_var: float
+def generate_llm_section(
+    llm_analysis: str | None
 ) -> str:
-    """Génère la section VaR / Expected Shortfall."""
+    """Generate the LLM commentary section."""
 
-    lines = []
+    lines = [
+        "## LLM Risk Commentary",
+        "",
+    ]
 
-    lines.append(
-        "## VaR / Expected Shortfall\n"
-    )
-
-    lines.append(
-        "| Mesure | Valeur |"
-    )
-
-    lines.append(
-        "|---|---:|"
-    )
-
-    lines.append(
-        f"| Niveau de confiance | "
-        f"{format_percent(var_result.confidence_level)} |"
-    )
-
-    lines.append(
-        f"| Horizon | "
-        f"{var_result.horizon_days} jour(s) |"
-    )
-
-    lines.append(
-        f"| Nombre de simulations | "
-        f"{var_result.number_of_simulations} |"
-    )
-
-    lines.append(
-        f"| VaR | "
-        f"{format_number(var_result.var_amount)} |"
-    )
-
-    lines.append(
-        f"| Expected Shortfall | "
-        f"{format_number(var_result.expected_shortfall)} |"
-    )
-
-    lines.append(
-        f"| Pire perte simulée | "
-        f"{format_number(var_result.worst_loss)} |"
-    )
-
-    lines.append(
-        f"| VaR paramétrique | "
-        f"{format_number(parametric_var)} |"
-    )
-
-    lines.append(
-        ""
-    )
-
-    lines.append(
-        "La VaR estime une perte maximale sur un horizon donné "
-        "avec un certain niveau de confiance. "
-        "L'Expected Shortfall mesure la perte moyenne dans les pires scénarios."
-    )
-
-    lines.append(
-        ""
-    )
-
-    return "\n".join(
-        lines
-    )
-
-
-def generate_hedge_section(
-    hedge_result: Any
-) -> str:
-    """Génère la section de couverture delta."""
-
-    lines = []
-
-    lines.append(
-        "## Couverture delta indicative\n"
-    )
-
-    if hedge_result.hedge_quantity > 0:
-        action = "Acheter du sous-jacent"
-
-    elif hedge_result.hedge_quantity < 0:
-        action = "Vendre du sous-jacent"
+    if llm_analysis:
+        lines.append(
+            llm_analysis
+        )
 
     else:
-        action = "Ne rien faire"
-
-    lines.append(
-        "| Mesure | Valeur |"
-    )
-
-    lines.append(
-        "|---|---:|"
-    )
-
-    lines.append(
-        f"| Delta actuel | "
-        f"{format_number(hedge_result.current_delta, 6)} |"
-    )
-
-    lines.append(
-        f"| Action indicative | "
-        f"{action} |"
-    )
-
-    lines.append(
-        f"| Quantité de couverture | "
-        f"{format_number(abs(hedge_result.hedge_quantity), 0)} |"
-    )
-
-    lines.append(
-        f"| Valeur de couverture | "
-        f"{format_number(hedge_result.hedge_market_value)} |"
-    )
-
-    lines.append(
-        f"| Delta après couverture | "
-        f"{format_number(hedge_result.hedged_delta, 6)} |"
-    )
-
-    lines.append(
-        ""
-    )
-
-    lines.append(
-        hedge_result.explanation
-    )
-
-    lines.append(
-        ""
-    )
-
-    return "\n".join(
-        lines
-    )
-
-
-def generate_risk_score_section(
-    risk_score_result: Any
-) -> str:
-    """Génère la section du Risk Score ARIA."""
-
-    lines = []
-
-    lines.append(
-        "## Risk Score ARIA\n"
-    )
-
-    lines.append(
-        f"Score : **{risk_score_result.score}/100**"
-    )
-
-    lines.append(
-        f"Niveau : **{risk_score_result.label}**"
-    )
-
-    lines.append(
-        ""
-    )
-
-    lines.append(
-        risk_score_result.explanation
-    )
-
-    lines.append(
-        ""
-    )
-
-    lines.append(
-        "Principaux facteurs de risque :"
-    )
-
-    for driver in risk_score_result.main_drivers:
         lines.append(
-            f"- {driver}"
+            "No LLM commentary was generated for this report."
         )
 
     lines.append(
@@ -440,58 +560,55 @@ def generate_risk_score_section(
     )
 
 
-def generate_market_section(
-    market_snapshot: Any | None
+def generate_limitations_section() -> str:
+    """Generate model limitations and assumptions."""
+
+    return "\n".join(
+        [
+            "## Limitations and Model Assumptions",
+            "",
+            "- Options are priced with Black-Scholes assumptions.",
+            "- Volatility, rates and dividends are simplified inputs.",
+            "- Stress tests are scenario based and do not represent forecasts.",
+            "- VaR / Expected Shortfall are simplified Monte Carlo estimates.",
+            "- Market data quality depends on the selected provider.",
+            "- Bloomberg integration is optional and requires a professional setup.",
+            "- The report is generated for monitoring and education, not advice.",
+            "",
+        ]
+    )
+
+
+def generate_recommended_actions_section(
+    alerts: list[Any],
+    risk_score_result: Any,
+    hedge_result: Any
 ) -> str:
-    """Génère la section des données de marché."""
+    """Generate recommended monitoring actions."""
 
-    lines = []
+    lines = [
+        "## Recommended Next Actions",
+        "",
+        "- Review the ARIA Risk Score and its main drivers before changing positions.",
+        "- Monitor delta, gamma and vega against the configured limits.",
+        "- Compare the worst stress scenario with the VaR / Expected Shortfall tail metrics.",
+        "- Re-run the report after material market moves or portfolio changes.",
+    ]
 
-    lines.append(
-        "## Données de marché\n"
-    )
-
-    if market_snapshot is None:
+    if alerts:
         lines.append(
-            "Aucune donnée de marché externe utilisée.\n"
+            "- Prioritize quantitative alerts by severity and confirm whether they are driven by Greeks, market moves or history z-scores."
         )
 
-        return "\n".join(
-            lines
+    if hedge_result.hedge_quantity != 0:
+        lines.append(
+            "- Evaluate the indicative delta hedge, including liquidity, transaction costs and residual gamma / vega exposure."
         )
 
-    lines.append(
-        "| Donnée | Valeur |"
-    )
-
-    lines.append(
-        "|---|---:|"
-    )
-
-    lines.append(
-        f"| Ticker | {market_snapshot.ticker} |"
-    )
-
-    lines.append(
-        f"| Dernier prix | {format_number(market_snapshot.last_price)} |"
-    )
-
-    lines.append(
-        f"| Prix précédent | {format_number(market_snapshot.previous_price)} |"
-    )
-
-    lines.append(
-        f"| Rendement journalier | {format_percent(market_snapshot.daily_return)} |"
-    )
-
-    lines.append(
-        f"| Volatilité historique annualisée | "
-        f"{format_percent(market_snapshot.annualized_volatility)} |"
-    )
-
-    lines.append(
-        f"| Nombre d'observations | {market_snapshot.number_of_observations} |"
-    )
+    if risk_score_result.score >= 60:
+        lines.append(
+            "- Consider reducing concentrated exposures or tightening monitoring frequency."
+        )
 
     lines.append(
         ""
@@ -516,135 +633,100 @@ def generate_risk_report(
     llm_analysis: str | None = None
 ) -> str:
     """
-    Génère un rapport complet de risque au format Markdown.
+    Generate a complete Markdown executive risk report.
     """
 
     report_date = datetime.now().strftime(
         "%Y-%m-%d %H:%M:%S"
     )
 
-    lines = []
-
-    lines.append(
-        "# Rapport de risque ARIA"
-    )
-
-    lines.append(
-        ""
-    )
-
-    lines.append(
-        f"Date de génération : **{report_date}**"
-    )
-
-    lines.append(
-        ""
-    )
-
-    lines.append(
-        "## Résumé général\n"
-    )
-
-    lines.append(
-        f"Valeur du portefeuille : **{format_number(portfolio.total_market_value())}**"
-    )
-
-    lines.append(
-        f"Spot utilisé : **{format_number(spot)}**"
-    )
-
-    lines.append(
-        f"Volatilité utilisée : **{format_percent(volatility)}**"
-    )
-
-    lines.append(
-        f"Nombre de positions : **{len(portfolio.positions)}**"
-    )
-
-    lines.append(
-        ""
-    )
-
-    lines.append(
+    lines = [
+        "# ARIA Executive Risk Report",
+        "",
+        f"Generated at: **{report_date}**",
+        "",
+        generate_executive_summary_section(
+            portfolio=portfolio,
+            spot=spot,
+            volatility=volatility,
+            alerts=alerts,
+            scenario_results=scenario_results,
+            var_result=var_result,
+            risk_score_result=risk_score_result
+        ),
         generate_market_section(
             market_snapshot
-        )
-    )
-
-    lines.append(
+        ),
+        generate_portfolio_overview_section(
+            portfolio
+        ),
         generate_risk_score_section(
             risk_score_result
-        )
-    )
-
-    lines.append(
+        ),
         generate_greeks_section(
             portfolio
-        )
-    )
-
-    lines.append(
-        generate_hedge_section(
-            hedge_result
-        )
-    )
-
-    lines.append(
+        ),
         generate_stress_section(
             scenario_results
-        )
-    )
-
-    lines.append(
+        ),
         generate_var_section(
             var_result,
             parametric_var
-        )
-    )
-
-    lines.append(
+        ),
+        generate_hedge_section(
+            hedge_result
+        ),
+        generate_key_risk_drivers_section(
+            risk_score_result=risk_score_result,
+            scenario_results=scenario_results,
+            var_result=var_result
+        ),
         generate_alerts_section(
             alerts
-        )
-    )
-
-    lines.append(
-        generate_positions_section(
-            portfolio
-        )
-    )
-
-    if llm_analysis:
-
-        lines.append(
-            "## Analyse LLM\n"
-        )
-
-        lines.append(
+        ),
+        generate_llm_section(
             llm_analysis
-        )
-
-        lines.append(
-            ""
-        )
-
-    lines.append(
-        "## Limites\n"
-    )
-
-    lines.append(
-        "Ce rapport est généré automatiquement par ARIA. "
-        "Il repose sur des hypothèses simplifiées, notamment Black-Scholes, "
-        "des stress tests prédéfinis et une VaR Monte Carlo simplifiée. "
-        "Il ne constitue pas un conseil financier."
-    )
-
-    lines.append(
-        ""
-    )
+        ),
+        generate_limitations_section(),
+        generate_recommended_actions_section(
+            alerts=alerts,
+            risk_score_result=risk_score_result,
+            hedge_result=hedge_result
+        ),
+    ]
 
     return "\n".join(
         lines
+    )
+
+
+def generate_executive_risk_report(
+    portfolio: Portfolio,
+    spot: float,
+    volatility: float,
+    alerts: list[Any],
+    scenario_results: list[Any],
+    var_result: Any,
+    parametric_var: float,
+    hedge_result: Any,
+    risk_score_result: Any,
+    market_snapshot: Any | None = None,
+    llm_analysis: str | None = None
+) -> str:
+    """Explicit alias for the executive report format."""
+
+    return generate_risk_report(
+        portfolio=portfolio,
+        spot=spot,
+        volatility=volatility,
+        alerts=alerts,
+        scenario_results=scenario_results,
+        var_result=var_result,
+        parametric_var=parametric_var,
+        hedge_result=hedge_result,
+        risk_score_result=risk_score_result,
+        market_snapshot=market_snapshot,
+        llm_analysis=llm_analysis
     )
 
 
@@ -673,7 +755,7 @@ if __name__ == "__main__":
         contract=call,
         quantity=20,
         multiplier=100,
-        name="Calls achetés"
+        name="Calls achetes"
     )
 
     scenarios = run_standard_scenarios(
@@ -710,16 +792,16 @@ if __name__ == "__main__":
         vega_limit=20
     )
 
-    report = generate_risk_report(
-        portfolio=portfolio,
-        spot=500,
-        volatility=0.20,
-        alerts=[],
-        scenario_results=scenarios,
-        var_result=var_result,
-        parametric_var=parametric_var,
-        hedge_result=hedge_result,
-        risk_score_result=risk_score_result
+    print(
+        generate_risk_report(
+            portfolio=portfolio,
+            spot=500,
+            volatility=0.20,
+            alerts=[],
+            scenario_results=scenarios,
+            var_result=var_result,
+            parametric_var=parametric_var,
+            hedge_result=hedge_result,
+            risk_score_result=risk_score_result
+        )
     )
-
-    print(report)

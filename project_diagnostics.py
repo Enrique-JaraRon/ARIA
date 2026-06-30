@@ -23,6 +23,7 @@ REQUIRED_FILES = [
     "risk_history.py",
     "history_analytics.py",
     "market_data.py",
+    "ui_components.py",
     "report_generator.py",
     "llm_explainer.py",
     "aria_workflow.py",
@@ -34,7 +35,22 @@ REQUIRED_FILES = [
     "requirements.txt",
     "README.md",
     ".gitignore",
-    "demo_portfolios.py"
+    "demo_portfolios.py",
+    "test_ui_components.py",
+    "test_demo_portfolios.py",
+    "docs/screenshots/.gitkeep"
+]
+
+REQUIRED_MODULES = [
+    "streamlit",
+    "pandas",
+    "numpy",
+    "scipy",
+    "altair",
+    "openai",
+    "dotenv",
+    "pytest",
+    "yfinance"
 ]
 
 
@@ -52,6 +68,7 @@ PROJECT_MODULES = [
     "risk_history",
     "history_analytics",
     "market_data",
+    "ui_components",
     "report_generator",
     "llm_explainer",
     "demo_portfolios",
