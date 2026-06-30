@@ -5,6 +5,8 @@ ARIA - Workflow principal
 
 import os
 
+from dotenv import load_dotenv
+
 from anomaly_detector import AnomalyDetector, create_snapshot
 from llm_explainer import LLMExplainer
 from portfolio import OptionPosition, Portfolio, StockPosition
@@ -82,6 +84,8 @@ def generate_llm_analysis(
     alerts
 ) -> str:
     """Demande au LLM d'expliquer les alertes détectées."""
+
+    load_dotenv()
 
     model = os.getenv("ARIA_LLM_MODEL")
 
