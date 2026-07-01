@@ -856,8 +856,13 @@ def validate_portfolio_coherence(
         if price is None or float(price) <= 0:
             errors.append(f"Ligne {line_number} : prix invalide.")
 
-        if value is None or float(value) < 0:
-            errors.append(f"Ligne {line_number} : valeur manquante ou négative.")
+        value_numeric = pd.to_numeric(value, errors="coerce")
+        if pd.isna(value_numeric) or float(value_numeric) == 0:
+            errors.append(f"Ligne {line_number} : valeur manquante ou nulle.")
+        elif float(value_numeric) < 0:
+            warnings.append(
+                f"Ligne {line_number} : position vendeuse détectée, valeur de marché négative."
+            )
 
         if weight is None or float(weight) < 0:
             errors.append(f"Ligne {line_number} : poids manquant ou négatif.")

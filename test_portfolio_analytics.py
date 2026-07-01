@@ -198,3 +198,51 @@ def test_portfolio_coherence_rejects_invalid_weights():
     errors, _ = validate_portfolio_coherence(data)
 
     assert any("100 %" in error for error in errors)
+
+
+def test_portfolio_coherence_allows_short_market_values():
+    data = pd.DataFrame(
+        [
+            {
+                "Asset type": "option",
+                "Asset class": "Option",
+                "Ticker": "SPY",
+                "Nom": "Calls ATM achetes",
+                "Sector": "Index options",
+                "Currency": "USD",
+                "Weight": 57.1,
+                "Value": 10_000,
+                "Quantity": 20,
+                "Price": 500,
+            },
+            {
+                "Asset type": "option",
+                "Asset class": "Option",
+                "Ticker": "SPY",
+                "Nom": "Puts vendus",
+                "Sector": "Index options",
+                "Currency": "USD",
+                "Weight": 28.5,
+                "Value": -5_000,
+                "Quantity": -10,
+                "Price": 500,
+            },
+            {
+                "Asset type": "stock",
+                "Asset class": "Action / ETF",
+                "Ticker": "SPY",
+                "Nom": "Couverture en actions",
+                "Sector": "US equities",
+                "Currency": "USD",
+                "Weight": 14.4,
+                "Value": -2_500,
+                "Quantity": -5,
+                "Price": 500,
+            },
+        ]
+    )
+
+    errors, warnings = validate_portfolio_coherence(data)
+
+    assert errors == []
+    assert any("vendeuse" in warning for warning in warnings)
