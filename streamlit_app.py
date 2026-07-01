@@ -3,13 +3,20 @@ ARIA - Application Streamlit
 """
 
 import unicodedata
-from pathlib import Path
 
 import altair as alt
 import pandas as pd
 import streamlit as st
 
 from anomaly_detector import AnomalyDetector, create_snapshot
+from app_config import (
+    DEFAULT_MARKET_DATA_PATH,
+    DEFAULT_PORTFOLIO_PATH,
+    RISK_HISTORY_PATH,
+    ensure_runtime_directories,
+    relative_to_project,
+    resolve_project_path,
+)
 from aria_workflow import generate_llm_analysis
 from demo_portfolios import (
     create_demo_portfolio,
@@ -61,6 +68,8 @@ st.set_page_config(
     page_icon="📊",
     layout="wide",
 )
+
+ensure_runtime_directories()
 
 
 CANONICAL_COLUMN_ALIASES = {
@@ -1002,7 +1011,7 @@ csv_market_data_path = None
 if market_source == "CSV local":
     csv_market_data_path = st.sidebar.text_input(
         "Chemin du CSV local",
-        value="data/market_data.csv",
+        value=relative_to_project(DEFAULT_MARKET_DATA_PATH),
     )
 
 market_snapshot = None
@@ -1014,7 +1023,11 @@ if market_source in {"Yahoo Finance", "CSV local", "Bloomberg optionnel"}:
     try:
         provider = get_provider(
             source=market_source,
-            csv_path=csv_market_data_path,
+            csv_path=(
+                resolve_project_path(csv_market_data_path)
+                if csv_market_data_path
+                else None
+            ),
         )
 
         market_snapshot = provider.get_market_snapshot(
@@ -1261,7 +1274,7 @@ if load_demo_portfolio:
 
 portfolio_file_path = st.text_input(
     "Fichier portefeuille CSV",
-    value="data/portfolios/current_portfolio.csv",
+    value=relative_to_project(DEFAULT_PORTFOLIO_PATH),
 )
 
 portfolio_action_col_1, portfolio_action_col_2 = st.columns(2)
@@ -1270,7 +1283,7 @@ if portfolio_action_col_1.button(
     "Sauvegarder le portefeuille",
     width="stretch",
 ):
-    portfolio_path = Path(portfolio_file_path)
+    portfolio_path = resolve_project_path(portfolio_file_path)
     portfolio_path.parent.mkdir(
         parents=True,
         exist_ok=True,
@@ -1287,7 +1300,13 @@ if portfolio_action_col_2.button(
     "Charger le portefeuille",
     width="stretch",
 ):
-    loaded_portfolio = pd.read_csv(portfolio_file_path)
+    portfolio_path = resolve_project_path(portfolio_file_path)
+
+    if not portfolio_path.exists():
+        st.error(f"Fichier introuvable : {portfolio_file_path}")
+        st.stop()
+
+    loaded_portfolio = pd.read_csv(portfolio_path)
 
     st.session_state.portfolio_data = normalize_portfolio_table(
         loaded_portfolio,
@@ -1408,7 +1427,7 @@ if analyse_button:
     )
 
     history_manager = RiskHistory(
-        file_path="data/risk_history.csv",
+        file_path=RISK_HISTORY_PATH,
     )
 
     history = history_manager.load_snapshots()
@@ -1494,7 +1513,7 @@ if analyse_button:
 
     history_manager.save_snapshot(current_snapshot)
 
-    updated_history = load_history_dataframe("data/risk_history.csv")
+    updated_history = load_history_dataframe(RISK_HISTORY_PATH)
     updated_history = clean_history_dataframe(updated_history)
     history_summary = get_history_summary(updated_history)
 

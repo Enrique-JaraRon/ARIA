@@ -2,11 +2,15 @@
 ARIA - Analyse de l'historique des risques
 """
 
+from pathlib import Path
+
 import pandas as pd
+
+from app_config import RISK_HISTORY_PATH
 
 
 def load_history_dataframe(
-    file_path: str = "data/risk_history.csv"
+    file_path: str | Path = RISK_HISTORY_PATH
 ) -> pd.DataFrame:
     """Charge l'historique des snapshots dans un DataFrame."""
 
@@ -138,7 +142,7 @@ def get_history_summary(
 if __name__ == "__main__":
 
     history_data = load_history_dataframe(
-        "data/risk_history.csv"
+        RISK_HISTORY_PATH
     )
 
     history_data = clean_history_dataframe(

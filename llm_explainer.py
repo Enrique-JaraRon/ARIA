@@ -2,18 +2,17 @@
 ARIA - Explication des alertes avec un LLM
 """
 
-import os
-
 from openai import OpenAI
 
 from anomaly_detector import Alert, RiskSnapshot
+from app_config import get_runtime_setting
 
 
 class LLMExplainer:
     """Transforme les alertes quantitatives en explication lisible."""
 
     def __init__(self, model: str) -> None:
-        api_key = os.getenv("OPENAI_API_KEY")
+        api_key = get_runtime_setting("OPENAI_API_KEY")
 
         if not api_key:
             raise ValueError(
@@ -341,7 +340,7 @@ if __name__ == "__main__":
         )
     ]
 
-    model = os.getenv("ARIA_LLM_MODEL")
+    model = get_runtime_setting("ARIA_LLM_MODEL")
 
     if not model:
         raise ValueError(

@@ -3,11 +3,12 @@
 ARIA - Workflow principal
 """
 
-import os
-
-from dotenv import load_dotenv
-
 from anomaly_detector import AnomalyDetector, create_snapshot
+from app_config import (
+    RISK_HISTORY_PATH,
+    ensure_runtime_directories,
+    get_runtime_setting,
+)
 from llm_explainer import LLMExplainer
 from portfolio import OptionPosition, Portfolio, StockPosition
 from pricing_BS import OptionContract
@@ -92,9 +93,7 @@ def generate_llm_analysis(
 ) -> str:
     """Demande au LLM d'expliquer les alertes détectées."""
 
-    load_dotenv()
-
-    model = os.getenv("ARIA_LLM_MODEL")
+    model = get_runtime_setting("ARIA_LLM_MODEL")
 
     if not model:
         if language.lower() == "en":
@@ -158,6 +157,8 @@ def run_aria(
 ) -> None:
     """Lance le workflow complet d'ARIA."""
 
+    ensure_runtime_directories()
+
     portfolio = build_demo_portfolio()
 
     update_portfolio_market(
@@ -173,7 +174,7 @@ def run_aria(
     )
 
     history_manager = RiskHistory(
-        file_path="data/risk_history.csv"
+        file_path=RISK_HISTORY_PATH
     )
 
     history = history_manager.load_snapshots()

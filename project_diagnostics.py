@@ -3,10 +3,9 @@ ARIA - Diagnostic du projet
 """
 
 import importlib
-import os
 from pathlib import Path
 
-from dotenv import load_dotenv
+from app_config import get_runtime_setting
 
 REQUIRED_FILES = [
     "streamlit_app.py",
@@ -26,6 +25,7 @@ REQUIRED_FILES = [
     "ui_components.py",
     "report_generator.py",
     "llm_explainer.py",
+    "app_config.py",
     "aria_workflow.py",
     "quality_check.py",
     "run_aria.py",
@@ -72,6 +72,7 @@ PROJECT_MODULES = [
     "ui_components",
     "report_generator",
     "llm_explainer",
+    "app_config",
     "demo_portfolios",
     "aria_workflow"
 ]
@@ -202,15 +203,39 @@ def check_environment_variables(
             "INFO fichier .env absent"
         )
 
-    load_dotenv(
-        env_path
+    gitignore_path = project_path / ".gitignore"
+    gitignore_text = (
+        gitignore_path.read_text(
+            encoding="utf-8",
+            errors="ignore"
+        )
+        if gitignore_path.exists()
+        else ""
     )
 
-    openai_key = os.getenv(
+    if ".env" in gitignore_text:
+        messages.append(
+            "OK .env est ignore par Git"
+        )
+    else:
+        messages.append(
+            "ERREUR .env n'est pas ignore par Git"
+        )
+
+    if ".streamlit/secrets.toml" in gitignore_text:
+        messages.append(
+            "OK .streamlit/secrets.toml est ignore par Git"
+        )
+    else:
+        messages.append(
+            "ERREUR .streamlit/secrets.toml n'est pas ignore par Git"
+        )
+
+    openai_key = get_runtime_setting(
         "OPENAI_API_KEY"
     )
 
-    llm_model = os.getenv(
+    llm_model = get_runtime_setting(
         "ARIA_LLM_MODEL"
     )
 

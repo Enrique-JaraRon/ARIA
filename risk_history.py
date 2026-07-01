@@ -8,6 +8,7 @@ from datetime import datetime
 from pathlib import Path
 
 from anomaly_detector import RiskSnapshot
+from app_config import RISK_HISTORY_PATH
 
 CSV_COLUMNS = [
     "timestamp",
@@ -27,7 +28,7 @@ class RiskHistory:
 
     def __init__(
         self,
-        file_path: str = "data/risk_history.csv"
+        file_path: str | Path = RISK_HISTORY_PATH
     ) -> None:
         self.file_path = Path(file_path)
 
