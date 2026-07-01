@@ -107,3 +107,54 @@ def test_risk_score_has_at_least_one_driver():
     )
 
     assert len(result.main_drivers) >= 1
+
+
+def test_risk_score_distinguishes_low_and_high_risk_portfolios():
+    """Le score doit varier selon le niveau de risque du portefeuille."""
+
+    low_risk = Portfolio(name="Faible risque")
+    low_risk.add_stock(
+        spot=100,
+        quantity=10,
+        name="ETF diversifie",
+        underlying="VTI",
+    )
+
+    high_risk = create_test_portfolio()
+
+    low_var, _ = calculate_var_es(
+        portfolio=low_risk,
+        annual_volatility=0.08,
+        confidence_level=0.95,
+        horizon_days=1,
+        number_of_simulations=500,
+    )
+    high_var, _ = calculate_var_es(
+        portfolio=high_risk,
+        annual_volatility=0.30,
+        confidence_level=0.95,
+        horizon_days=1,
+        number_of_simulations=500,
+    )
+
+    low_score = calculate_risk_score(
+        portfolio=low_risk,
+        alerts=[],
+        var_result=low_var,
+        scenario_results=run_standard_scenarios(low_risk),
+        delta_limit=100,
+        gamma_limit=10,
+        vega_limit=100,
+    )
+    high_score = calculate_risk_score(
+        portfolio=high_risk,
+        alerts=[],
+        var_result=high_var,
+        scenario_results=run_standard_scenarios(high_risk),
+        delta_limit=10,
+        gamma_limit=1,
+        vega_limit=20,
+    )
+
+    assert low_score.score < high_score.score
+    assert high_score.score < 100

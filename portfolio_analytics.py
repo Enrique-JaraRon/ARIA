@@ -601,13 +601,18 @@ MODEL_PORTFOLIOS: dict[str, ModelPortfolio] = {
 
 PROFESSIONAL_COLUMNS = [
     "Asset type",
+    "Asset class",
     "Ticker",
     "Sous-jacent",
     "Nom",
     "Sector",
     "Currency",
+    "Weight",
+    "Value",
     "Quantity",
     "Price",
+    "Data source",
+    "Commentaire",
     "Option type",
     "Strike",
     "Maturity",
@@ -653,13 +658,18 @@ def model_portfolio_to_dataframe(
         rows.append(
             {
                 "Asset type": "stock",
+                "Asset class": "ETF / action",
                 "Ticker": ticker,
                 "Sous-jacent": ticker,
-                "Nom": f"{ticker} allocation",
+                "Nom": f"{ticker} - {model.sectors[ticker]}",
                 "Sector": model.sectors[ticker],
                 "Currency": model.currency,
+                "Weight": round(weight * 100, 4),
+                "Value": round(total_value * weight, 2),
                 "Quantity": quantity,
                 "Price": price,
+                "Data source": "Portefeuille de demonstration ARIA",
+                "Commentaire": model.explanation,
                 "Option type": "",
                 "Strike": None,
                 "Maturity": None,
@@ -814,25 +824,36 @@ def portfolio_exposure_table(table: pd.DataFrame) -> pd.DataFrame:
         name = str(_row_value(row, "Nom", default=ticker)).strip()
         quantity = _row_value(row, "Quantity", "Quantite")
         price = _row_value(row, "Price", "Spot")
+        target_weight = _row_value(row, "Weight")
+        value = _row_value(row, "Value")
 
-        if not ticker or quantity is None or price is None:
+        if not ticker or price is None:
+            continue
+
+        if quantity is None and value is None:
             continue
 
         sector = str(_row_value(row, "Sector", default="Unclassified")).strip()
         currency = str(_row_value(row, "Currency", default="USD")).strip()
-        market_value = _market_value(row)
+        market_value = float(value) if value is not None else _market_value(row)
         rows.append(
             {
                 "Ticker": ticker,
                 "Name": name or ticker,
                 "Asset type": asset_type,
+                "Asset class": str(_row_value(row, "Asset class", default=asset_type)),
                 "Sector": sector or "Unclassified",
                 "Currency": currency or "USD",
-                "Quantity": float(quantity),
+                "Quantity": float(quantity) if quantity is not None else 0.0,
                 "Price": float(price),
+                "Portfolio weight": (
+                    float(target_weight) / 100
+                    if target_weight is not None
+                    else None
+                ),
                 "Market value": market_value,
                 "Gross exposure": abs(market_value),
-                "Data source": "Manual / demo",
+                "Data source": str(_row_value(row, "Data source", default="Manuel / demo")),
             }
         )
 
@@ -843,6 +864,13 @@ def portfolio_exposure_table(table: pd.DataFrame) -> pd.DataFrame:
     gross_total = max(float(exposure["Gross exposure"].sum()), 1.0)
     net_total = float(exposure["Market value"].sum())
     exposure["Gross weight"] = exposure["Gross exposure"] / gross_total
+    if exposure["Portfolio weight"].notna().any():
+        explicit_weight = exposure["Portfolio weight"].fillna(
+            exposure["Gross weight"]
+        )
+        explicit_total = float(explicit_weight.sum())
+        if explicit_total > 0:
+            exposure["Gross weight"] = explicit_weight / explicit_total
     exposure["Net weight"] = (
         exposure["Market value"] / net_total
         if abs(net_total) > 1e-9
@@ -866,17 +894,17 @@ def portfolio_diagnosis(table: pd.DataFrame) -> dict[str, Any]:
             "number_of_assets": 0,
             "number_of_sectors": 0,
             "concentration_level": "N/A",
-            "diversification_comment": "No portfolio data available.",
+            "diversification_comment": "Aucune donnée de portefeuille disponible.",
         }
 
     top_row = exposure.iloc[0]
     top_weight = float(top_row["Gross weight"])
     concentration_level = (
-        "High"
+        "Élevée"
         if top_weight >= 0.35
-        else "Moderate"
+        else "Modérée"
         if top_weight >= 0.20
-        else "Controlled"
+        else "Maîtrisée"
     )
     number_of_assets = int(exposure["Ticker"].nunique())
     number_of_sectors = int(exposure["Sector"].nunique())
@@ -889,10 +917,10 @@ def portfolio_diagnosis(table: pd.DataFrame) -> dict[str, Any]:
         "number_of_assets": number_of_assets,
         "number_of_sectors": number_of_sectors,
         "concentration_level": concentration_level,
-        "diversification_comment": (
-            "Diversification is broad across assets and sectors."
+            "diversification_comment": (
+            "La diversification est large entre actifs et secteurs."
             if number_of_assets >= 6 and number_of_sectors >= 4
-            else "Diversification could be improved with broader asset and sector exposure."
+            else "La diversification peut être améliorée en élargissant les actifs ou secteurs."
         ),
     }
 

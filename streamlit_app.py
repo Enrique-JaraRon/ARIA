@@ -87,13 +87,24 @@ st.set_page_config(
 )
 
 PORTFOLIO_EDITOR_COLUMNS = [
-    "Asset type",
     "Ticker",
     "Nom",
+    "Asset class",
     "Sector",
+    "Weight",
+    "Value",
     "Currency",
     "Quantity",
     "Price",
+    "Data source",
+    "Commentaire",
+    "Asset type",
+]
+
+PORTFOLIO_OPTION_COLUMNS = [
+    "Ticker",
+    "Nom",
+    "Asset type",
     "Option type",
     "Strike",
     "Maturity",
@@ -111,6 +122,11 @@ CANONICAL_COLUMN_ALIASES = {
     "Quantite": ["Quantite", "Quantité", "QuantitÃ©", "QuantitÃƒÆ’Ã‚Â©"],
     "Maturite": ["Maturite", "Maturité", "MaturitÃ©", "MaturitÃƒÆ’Ã‚Â©"],
     "Volatilite": ["Volatilite", "Volatilité", "VolatilitÃ©", "VolatilitÃƒÂ©"],
+    "Weight": ["Weight", "Poids", "Ponderation", "Pondération"],
+    "Value": ["Value", "Valeur", "Montant"],
+    "Asset class": ["Asset class", "Classe actif", "Classe d'actif"],
+    "Data source": ["Data source", "Source", "Source donnees", "Source données"],
+    "Commentaire": ["Commentaire", "Justification", "Rationale", "Notes"],
     "Spot stressé": ["Spot stresse", "Spot stressé", "Spot stressÃ©"],
     "Scenario": ["Scenario", "Scénario", "ScÃ©nario"],
     "Resultat": ["Resultat", "Résultat", "RÃ©sultat"],
@@ -174,6 +190,55 @@ def normalize_dataframe_columns(data: pd.DataFrame) -> pd.DataFrame:
     )
 
     return normalized
+
+
+def numeric_series(
+    data: pd.DataFrame,
+    column: str,
+) -> pd.Series:
+    """Convert a column to numeric values while preserving missing cells."""
+
+    if column not in data.columns:
+        return pd.Series(
+            pd.NA,
+            index=data.index,
+            dtype="Float64",
+        )
+
+    return pd.to_numeric(
+        data[column],
+        errors="coerce",
+    )
+
+
+def merge_visible_portfolio_edits(
+    current_table: pd.DataFrame,
+    edited_table: pd.DataFrame,
+) -> pd.DataFrame:
+    """Merge visible editor columns without losing hidden option fields."""
+
+    current = current_table.reset_index(drop=True).copy()
+    edited = edited_table.reset_index(drop=True).copy()
+
+    if len(edited) <= len(current):
+        merged = current.iloc[: len(edited)].copy()
+    else:
+        extra_rows = pd.DataFrame(
+            index=range(len(edited) - len(current)),
+            columns=current.columns,
+        )
+        merged = pd.concat(
+            [
+                current,
+                extra_rows,
+            ],
+            ignore_index=True,
+        )
+
+    for column in edited.columns:
+        merged[column] = edited[column]
+
+    return merged
 
 
 def default_portfolio() -> pd.DataFrame:
@@ -303,13 +368,18 @@ def normalize_portfolio_table(
 
     defaults = {
         "Asset type": "stock",
+        "Asset class": pd.NA,
         "Ticker": "SPY",
         "Sous-jacent": "SPY",
         "Nom": "Position",
         "Sector": "Unclassified",
         "Currency": "USD",
+        "Weight": pd.NA,
+        "Value": pd.NA,
         "Spot": default_spot_value,
         "Price": default_spot_value,
+        "Data source": "Manuel",
+        "Commentaire": pd.NA,
         "Strike": pd.NA,
         "Option type": pd.NA,
         "Type option": pd.NA,
@@ -317,8 +387,8 @@ def normalize_portfolio_table(
         "Volatility": default_volatility_value,
         "Rate": 0.05,
         "Contract size": 1,
-        "Quantite": 1,
-        "Quantity": 1,
+        "Quantite": pd.NA,
+        "Quantity": pd.NA,
         "Multiplicateur": 1,
         "Maturite": 0.25,
         "Maturity": 0.25,
@@ -346,6 +416,8 @@ def normalize_portfolio_table(
     normalized["Nom"] = normalized["Nom"].fillna(normalized["Ticker"])
     normalized["Sector"] = normalized["Sector"].fillna("Unclassified")
     normalized["Currency"] = normalized["Currency"].fillna("USD")
+    normalized["Data source"] = normalized["Data source"].fillna("Manuel")
+    normalized["Commentaire"] = normalized["Commentaire"].fillna("")
 
     normalized["Asset type"] = normalized.apply(
         lambda row: "option"
@@ -358,6 +430,14 @@ def normalize_portfolio_table(
         lambda value: "Option"
         if str(value).strip().lower() == "option"
         else "Action"
+    )
+    normalized["Asset class"] = normalized["Asset class"].fillna(
+        normalized["Asset type"].map(
+            {
+                "stock": "Action / ETF",
+                "option": "Option",
+            }
+        )
     )
     normalized["Quantity"] = normalized["Quantity"].fillna(
         normalized["Quantite"]
@@ -383,6 +463,15 @@ def normalize_portfolio_table(
         normalized["Multiplicateur"]
     )
     normalized["Multiplicateur"] = normalized["Contract size"]
+
+    normalized["Price"] = numeric_series(normalized, "Price").fillna(
+        default_spot_value
+    )
+    normalized["Spot"] = normalized["Price"]
+    normalized["Weight"] = numeric_series(normalized, "Weight")
+    normalized["Value"] = numeric_series(normalized, "Value")
+    normalized["Quantity"] = numeric_series(normalized, "Quantity")
+    normalized["Quantite"] = numeric_series(normalized, "Quantite")
 
     option_mask = normalized["Asset type"].astype(str).str.lower().eq("option")
     stock_mask = ~option_mask
@@ -432,6 +521,85 @@ def normalize_portfolio_table(
         option_mask,
         "Contract size",
     ]
+
+    value_mask = normalized["Value"].notna()
+    weight_mask = normalized["Weight"].notna()
+    price_positive = normalized["Price"].fillna(0) > 0
+
+    total_value_basis = float(normalized.loc[value_mask, "Value"].abs().sum())
+    if total_value_basis <= 0:
+        total_value_basis = 100_000.0
+
+    normalized.loc[~value_mask & weight_mask, "Value"] = (
+        normalized.loc[~value_mask & weight_mask, "Weight"]
+        / 100
+        * total_value_basis
+    )
+
+    quantity_missing = normalized["Quantity"].isna()
+    normalized.loc[quantity_missing & normalized["Value"].notna() & price_positive, "Quantity"] = (
+        normalized.loc[quantity_missing & normalized["Value"].notna() & price_positive, "Value"]
+        / normalized.loc[quantity_missing & normalized["Value"].notna() & price_positive, "Price"]
+    )
+
+    quantity_missing = normalized["Quantity"].isna()
+    normalized.loc[quantity_missing & normalized["Quantite"].notna(), "Quantity"] = (
+        normalized.loc[quantity_missing & normalized["Quantite"].notna(), "Quantite"]
+    )
+    normalized["Quantity"] = normalized["Quantity"].fillna(0.0)
+    normalized["Quantite"] = normalized["Quantity"]
+
+    value_missing = normalized["Value"].isna()
+    normalized.loc[value_missing, "Value"] = (
+        normalized.loc[value_missing, "Quantity"]
+        * normalized.loc[value_missing, "Price"]
+    )
+
+    weight_missing = normalized["Weight"].isna()
+    gross_value = float(normalized["Value"].abs().sum())
+    if gross_value > 0:
+        normalized.loc[weight_missing, "Weight"] = (
+            normalized.loc[weight_missing, "Value"].abs()
+            / gross_value
+            * 100
+        )
+
+    stock_rows = normalized.loc[stock_mask].copy()
+    option_rows = normalized.loc[option_mask].copy()
+
+    if not stock_rows.empty:
+        grouped_stock_rows = []
+        for _, group in stock_rows.groupby("Ticker", dropna=False, sort=False):
+            first = group.iloc[0].copy()
+            first["Quantity"] = group["Quantity"].sum()
+            first["Quantite"] = first["Quantity"]
+            first["Value"] = group["Value"].sum()
+            first["Weight"] = group["Weight"].sum()
+            comments = [
+                str(comment)
+                for comment in group["Commentaire"].dropna().unique()
+                if str(comment).strip()
+            ]
+            first["Commentaire"] = " | ".join(comments[:3])
+            grouped_stock_rows.append(first)
+        stock_rows = pd.DataFrame(grouped_stock_rows)
+
+    normalized = pd.concat(
+        [
+            option_rows,
+            stock_rows,
+        ],
+        ignore_index=True,
+    )
+
+    weight_total = float(normalized["Weight"].fillna(0).sum())
+    if not normalized.empty and abs(weight_total - 100.0) <= 0.05:
+        rounding_gap = 100.0 - weight_total
+        max_weight_index = normalized["Weight"].fillna(0).idxmax()
+        normalized.loc[max_weight_index, "Weight"] = round(
+            float(normalized.loc[max_weight_index, "Weight"]) + rounding_gap,
+            4,
+        )
 
     normalized = normalized.drop_duplicates(
         ignore_index=True,
@@ -1427,15 +1595,15 @@ st.session_state.portfolio_data = normalize_portfolio_table(
 
 
 render_section_title(
-    "Composition du portefeuille",
-    "Importe, charge une allocation modele ou genere un portefeuille assiste par IA.",
+    "Portefeuille client",
+    "Importez, chargez une allocation modèle ou générez un portefeuille assisté par IA.",
 )
 
 manual_tab, demo_tab, ai_tab = st.tabs(
     [
         "A. Modifier / importer",
-        "B. Portefeuilles de demonstration",
-        "C. Creer avec l'IA",
+        "B. Portefeuilles de démonstration",
+        "C. Créer avec l'IA",
     ]
 )
 
@@ -1503,16 +1671,16 @@ with manual_tab:
     render_info_card(
         "Lecture des positions",
         (
-            "Une quantite positive correspond a une position achetee. "
-            "Une quantite negative correspond a une position vendue. "
-            "Les colonnes techniques necessaires au moteur ARIA sont "
+            "Une quantité positive correspond à une position achetée. "
+            "Une quantité négative correspond à une position vendue. "
+            "Les colonnes techniques nécessaires au moteur ARIA sont "
             "reconstruites automatiquement."
         ),
     )
 
 with demo_tab:
     selected_demo_portfolio = st.selectbox(
-        "Portefeuille de demonstration",
+        "Portefeuille de démonstration",
         options=get_demo_portfolio_names(),
     )
 
@@ -1521,10 +1689,10 @@ with demo_tab:
         demo_kpi_1, demo_kpi_2, demo_kpi_3, demo_kpi_4 = st.columns(4)
         demo_kpi_1.metric("Risque", selected_model.risk_level)
         demo_kpi_2.metric("Horizon", "Long terme")
-        demo_kpi_3.metric("Vol. estimee", f"{selected_model.volatility:.1%}")
+        demo_kpi_3.metric("Vol. estimée", f"{selected_model.volatility:.1%}")
         demo_kpi_4.metric("Drawdown", f"{selected_model.drawdown:.1%}")
         st.info(
-            f"{selected_model.explanation} Profil : "
+            f"{selected_model.explanation} Profil adapté : "
             f"{selected_model.investor_profile}"
         )
 
@@ -1621,8 +1789,8 @@ with ai_tab:
     if submitted_ai_portfolio:
         st.session_state.ai_portfolio_result = generate_ai_portfolio(
             {
-                "horizon": horizon,
-                "risk_level": risk_level,
+            "horizon": horizon,
+            "risk_level": risk_level,
                 "instruments": instruments,
                 "style": style,
                 "geography": geography,
@@ -1632,6 +1800,9 @@ with ai_tab:
                 "included_names": included_names,
                 "excluded_names": excluded_names,
             }
+        )
+        st.session_state.ai_portfolio_result["simulated_amount"] = float(
+            simulated_amount
         )
 
     if "ai_portfolio_result" in st.session_state:
@@ -1645,8 +1816,18 @@ with ai_tab:
         if ai_result["warnings"]:
             for warning in ai_result["warnings"]:
                 st.warning(warning)
+        ai_display = ai_result["portfolio"].rename(
+            columns={
+                "ticker": "Ticker",
+                "name": "Nom",
+                "weight": "Poids (%)",
+                "asset_class": "Classe d'actif",
+                "sector": "Secteur",
+                "rationale": "Justification",
+            }
+        )
         st.dataframe(
-            ai_result["portfolio"],
+            ai_display,
             hide_index=True,
             width="stretch",
         )
@@ -1661,7 +1842,9 @@ with ai_tab:
             st.session_state.portfolio_data = normalize_portfolio_table(
                 generated_portfolio_to_aria_table(
                     ai_result["portfolio"],
-                    total_value=float(simulated_amount),
+                    total_value=float(
+                        ai_result.get("simulated_amount", simulated_amount)
+                    ),
                 ),
                 default_spot_value=current_spot,
                 default_volatility_value=current_volatility,
@@ -1678,7 +1861,9 @@ with ai_tab:
             st.session_state.portfolio_data = normalize_portfolio_table(
                 generated_portfolio_to_aria_table(
                     ai_result["portfolio"],
-                    total_value=float(simulated_amount),
+                    total_value=float(
+                        ai_result.get("simulated_amount", simulated_amount)
+                    ),
                 ),
                 default_spot_value=current_spot,
                 default_volatility_value=current_volatility,
@@ -1702,65 +1887,52 @@ edited_portfolio = st.data_editor(
     width="stretch",
     column_order=PORTFOLIO_EDITOR_COLUMNS,
     column_config={
-        "Asset type": st.column_config.SelectboxColumn(
-            "Asset type",
-            options=["stock", "option"],
-            required=True,
-        ),
         "Ticker": st.column_config.TextColumn("Ticker"),
-        "Nom": st.column_config.TextColumn("Name"),
-        "Sector": st.column_config.TextColumn("Sector"),
+        "Nom": st.column_config.TextColumn("Nom"),
+        "Asset class": st.column_config.TextColumn("Classe d'actif"),
+        "Sector": st.column_config.TextColumn("Secteur"),
+        "Weight": st.column_config.NumberColumn(
+            "Poids (%)",
+            min_value=0.0,
+            max_value=100.0,
+            step=0.5,
+            format="%.2f",
+        ),
+        "Value": st.column_config.NumberColumn(
+            "Valeur",
+            min_value=0.0,
+            step=100.0,
+            format="%.2f",
+        ),
         "Currency": st.column_config.SelectboxColumn(
-            "Currency",
+            "Devise",
             options=["USD", "EUR", "GBP", "CHF", "JPY"],
         ),
         "Quantity": st.column_config.NumberColumn(
-            "Quantity",
+            "Quantité",
             step=1.0,
             format="%.4f",
         ),
         "Price": st.column_config.NumberColumn(
-            "Price",
+            "Prix",
             min_value=0.01,
             step=1.0,
         ),
-        "Option type": st.column_config.SelectboxColumn(
-            "Option type",
-            options=["", "call", "put"],
-        ),
-        "Strike": st.column_config.NumberColumn(
-            "Strike",
-            min_value=0.01,
-            step=1.0,
-        ),
-        "Maturity": st.column_config.NumberColumn(
-            "Maturity",
-            min_value=0.001,
-            step=0.05,
-            format="%.3f",
-        ),
-        "Volatility": st.column_config.NumberColumn(
-            "Volatility",
-            min_value=0.0001,
-            step=0.01,
-            format="%.2f",
-        ),
-        "Rate": st.column_config.NumberColumn(
-            "Rate",
-            step=0.0025,
-            format="%.4f",
-        ),
-        "Contract size": st.column_config.NumberColumn(
-            "Contract size",
-            min_value=1,
-            step=1,
-            format="%d",
+        "Data source": st.column_config.TextColumn("Source"),
+        "Commentaire": st.column_config.TextColumn("Commentaire"),
+        "Asset type": st.column_config.SelectboxColumn(
+            "Type d'actif",
+            options=["stock", "option"],
+            required=True,
         ),
     },
 )
 
 st.session_state.portfolio_data = normalize_portfolio_table(
-    edited_portfolio,
+    merge_visible_portfolio_edits(
+        st.session_state.portfolio_data,
+        edited_portfolio,
+    ),
     default_spot_value=current_spot,
     default_volatility_value=current_volatility,
 )
@@ -1778,8 +1950,8 @@ if portfolio_validation_errors:
         st.error(validation_error)
 
 render_section_title(
-    "Portfolio intelligence",
-    "Diagnostic de composition, concentration et réallocation possible.",
+    "Diagnostic rapide du portefeuille",
+    "Lecture synthétique avant analyse ARIA.",
 )
 
 current_exposure_table = portfolio_exposure_table(
@@ -1791,16 +1963,16 @@ current_diagnosis = portfolio_diagnosis(
 
 portfolio_kpi_1, portfolio_kpi_2, portfolio_kpi_3, portfolio_kpi_4 = st.columns(4)
 portfolio_kpi_1.metric(
-    "Gross exposure",
+    "Exposition brute",
     f"{current_diagnosis['gross_exposure']:,.0f}",
 )
 portfolio_kpi_2.metric(
-    "Top position",
+    "1re position",
     current_diagnosis["top_position"],
     f"{current_diagnosis['top_weight']:.1%}",
 )
 portfolio_kpi_3.metric(
-    "Assets",
+    "Actifs",
     current_diagnosis["number_of_assets"],
 )
 portfolio_kpi_4.metric(
@@ -1810,8 +1982,8 @@ portfolio_kpi_4.metric(
 
 st.caption(current_diagnosis["diversification_comment"])
 
-if not current_exposure_table.empty:
-    with st.expander("Voir les poids et expositions par position", expanded=False):
+with st.expander("Détails avancés : expositions, poids et réallocation", expanded=False):
+    if not current_exposure_table.empty:
         exposure_display = current_exposure_table.copy()
         exposure_display["Gross weight"] = exposure_display["Gross weight"].map(
             "{:.2%}".format
@@ -1819,36 +1991,52 @@ if not current_exposure_table.empty:
         exposure_display["Net weight"] = exposure_display["Net weight"].map(
             "{:.2%}".format
         )
+        exposure_display = exposure_display.rename(
+            columns={
+                "Ticker": "Ticker",
+                "Name": "Nom",
+                "Asset type": "Type d'actif",
+                "Asset class": "Classe d'actif",
+                "Sector": "Secteur",
+                "Currency": "Devise",
+                "Quantity": "Quantité",
+                "Price": "Prix",
+                "Market value": "Valeur",
+                "Gross exposure": "Exposition brute",
+                "Gross weight": "Poids brut",
+                "Net weight": "Poids net",
+                "Data source": "Source",
+            }
+        )
         st.dataframe(
             exposure_display,
             hide_index=True,
             width="stretch",
         )
 
-target_model_name = st.selectbox(
-    "Portefeuille cible pour comparer la réallocation",
-    options=get_model_portfolio_names(),
-    index=1,
-)
-target_model = get_model_portfolio(target_model_name)
+    target_model_name = st.selectbox(
+        "Portefeuille cible pour comparer la réallocation",
+        options=get_model_portfolio_names(),
+        index=1,
+    )
+    target_model = get_model_portfolio(target_model_name)
 
-model_col_1, model_col_2, model_col_3, model_col_4 = st.columns(4)
-model_col_1.metric("Profil cible", target_model.risk_level)
-model_col_2.metric("Rendement estimé", f"{target_model.expected_return:.1%}")
-model_col_3.metric("Volatilité estimée", f"{target_model.volatility:.1%}")
-model_col_4.metric("Drawdown indicatif", f"{target_model.drawdown:.1%}")
+    model_col_1, model_col_2, model_col_3, model_col_4 = st.columns(4)
+    model_col_1.metric("Profil cible", target_model.risk_level)
+    model_col_2.metric("Rendement estimé", f"{target_model.expected_return:.1%}")
+    model_col_3.metric("Volatilité estimée", f"{target_model.volatility:.1%}")
+    model_col_4.metric("Drawdown indicatif", f"{target_model.drawdown:.1%}")
 
-st.info(
-    f"{target_model.explanation} Profil adapté : {target_model.investor_profile} "
-    "Ces chiffres sont des estimations basées sur les hypothèses ARIA, pas des rendements garantis."
-)
+    st.info(
+        f"{target_model.explanation} Profil adapté : {target_model.investor_profile} "
+        "Ces chiffres sont des estimations basées sur les hypothèses ARIA, pas des rendements garantis."
+    )
 
-rebalance_table, rebalance_summary = rebalancing_recommendations(
-    current_table=st.session_state.portfolio_data,
-    target_model=target_model,
-)
+    rebalance_table, rebalance_summary = rebalancing_recommendations(
+        current_table=st.session_state.portfolio_data,
+        target_model=target_model,
+    )
 
-with st.expander("Voir les recommandations de réallocation", expanded=False):
     rebalance_display = rebalance_table.copy()
     for percent_column in [
         "Current weight",

@@ -22,9 +22,9 @@ REQUIRED_GENERATED_COLUMNS = [
 ]
 
 DISCLAIMER = (
-    "Ce portefeuille est une simulation educative generee a partir des "
-    "preferences indiquees. Il ne constitue pas un conseil en investissement. "
-    "Les performances passees ou estimees ne prejugent pas des performances "
+    "Ce portefeuille est une simulation éducative générée à partir des "
+    "préférences indiquées. Il ne constitue pas un conseil en investissement. "
+    "Les performances passées ou estimées ne préjugent pas des performances "
     "futures."
 )
 
@@ -34,6 +34,7 @@ PRICE_FALLBACKS = {
     "VTI": 285.0,
     "VT": 118.0,
     "BND": 72.0,
+    "AGG": 100.0,
     "BNDX": 49.0,
     "SHV": 110.0,
     "SHY": 82.0,
@@ -45,6 +46,9 @@ PRICE_FALLBACKS = {
     "XLV": 145.0,
     "XLP": 77.0,
     "XLE": 93.0,
+    "IXUS": 70.0,
+    "VWO": 44.0,
+    "NOBL": 105.0,
     "TIP": 108.0,
     "DBC": 23.0,
     "ESGU": 123.0,
@@ -103,7 +107,7 @@ def validate_generated_portfolio(
     for column in REQUIRED_GENERATED_COLUMNS:
         if column not in data.columns:
             data[column] = ""
-            warnings.append(f"Missing column filled automatically: {column}")
+            warnings.append(f"Colonne manquante remplie automatiquement : {column}")
 
     if "rationale" not in data.columns:
         data["rationale"] = ""
@@ -113,7 +117,9 @@ def validate_generated_portfolio(
 
     if data.empty:
         data = fallback_portfolio({})["portfolio"]
-        warnings.append("Empty generation replaced with a diversified fallback.")
+        warnings.append(
+            "La génération était vide : ARIA a utilisé un portefeuille diversifié de secours."
+        )
 
     data["weight"] = pd.to_numeric(
         data["weight"],
@@ -128,7 +134,7 @@ def validate_generated_portfolio(
     duplicated_tickers = data[data["ticker"].duplicated()]["ticker"].unique().tolist()
     if duplicated_tickers:
         warnings.append(
-            "Duplicate tickers merged: "
+            "Tickers en double fusionnés : "
             + ", ".join(sorted(duplicated_tickers))
         )
 
@@ -149,7 +155,7 @@ def validate_generated_portfolio(
 
     if float(data["weight"].max()) > 80.0:
         warnings.append(
-            "A very concentrated position was reduced during normalization."
+            "Une position trop concentrée a été réduite pendant la validation."
         )
         excess_index = data["weight"].idxmax()
         excess = float(data.loc[excess_index, "weight"] - 45.0)
@@ -187,7 +193,7 @@ def fallback_portfolio(preferences: dict[str, Any]) -> dict[str, Any]:
             ("BND", "Vanguard Total Bond Market ETF", 12, "Bond ETF", "Core bonds"),
             ("GLD", "SPDR Gold Shares", 6, "Commodity ETF", "Gold"),
         ]
-        strategy = "Growth allocation with an AI and semiconductor tilt."
+        strategy = "Allocation croissance avec biais IA et semi-conducteurs."
     elif "low" in risk_level or "faible" in risk_level or "defensive" in style:
         rows = [
             ("BND", "Vanguard Total Bond Market ETF", 32, "Bond ETF", "Core bonds"),
@@ -197,7 +203,7 @@ def fallback_portfolio(preferences: dict[str, Any]) -> dict[str, Any]:
             ("GLD", "SPDR Gold Shares", 12, "Commodity ETF", "Gold"),
             ("VTI", "Vanguard Total Stock Market ETF", 8, "Equity ETF", "US equities"),
         ]
-        strategy = "Defensive allocation focused on drawdown control."
+        strategy = "Allocation défensive centrée sur la maîtrise du drawdown."
     elif "esg" in style or "sustainable" in style:
         rows = [
             ("ESGU", "iShares ESG Aware MSCI USA ETF", 34, "Equity ETF", "US ESG"),
@@ -207,7 +213,7 @@ def fallback_portfolio(preferences: dict[str, Any]) -> dict[str, Any]:
             ("ICLN", "iShares Global Clean Energy ETF", 6, "Equity ETF", "Clean energy"),
             ("GLD", "SPDR Gold Shares", 6, "Commodity ETF", "Gold"),
         ]
-        strategy = "Diversified ESG allocation with a stabilizing bond sleeve."
+        strategy = "Allocation ESG diversifiée avec une poche obligataire stabilisatrice."
     else:
         rows = [
             ("VT", "Vanguard Total World Stock ETF", 42, "Equity ETF", "Global equities"),
@@ -217,7 +223,7 @@ def fallback_portfolio(preferences: dict[str, Any]) -> dict[str, Any]:
             ("GLD", "SPDR Gold Shares", 7, "Commodity ETF", "Gold"),
             ("SHY", "iShares 1-3 Year Treasury Bond ETF", 5, "Cash/Bond ETF", "Short bonds"),
         ]
-        strategy = "Balanced global core allocation."
+        strategy = "Allocation mondiale équilibrée coeur-satellite."
 
     portfolio = pd.DataFrame(
         [
@@ -228,8 +234,8 @@ def fallback_portfolio(preferences: dict[str, Any]) -> dict[str, Any]:
                 "asset_class": asset_class,
                 "sector": sector,
                 "rationale": (
-                    "Selected to match the stated risk profile while preserving "
-                    "diversification."
+                    "Sélectionné pour respecter le profil de risque tout en "
+                    "préservant la diversification."
                 ),
             }
             for ticker, name, weight, asset_class, sector in rows
@@ -244,9 +250,9 @@ def fallback_portfolio(preferences: dict[str, Any]) -> dict[str, Any]:
         "horizon": preferences.get("horizon", "Long term"),
         "strategy": strategy,
         "limits": [
-            "Model assumptions are simplified.",
-            "Prices are indicative fallbacks when live data is unavailable.",
-            "No return is guaranteed.",
+            "Les hypothèses du modèle sont simplifiées.",
+            "Les prix sont indicatifs lorsque la donnée de marché n'est pas disponible.",
+            "Aucun rendement n'est garanti.",
         ],
         "disclaimer": DISCLAIMER,
         "used_llm": False,
@@ -289,12 +295,13 @@ def generate_ai_portfolio(preferences: dict[str, Any]) -> dict[str, Any]:
             "role": "user",
             "content": (
                 "Create an educational investment portfolio proposal for ARIA. "
-                "Return only valid JSON with keys: portfolio, risk_level, "
-                "horizon, strategy, limits. portfolio must be a list of objects "
-                "with ticker, name, weight, asset_class, sector, rationale. "
-                "Rules: weights sum to 100, no negative weights, no guaranteed "
-                "returns, no personalized financial advice, use liquid listed "
-                "tickers or broad ETFs. Preferences: "
+                "Réponds en français. Return only valid JSON with keys: "
+                "portfolio, risk_level, horizon, strategy, limits. portfolio "
+                "must be a list of objects with ticker, name, weight, "
+                "asset_class, sector, rationale. Rules: weights sum to 100, "
+                "no negative weights, no guaranteed returns, no personalized "
+                "financial advice, use liquid listed tickers or broad ETFs. "
+                "Preferences: "
                 + json.dumps(preferences, ensure_ascii=True)
             ),
         }
@@ -320,7 +327,7 @@ def generate_ai_portfolio(preferences: dict[str, Any]) -> dict[str, Any]:
     except Exception as error:
         result = fallback_portfolio(preferences)
         result["warnings"].append(
-            f"LLM generation unavailable, fallback used: {error}"
+            f"Génération LLM indisponible, portefeuille de secours utilisé : {error}"
         )
         return result
 
@@ -341,13 +348,18 @@ def generated_portfolio_to_aria_table(
         rows.append(
             {
                 "Asset type": "stock",
+                "Asset class": row["asset_class"],
                 "Ticker": ticker,
                 "Sous-jacent": ticker,
                 "Nom": row["name"],
                 "Sector": row["sector"],
                 "Currency": "USD",
+                "Weight": round(float(row["weight"]), 4),
+                "Value": round(total_value * float(row["weight"]) / 100.0, 2),
                 "Quantity": quantity,
                 "Price": price,
+                "Data source": "IA ARIA",
+                "Commentaire": row["rationale"],
                 "Option type": "",
                 "Strike": None,
                 "Maturity": None,

@@ -41,7 +41,7 @@ def test_validate_generated_portfolio_merges_duplicates_and_normalizes_weights()
 
     assert clean["ticker"].tolist() == ["VTI", "BND"]
     assert clean["weight"].sum() == pytest.approx(100.0)
-    assert any("Duplicate tickers" in warning for warning in warnings)
+    assert any("Tickers en double" in warning for warning in warnings)
 
 
 def test_fallback_portfolio_is_diversified_and_loadable_in_aria_schema():
@@ -63,6 +63,9 @@ def test_fallback_portfolio_is_diversified_and_loadable_in_aria_schema():
     assert generated["ticker"].nunique() >= 5
     assert not aria_table.empty
     assert set(aria_table["Asset type"]) == {"stock"}
+    assert aria_table["Weight"].sum() == pytest.approx(100.0)
+    assert aria_table["Value"].sum() == pytest.approx(100_000.0)
+    assert (aria_table["Quantity"] > 1).any()
     assert {"Ticker", "Quantity", "Price", "Instrument"}.issubset(
         aria_table.columns
     )

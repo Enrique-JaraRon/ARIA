@@ -44,6 +44,10 @@ def test_model_portfolio_dataframe_uses_professional_schema():
     assert "Sector" in data.columns
     assert "Price" in data.columns
     assert "Quantity" in data.columns
+    assert "Weight" in data.columns
+    assert "Value" in data.columns
+    assert data["Weight"].sum() == pytest.approx(100.0)
+    assert data["Value"].sum() == pytest.approx(100_000)
 
 
 def test_stock_validation_does_not_require_option_fields():
@@ -130,7 +134,7 @@ def test_portfolio_diagnosis_identifies_concentration():
 
     assert diagnosis["top_position"] == "NVDA"
     assert diagnosis["top_weight"] > 0.80
-    assert diagnosis["concentration_level"] == "High"
+    assert diagnosis["concentration_level"] == "Élevée"
 
 
 def test_rebalancing_recommendations_are_coherent():
