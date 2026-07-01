@@ -6,6 +6,12 @@ pour tester rapidement l'application ARIA.
 """
 
 from portfolio import Portfolio
+from portfolio_analytics import (
+    PROFESSIONAL_COLUMNS,
+    get_model_portfolio,
+    get_model_portfolio_names,
+    model_portfolio_to_dataframe,
+)
 from pricing_BS import OptionContract
 
 
@@ -592,7 +598,7 @@ def create_crisis_sensitive_portfolio(
 def get_demo_portfolio_names() -> list[str]:
     """Renvoie la liste des portefeuilles de démonstration disponibles."""
 
-    return [
+    option_books = [
         "Long Straddle",
         "Short Straddle",
         "Bull Call Spread",
@@ -604,6 +610,30 @@ def get_demo_portfolio_names() -> list[str]:
         "Volatility Book",
         "Crisis-sensitive Portfolio",
     ]
+
+    return option_books + [
+        name
+        for name in get_model_portfolio_names()
+        if name not in option_books
+    ]
+
+
+def create_model_portfolio_as_portfolio(name: str) -> Portfolio:
+    """Create a stock-only Portfolio from a professional model allocation."""
+
+    model = get_model_portfolio(name)
+    table = model_portfolio_to_dataframe(model)
+    portfolio = Portfolio(name=name)
+
+    for _, row in table.iterrows():
+        portfolio.add_stock(
+            spot=float(row["Price"]),
+            quantity=max(int(round(float(row["Quantity"]))), 1),
+            name=str(row["Nom"]),
+            underlying=str(row["Ticker"]),
+        )
+
+    return portfolio
 
 
 def create_demo_portfolio(
@@ -692,6 +722,9 @@ def create_demo_portfolio(
             volatility=volatility,
         )
 
+    if name in get_model_portfolio_names():
+        return create_model_portfolio_as_portfolio(name)
+
     raise ValueError(
         f"Portefeuille de démonstration inconnu : {name}"
     )
@@ -700,7 +733,7 @@ def create_demo_portfolio(
 def portfolio_to_dataframe(
     portfolio: Portfolio
 ):
-    """Convertit un portefeuille ARIA en DataFrame compatible Streamlit."""
+    """Convert an ARIA portfolio into the professional editor schema."""
 
     import pandas as pd
 
@@ -713,49 +746,60 @@ def portfolio_to_dataframe(
         ):
             rows.append(
                 {
-                    "Instrument": "Option",
+                    "Asset type": "option",
+                    "Ticker": position.underlying,
                     "Sous-jacent": position.underlying,
                     "Nom": position.name,
+                    "Sector": "Options",
+                    "Currency": "USD",
+                    "Quantity": position.quantity,
+                    "Price": position.contract.S,
+                    "Option type": position.contract.option_type,
+                    "Strike": position.contract.K,
+                    "Maturity": position.contract.T,
+                    "Volatility": position.contract.sigma,
+                    "Rate": position.contract.r,
+                    "Contract size": position.multiplier,
+                    "Instrument": "Option",
                     "Type option": position.contract.option_type,
-                    "QuantitÃ©": position.quantity,
+                    "Quantite": position.quantity,
                     "Multiplicateur": position.multiplier,
                     "Spot": position.contract.S,
                     "Volatilite": position.contract.sigma,
-                    "Strike": position.contract.K,
-                    "MaturitÃ©": position.contract.T,
+                    "Maturite": position.contract.T,
                 }
             )
 
         else:
             rows.append(
                 {
-                    "Instrument": "Action",
+                    "Asset type": "stock",
+                    "Ticker": position.underlying,
                     "Sous-jacent": position.underlying,
                     "Nom": position.name,
-                    "Type option": "call",
-                    "QuantitÃ©": position.quantity,
+                    "Sector": "Equity",
+                    "Currency": "USD",
+                    "Quantity": position.quantity,
+                    "Price": position.spot,
+                    "Option type": "",
+                    "Strike": None,
+                    "Maturity": None,
+                    "Volatility": None,
+                    "Rate": None,
+                    "Contract size": 1,
+                    "Instrument": "Action",
+                    "Type option": "",
+                    "Quantite": position.quantity,
                     "Multiplicateur": 1,
                     "Spot": position.spot,
-                    "Volatilite": 0.20,
-                    "Strike": position.spot,
-                    "MaturitÃ©": 0.25,
+                    "Volatilite": None,
+                    "Maturite": None,
                 }
             )
 
     return pd.DataFrame(
         rows,
-        columns=[
-            "Instrument",
-            "Sous-jacent",
-            "Nom",
-            "Type option",
-            "QuantitÃ©",
-            "Multiplicateur",
-            "Spot",
-            "Volatilite",
-            "Strike",
-            "MaturitÃ©",
-        ],
+        columns=PROFESSIONAL_COLUMNS,
     )
 
 

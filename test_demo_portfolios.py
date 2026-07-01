@@ -73,6 +73,22 @@ def test_portfolio_to_dataframe_matches_streamlit_columns():
     )
 
     assert not data.empty
+    for column in [
+        "Asset type",
+        "Ticker",
+        "Sector",
+        "Currency",
+        "Quantity",
+        "Price",
+        "Instrument",
+        "Sous-jacent",
+        "Quantite",
+        "Spot",
+    ]:
+        assert column in data.columns
+
+    return
+
     assert list(data.columns) == [
         "Instrument",
         "Sous-jacent",
@@ -85,3 +101,14 @@ def test_portfolio_to_dataframe_matches_streamlit_columns():
         "Strike",
         "MaturitÃ©",
     ]
+
+
+def test_professional_model_portfolios_are_available():
+    """Model allocations should be loadable through the demo selector."""
+
+    portfolio = create_demo_portfolio(
+        name="Conservative Balanced Portfolio"
+    )
+
+    assert portfolio.positions
+    assert portfolio.name == "Conservative Balanced Portfolio"

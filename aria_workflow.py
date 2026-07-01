@@ -87,6 +87,8 @@ def generate_llm_analysis(
     scenario_results=None,
     var_result=None,
     probabilistic_result=None,
+    portfolio_diagnosis_result=None,
+    rebalancing_summary=None,
     hedge_result=None,
     market_snapshot=None,
     language: str = "fr"
@@ -139,6 +141,8 @@ def generate_llm_analysis(
             scenario_results=scenario_results,
             var_result=var_result,
             probabilistic_result=probabilistic_result,
+            portfolio_diagnosis_result=portfolio_diagnosis_result,
+            rebalancing_summary=rebalancing_summary,
             hedge_result=hedge_result,
             market_snapshot=market_snapshot,
             language=language

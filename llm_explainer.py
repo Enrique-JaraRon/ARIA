@@ -30,6 +30,8 @@ class LLMExplainer:
         scenario_results=None,
         var_result=None,
         probabilistic_result=None,
+        portfolio_diagnosis_result=None,
+        rebalancing_summary=None,
         hedge_result=None,
         market_snapshot=None,
         language: str = "fr"
@@ -166,6 +168,53 @@ class LLMExplainer:
                 ]
             )
 
+        if portfolio_diagnosis_result is not None:
+            context_lines.extend(
+                [
+                    (
+                        "- Diagnostic portefeuille : "
+                        f"exposition brute {portfolio_diagnosis_result.get('gross_exposure', 0):.2f}, "
+                        f"position dominante {portfolio_diagnosis_result.get('top_position', 'N/A')} "
+                        f"({portfolio_diagnosis_result.get('top_weight', 0):.2%})"
+                    ),
+                    (
+                        "- Niveau de concentration : "
+                        f"{portfolio_diagnosis_result.get('concentration_level', 'N/A')}"
+                    ),
+                    (
+                        "- Diversification : "
+                        f"{portfolio_diagnosis_result.get('number_of_assets', 0)} actifs, "
+                        f"{portfolio_diagnosis_result.get('number_of_sectors', 0)} secteurs"
+                    ),
+                ]
+            )
+
+        if rebalancing_summary is not None:
+            context_lines.extend(
+                [
+                    (
+                        "- Portefeuille cible de reallocation : "
+                        f"{rebalancing_summary.get('target_model', 'N/A')}"
+                    ),
+                    (
+                        "- Volatilite cible estimee : "
+                        f"{rebalancing_summary.get('target_volatility', 0):.2%}"
+                    ),
+                    (
+                        "- Drawdown cible indicatif : "
+                        f"{rebalancing_summary.get('target_drawdown', 0):.2%}"
+                    ),
+                    (
+                        "- Score de diversification cible : "
+                        f"{rebalancing_summary.get('target_diversification_score', 'N/A')}"
+                    ),
+                    (
+                        "- Impact attendu : "
+                        f"{rebalancing_summary.get('expected_impact', 'N/A')}"
+                    ),
+                ]
+            )
+
         if hedge_result is not None:
             context_lines.extend(
                 [
@@ -276,6 +325,8 @@ Termine par un avertissement clair : ces pistes sont une aide a la decision de g
         scenario_results=None,
         var_result=None,
         probabilistic_result=None,
+        portfolio_diagnosis_result=None,
+        rebalancing_summary=None,
         hedge_result=None,
         market_snapshot=None,
         language: str = "fr"
@@ -289,6 +340,8 @@ Termine par un avertissement clair : ces pistes sont une aide a la decision de g
             scenario_results=scenario_results,
             var_result=var_result,
             probabilistic_result=probabilistic_result,
+            portfolio_diagnosis_result=portfolio_diagnosis_result,
+            rebalancing_summary=rebalancing_summary,
             hedge_result=hedge_result,
             market_snapshot=market_snapshot,
             language=language

@@ -50,17 +50,57 @@ and keeps the Streamlit app focused on orchestration and visualization.
 
 ### Dashboard Overview
 
-![Dashboard Overview](docs/screenshots/dashboard_overview.png)
+![Dashboard Overview](screenshots/dashboard.png)
+
+### Portfolio Analysis
+
+![Portfolio Analysis](screenshots/portfolio_analysis.png)
+
+### Model Portfolios
+
+![Model Portfolios](screenshots/model_portfolios.png)
 
 ### Stress Testing
 
-![Stress Testing](docs/screenshots/stress_testing.png)
+![Stress Testing](screenshots/stress_testing.png)
+
+### Probabilistic Risk Analysis
+
+![Probabilistic Risk Analysis](screenshots/probabilistic_risk.png)
 
 ### Risk Report
 
-![Risk Report](docs/screenshots/risk_report.png)
+![Risk Report](screenshots/risk_report.png)
 
-## Demo Portfolios
+### Rebalancing Recommendations
+
+![Rebalancing Recommendations](screenshots/rebalancing.png)
+
+## Portfolio Analytics
+
+ARIA now includes a more professional portfolio workflow designed for a private
+banking / advisory-style first risk review:
+
+- stable manual portfolio editor backed by `st.session_state`;
+- clear distinction between `stock` and `option` rows;
+- stock rows require ticker, quantity, price, currency and optional sector;
+- option rows require underlying, option type, strike, maturity, volatility,
+  rate, quantity and contract size;
+- automatic validation with explicit error messages;
+- current exposure table with gross weights and net weights;
+- concentration diagnosis;
+- sector / asset diversification view;
+- comparison against a target model portfolio;
+- rebalancing table showing current weight, target weight and amount to
+  reduce or increase;
+- recommendations phrased as risk-management actions, not direct investment
+  orders.
+
+The analytics engine does not promise returns. Expected return, volatility,
+drawdown and diversification scores are model assumptions intended to guide
+discussion and risk monitoring.
+
+## Demo And Model Portfolios
 
 ARIA includes ready-to-load option strategies:
 
@@ -73,6 +113,21 @@ ARIA includes ready-to-load option strategies:
 
 These strategies can be loaded from the Streamlit interface and then edited
 manually in the portfolio table.
+
+ARIA also includes professional stock / ETF model allocations:
+
+- Conservative Balanced Portfolio
+- Moderate Growth Portfolio
+- Global Diversified Portfolio
+- Tech Growth Portfolio
+- Defensive Dividend Portfolio
+- Hedged Equity Portfolio
+- Low Volatility Portfolio
+- Crisis-Resilient Portfolio
+
+Each model portfolio includes target weights, estimated return, estimated
+volatility, indicative drawdown, diversification score and a plain-English
+investor profile.
 
 ## Market Data Architecture
 
@@ -144,14 +199,17 @@ ARIA/
 |-- history_analytics.py
 |-- market_data.py
 |-- demo_portfolios.py
+|-- portfolio_analytics.py
 |-- report_generator.py
 |-- llm_explainer.py
+|-- app_config.py
 |-- aria_workflow.py
 |-- project_diagnostics.py
 |-- quality_check.py
 |-- tests: test_*.py
 |-- docs/
 |   `-- screenshots/
+|-- screenshots/
 `-- data/
 ```
 

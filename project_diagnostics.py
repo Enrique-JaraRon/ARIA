@@ -22,6 +22,7 @@ REQUIRED_FILES = [
     "risk_history.py",
     "history_analytics.py",
     "market_data.py",
+    "portfolio_analytics.py",
     "ui_components.py",
     "report_generator.py",
     "llm_explainer.py",
@@ -38,7 +39,8 @@ REQUIRED_FILES = [
     "demo_portfolios.py",
     "test_ui_components.py",
     "test_demo_portfolios.py",
-    "docs/screenshots/.gitkeep"
+    "docs/screenshots/.gitkeep",
+    "screenshots/.gitkeep",
 ]
 
 REQUIRED_MODULES = [
@@ -69,6 +71,7 @@ PROJECT_MODULES = [
     "risk_history",
     "history_analytics",
     "market_data",
+    "portfolio_analytics",
     "ui_components",
     "report_generator",
     "llm_explainer",

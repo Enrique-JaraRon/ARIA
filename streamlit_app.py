@@ -37,6 +37,16 @@ from pnl_profile import (
     pnl_profile_to_dataframe,
 )
 from portfolio import Portfolio
+from portfolio_analytics import (
+    PROFESSIONAL_COLUMNS,
+    get_model_portfolio,
+    get_model_portfolio_names,
+    model_portfolio_to_dataframe,
+    portfolio_diagnosis,
+    portfolio_exposure_table,
+    rebalancing_recommendations,
+    validate_portfolio_table,
+)
 from pricing_BS import OptionContract
 from probabilistic_risk import (
     contribution_table,
@@ -146,9 +156,20 @@ def default_portfolio() -> pd.DataFrame:
     return pd.DataFrame(
         [
             {
+                "Asset type": "option",
+                "Ticker": "SPY",
                 "Instrument": "Option",
                 "Sous-jacent": "SPY",
                 "Nom": "Calls ATM achetes",
+                "Sector": "Index options",
+                "Currency": "USD",
+                "Quantity": 20,
+                "Price": 500.0,
+                "Option type": "call",
+                "Maturity": 0.25,
+                "Volatility": 0.20,
+                "Rate": 0.05,
+                "Contract size": 100,
                 "Type option": "call",
                 "Quantite": 20,
                 "Multiplicateur": 100,
@@ -158,9 +179,20 @@ def default_portfolio() -> pd.DataFrame:
                 "Maturite": 0.25,
             },
             {
+                "Asset type": "option",
+                "Ticker": "SPY",
                 "Instrument": "Option",
                 "Sous-jacent": "SPY",
                 "Nom": "Puts vendus",
+                "Sector": "Index options",
+                "Currency": "USD",
+                "Quantity": -10,
+                "Price": 500.0,
+                "Option type": "put",
+                "Maturity": 0.25,
+                "Volatility": 0.20,
+                "Rate": 0.05,
+                "Contract size": 100,
                 "Type option": "put",
                 "Quantite": -10,
                 "Multiplicateur": 100,
@@ -170,16 +202,27 @@ def default_portfolio() -> pd.DataFrame:
                 "Maturite": 0.25,
             },
             {
+                "Asset type": "stock",
+                "Ticker": "SPY",
                 "Instrument": "Action",
                 "Sous-jacent": "SPY",
                 "Nom": "Couverture en actions",
-                "Type option": "call",
+                "Sector": "US equities",
+                "Currency": "USD",
+                "Quantity": -5,
+                "Price": 500.0,
+                "Option type": "",
+                "Strike": None,
+                "Maturity": None,
+                "Volatility": None,
+                "Rate": None,
+                "Contract size": 1,
+                "Type option": "",
                 "Quantite": -5,
                 "Multiplicateur": 1,
                 "Spot": 500.0,
-                "Volatilite": 0.20,
-                "Strike": 500.0,
-                "Maturite": 0.25,
+                "Volatilite": None,
+                "Maturite": None,
             },
         ]
     )
@@ -192,6 +235,9 @@ def normalize_portfolio_table(
 ) -> pd.DataFrame:
     """Ensure portfolio tables have the professional multi-underlying schema."""
     normalized = normalize_dataframe_columns(table)
+    normalized = normalized.dropna(
+        how="all",
+    )
 
     quantity_columns = [
         column
@@ -231,29 +277,75 @@ def normalize_portfolio_table(
     )
 
     defaults = {
+        "Asset type": "stock",
+        "Ticker": "SPY",
         "Sous-jacent": "SPY",
+        "Sector": "Unclassified",
+        "Currency": "USD",
         "Spot": default_spot_value,
+        "Price": default_spot_value,
         "Volatilite": default_volatility_value,
+        "Volatility": default_volatility_value,
+        "Rate": 0.05,
+        "Contract size": 1,
         "Quantite": 1,
+        "Quantity": 1,
         "Maturite": 0.25,
+        "Maturity": 0.25,
     }
 
     for column, value in defaults.items():
         if column not in normalized.columns:
             normalized[column] = value
 
-    desired_columns = [
-        "Instrument",
-        "Sous-jacent",
-        "Nom",
-        "Type option",
-        "Quantite",
-        "Multiplicateur",
-        "Spot",
-        "Volatilite",
-        "Strike",
-        "Maturite",
-    ]
+    normalized = normalized.replace(
+        {
+            "": pd.NA,
+            " ": pd.NA,
+        }
+    )
+
+    normalized["Asset type"] = normalized.apply(
+        lambda row: "option"
+        if str(row.get("Instrument", "")).strip().lower() == "option"
+        or str(row.get("Asset type", "")).strip().lower() == "option"
+        else "stock",
+        axis=1,
+    )
+    normalized["Instrument"] = normalized["Asset type"].apply(
+        lambda value: "Option"
+        if str(value).strip().lower() == "option"
+        else "Action"
+    )
+    normalized["Sous-jacent"] = normalized["Ticker"].fillna(
+        normalized["Sous-jacent"]
+    )
+    normalized["Quantity"] = normalized["Quantity"].fillna(
+        normalized["Quantite"]
+    )
+    normalized["Quantite"] = normalized["Quantity"]
+    normalized["Price"] = normalized["Price"].fillna(
+        normalized["Spot"]
+    )
+    normalized["Spot"] = normalized["Price"]
+    normalized["Option type"] = normalized["Option type"].fillna(
+        normalized.get("Type option", "")
+    )
+    normalized["Type option"] = normalized["Option type"]
+    normalized["Volatility"] = normalized["Volatility"].fillna(
+        normalized["Volatilite"]
+    )
+    normalized["Volatilite"] = normalized["Volatility"]
+    normalized["Maturity"] = normalized["Maturity"].fillna(
+        normalized["Maturite"]
+    )
+    normalized["Maturite"] = normalized["Maturity"]
+    normalized["Contract size"] = normalized["Contract size"].fillna(
+        normalized.get("Multiplicateur", 1)
+    )
+    normalized["Multiplicateur"] = normalized["Contract size"]
+
+    desired_columns = PROFESSIONAL_COLUMNS
 
     existing_columns = [
         column
@@ -294,8 +386,11 @@ def build_portfolio_from_table(
     portfolio = Portfolio(name="Portefeuille ARIA")
 
     for index, row in portfolio_table.iterrows():
-        instrument = row.get("Instrument")
-        quantity_value = row_value(row, "Quantite")
+        asset_type = str(
+            row_value(row, "Asset type", "Instrument", default="stock")
+        ).strip().lower()
+        instrument = "Option" if asset_type == "option" else "Action"
+        quantity_value = row_value(row, "Quantity", "Quantite")
 
         if pd.isna(instrument) or pd.isna(quantity_value):
             continue
@@ -313,14 +408,17 @@ def build_portfolio_from_table(
         underlying = str(
             row_value(
                 row,
+                "Ticker",
                 "Sous-jacent",
                 "Underlying",
                 default="SPY",
             )
         ).strip() or "SPY"
 
-        row_spot = float(row_value(row, "Spot", default=spot))
-        row_volatility = float(row_value(row, "Volatilite", default=volatility))
+        row_spot = float(row_value(row, "Price", "Spot", default=spot))
+        row_volatility = float(
+            row_value(row, "Volatility", "Volatilite", default=volatility)
+        )
 
         if instrument == "Action":
             portfolio.add_stock(
@@ -331,10 +429,11 @@ def build_portfolio_from_table(
             )
 
         elif instrument == "Option":
-            option_type = row.get("Type option")
+            option_type = row_value(row, "Option type", "Type option")
             strike = row.get("Strike")
-            maturity = row_value(row, "Maturite")
-            multiplier_value = row.get("Multiplicateur")
+            maturity = row_value(row, "Maturity", "Maturite")
+            multiplier_value = row_value(row, "Contract size", "Multiplicateur")
+            option_rate = float(row_value(row, "Rate", default=rate))
 
             if pd.isna(option_type):
                 raise ValueError(
@@ -365,7 +464,7 @@ def build_portfolio_from_table(
                 S=row_spot,
                 K=float(strike),
                 T=float(maturity),
-                r=rate,
+                r=option_rate,
                 sigma=row_volatility,
                 option_type=str(option_type),
                 q=dividend,
@@ -1253,16 +1352,22 @@ load_demo_portfolio = demo_col_2.button(
 )
 
 if load_demo_portfolio:
-    demo_portfolio = create_demo_portfolio(
-        name=selected_demo_portfolio,
-        spot=current_spot,
-        maturity=0.25,
-        rate=risk_free_rate,
-        volatility=current_volatility,
-    )
+    if selected_demo_portfolio in get_model_portfolio_names():
+        loaded_demo_data = model_portfolio_to_dataframe(
+            get_model_portfolio(selected_demo_portfolio)
+        )
+    else:
+        demo_portfolio = create_demo_portfolio(
+            name=selected_demo_portfolio,
+            spot=current_spot,
+            maturity=0.25,
+            rate=risk_free_rate,
+            volatility=current_volatility,
+        )
+        loaded_demo_data = portfolio_to_dataframe(demo_portfolio)
 
     st.session_state.portfolio_data = normalize_portfolio_table(
-        portfolio_to_dataframe(demo_portfolio),
+        loaded_demo_data,
         default_spot_value=current_spot,
         default_volatility_value=current_volatility,
     )
@@ -1345,49 +1450,103 @@ edited_portfolio = st.data_editor(
     hide_index=True,
     width="stretch",
     column_config={
+        "Asset type": st.column_config.SelectboxColumn(
+            "Asset type",
+            options=["stock", "option"],
+            required=True,
+        ),
+        "Ticker": st.column_config.TextColumn("Ticker"),
         "Instrument": st.column_config.SelectboxColumn(
             "Instrument",
             options=["Option", "Action"],
-            required=True,
+            disabled=True,
         ),
         "Sous-jacent": st.column_config.TextColumn("Sous-jacent"),
-        "Nom": st.column_config.TextColumn("Nom de la position"),
-        "Type option": st.column_config.SelectboxColumn(
-            "Type d'option",
-            options=["call", "put"],
+        "Nom": st.column_config.TextColumn("Position name"),
+        "Sector": st.column_config.TextColumn("Sector"),
+        "Currency": st.column_config.SelectboxColumn(
+            "Currency",
+            options=["USD", "EUR", "GBP", "CHF", "JPY"],
         ),
-        "Quantite": st.column_config.NumberColumn(
-            "Quantite",
-            step=1,
-            format="%d",
+        "Quantity": st.column_config.NumberColumn(
+            "Quantity",
+            step=1.0,
+            format="%.4f",
         ),
-        "Multiplicateur": st.column_config.NumberColumn(
-            "Multiplicateur",
-            min_value=1,
-            step=1,
-            format="%d",
-        ),
-        "Spot": st.column_config.NumberColumn(
-            "Spot",
+        "Price": st.column_config.NumberColumn(
+            "Price",
             min_value=0.01,
             step=1.0,
         ),
-        "Volatilite": st.column_config.NumberColumn(
-            "Volatilite",
-            min_value=0.0001,
-            step=0.01,
-            format="%.2f",
+        "Option type": st.column_config.SelectboxColumn(
+            "Option type",
+            options=["", "call", "put"],
         ),
         "Strike": st.column_config.NumberColumn(
             "Strike",
             min_value=0.01,
             step=1.0,
         ),
+        "Maturity": st.column_config.NumberColumn(
+            "Maturity in years",
+            min_value=0.001,
+            step=0.05,
+            format="%.3f",
+        ),
+        "Volatility": st.column_config.NumberColumn(
+            "Volatility",
+            min_value=0.0001,
+            step=0.01,
+            format="%.2f",
+        ),
+        "Rate": st.column_config.NumberColumn(
+            "Rate",
+            step=0.0025,
+            format="%.4f",
+        ),
+        "Contract size": st.column_config.NumberColumn(
+            "Contract size",
+            min_value=1,
+            step=1,
+            format="%d",
+        ),
+        "Type option": st.column_config.SelectboxColumn(
+            "Type d'option",
+            options=["call", "put"],
+            disabled=True,
+        ),
+        "Quantite": st.column_config.NumberColumn(
+            "Quantite",
+            step=1,
+            format="%d",
+            disabled=True,
+        ),
+        "Multiplicateur": st.column_config.NumberColumn(
+            "Multiplicateur",
+            min_value=1,
+            step=1,
+            format="%d",
+            disabled=True,
+        ),
+        "Spot": st.column_config.NumberColumn(
+            "Spot",
+            min_value=0.01,
+            step=1.0,
+            disabled=True,
+        ),
+        "Volatilite": st.column_config.NumberColumn(
+            "Volatilite",
+            min_value=0.0001,
+            step=0.01,
+            format="%.2f",
+            disabled=True,
+        ),
         "Maturite": st.column_config.NumberColumn(
             "Maturite en annees",
             min_value=0.001,
             step=0.05,
             format="%.3f",
+            disabled=True,
         ),
     },
 )
@@ -1398,6 +1557,114 @@ st.session_state.portfolio_data = normalize_portfolio_table(
     default_volatility_value=current_volatility,
 )
 
+portfolio_validation_errors = validate_portfolio_table(
+    st.session_state.portfolio_data
+)
+
+if portfolio_validation_errors:
+    render_section_title(
+        "Validation du portefeuille",
+        "ARIA bloque les incohérences avant de lancer les calculs de risque.",
+    )
+    for validation_error in portfolio_validation_errors:
+        st.error(validation_error)
+
+render_section_title(
+    "Portfolio intelligence",
+    "Diagnostic de composition, concentration et réallocation possible.",
+)
+
+current_exposure_table = portfolio_exposure_table(
+    st.session_state.portfolio_data
+)
+current_diagnosis = portfolio_diagnosis(
+    st.session_state.portfolio_data
+)
+
+portfolio_kpi_1, portfolio_kpi_2, portfolio_kpi_3, portfolio_kpi_4 = st.columns(4)
+portfolio_kpi_1.metric(
+    "Gross exposure",
+    f"{current_diagnosis['gross_exposure']:,.0f}",
+)
+portfolio_kpi_2.metric(
+    "Top position",
+    current_diagnosis["top_position"],
+    f"{current_diagnosis['top_weight']:.1%}",
+)
+portfolio_kpi_3.metric(
+    "Assets",
+    current_diagnosis["number_of_assets"],
+)
+portfolio_kpi_4.metric(
+    "Concentration",
+    current_diagnosis["concentration_level"],
+)
+
+st.caption(current_diagnosis["diversification_comment"])
+
+if not current_exposure_table.empty:
+    with st.expander("Voir les poids et expositions par position", expanded=False):
+        exposure_display = current_exposure_table.copy()
+        exposure_display["Gross weight"] = exposure_display["Gross weight"].map(
+            "{:.2%}".format
+        )
+        exposure_display["Net weight"] = exposure_display["Net weight"].map(
+            "{:.2%}".format
+        )
+        st.dataframe(
+            exposure_display,
+            hide_index=True,
+            width="stretch",
+        )
+
+target_model_name = st.selectbox(
+    "Portefeuille cible pour comparer la réallocation",
+    options=get_model_portfolio_names(),
+    index=1,
+)
+target_model = get_model_portfolio(target_model_name)
+
+model_col_1, model_col_2, model_col_3, model_col_4 = st.columns(4)
+model_col_1.metric("Profil cible", target_model.risk_level)
+model_col_2.metric("Rendement estimé", f"{target_model.expected_return:.1%}")
+model_col_3.metric("Volatilité estimée", f"{target_model.volatility:.1%}")
+model_col_4.metric("Drawdown indicatif", f"{target_model.drawdown:.1%}")
+
+st.info(
+    f"{target_model.explanation} Profil adapté : {target_model.investor_profile} "
+    "Ces chiffres sont des estimations basées sur les hypothèses ARIA, pas des rendements garantis."
+)
+
+rebalance_table, rebalance_summary = rebalancing_recommendations(
+    current_table=st.session_state.portfolio_data,
+    target_model=target_model,
+)
+
+with st.expander("Voir les recommandations de réallocation", expanded=False):
+    rebalance_display = rebalance_table.copy()
+    for percent_column in [
+        "Current weight",
+        "Target weight",
+    ]:
+        rebalance_display[percent_column] = rebalance_display[percent_column].map(
+            "{:.2%}".format
+        )
+    for amount_column in [
+        "Current amount",
+        "Target amount",
+        "Change amount",
+    ]:
+        rebalance_display[amount_column] = rebalance_display[amount_column].map(
+            "{:,.0f}".format
+        )
+
+    st.dataframe(
+        rebalance_display,
+        hide_index=True,
+        width="stretch",
+    )
+    st.write(rebalance_summary["expected_impact"])
+
 
 analyse_button = st.button(
     "Lancer l'analyse ARIA",
@@ -1407,6 +1674,12 @@ analyse_button = st.button(
 
 
 if analyse_button:
+    if portfolio_validation_errors:
+        st.error(
+            "Corrige les erreurs de portefeuille avant de lancer l'analyse ARIA."
+        )
+        st.stop()
+
     try:
         portfolio = build_portfolio_from_table(
             portfolio_table=st.session_state.portfolio_data,
@@ -2333,6 +2606,8 @@ if analyse_button:
                     scenario_results=scenario_results,
                     var_result=var_result,
                     probabilistic_result=probabilistic_result,
+                    portfolio_diagnosis_result=current_diagnosis,
+                    rebalancing_summary=rebalance_summary,
                     hedge_result=hedge_result,
                     market_snapshot=market_snapshot,
                     language="fr",
@@ -2345,6 +2620,8 @@ if analyse_button:
                     scenario_results=scenario_results,
                     var_result=var_result,
                     probabilistic_result=probabilistic_result,
+                    portfolio_diagnosis_result=current_diagnosis,
+                    rebalancing_summary=rebalance_summary,
                     hedge_result=hedge_result,
                     market_snapshot=market_snapshot,
                     language="en",
