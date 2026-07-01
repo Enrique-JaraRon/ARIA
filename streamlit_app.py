@@ -63,7 +63,7 @@ CANONICAL_COLUMN_ALIASES = {
     "Quantite": ["Quantite", "Quantité", "QuantitÃ©", "QuantitÃƒÆ’Ã‚Â©"],
     "Maturite": ["Maturite", "Maturité", "MaturitÃ©", "MaturitÃƒÆ’Ã‚Â©"],
     "Volatilite": ["Volatilite", "Volatilité", "VolatilitÃ©", "VolatilitÃƒÂ©"],
-    "Spot stresse": ["Spot stresse", "Spot stressé", "Spot stressÃ©"],
+    "Spot stressé": ["Spot stresse", "Spot stressé", "Spot stressÃ©"],
     "Scenario": ["Scenario", "Scénario", "ScÃ©nario"],
     "Resultat": ["Resultat", "Résultat", "RÃ©sultat"],
     "Valeur stressee": ["Valeur stressee", "Valeur stressée", "Valeur stressÃ©e"],
@@ -497,7 +497,7 @@ def create_pnl_profile_chart(
         color="#2563EB",
     ).encode(
         x=alt.X(
-            "Spot stresse:Q",
+            "Spot stressé:Q",
             title="Niveau du spot",
         ),
         y=alt.Y(
@@ -506,7 +506,7 @@ def create_pnl_profile_chart(
         ),
         tooltip=[
             alt.Tooltip(
-                "Spot stresse:Q",
+                "Spot stressé:Q",
                 title="Spot",
                 format=",.2f",
             ),
@@ -526,7 +526,7 @@ def create_pnl_profile_chart(
     points = alt.Chart(chart_data).mark_circle(
         size=45,
     ).encode(
-        x="Spot stresse:Q",
+        x="Spot stressé:Q",
         y="Profit / Perte:Q",
         color=alt.Color(
             "Resultat:N",
@@ -613,11 +613,11 @@ def create_greeks_profile_chart(
     greeks_data = normalize_dataframe_columns(greeks_data)
 
     chart_data = greeks_data[
-        ["Spot stresse", "Variation spot"] + selected_greeks
+        ["Spot stressé", "Variation spot"] + selected_greeks
     ].copy()
 
     long_data = chart_data.melt(
-        id_vars=["Spot stresse", "Variation spot"],
+        id_vars=["Spot stressé", "Variation spot"],
         value_vars=selected_greeks,
         var_name="Greek",
         value_name="Valeur",
@@ -627,7 +627,7 @@ def create_greeks_profile_chart(
         strokeWidth=3,
     ).encode(
         x=alt.X(
-            "Spot stresse:Q",
+            "Spot stressé:Q",
             title="Niveau du spot",
         ),
         y=alt.Y(
@@ -644,7 +644,7 @@ def create_greeks_profile_chart(
         tooltip=[
             alt.Tooltip("Greek:N", title="Greek"),
             alt.Tooltip(
-                "Spot stresse:Q",
+                "Spot stressé:Q",
                 title="Spot",
                 format=",.2f",
             ),
@@ -1752,7 +1752,22 @@ if analyse_button:
         pnl_data = normalize_dataframe_columns(
             pnl_profile_to_dataframe(pnl_points)
         )
+        
+        pnl_data = pnl_data.rename(
+            columns={
+                "Spot stressé": "Spot stressé",
+                "Spot stressÃ©": "Spot stressé",
+                "Spot stresse": "Spot stressé",
+                "Valeur stressée": "Valeur stressee",
+                "Valeur stressÃ©e": "Valeur stressee",
+                "Valeur stressee": "Valeur stressee",
+            }
+        )
 
+        st.write(
+            "DEBUG colonnes pnl_data :",
+            pnl_data.columns.tolist()
+        )
         breakeven_spots = find_breakeven_spots(pnl_data)
 
         pnl_chart = create_pnl_profile_chart(
@@ -1777,14 +1792,14 @@ if analyse_button:
         pnl_column_1, pnl_column_2, pnl_column_3 = st.columns(3)
 
         pnl_column_1.metric(
-            "Meilleur spot teste",
-            f"{best_pnl_point['Spot stresse']:,.2f}",
+            "Meilleur spot testé",
+            f"{best_pnl_point['Spot stressé']:,.2f}",
             f"{best_pnl_point['Profit / Perte']:+,.2f}",
         )
 
         pnl_column_2.metric(
-            "Pire spot teste",
-            f"{worst_pnl_point['Spot stresse']:,.2f}",
+            "Pire spot testé",
+            f"{worst_pnl_point['Spot stressé']:,.2f}",
             f"{worst_pnl_point['Profit / Perte']:+,.2f}",
         )
 

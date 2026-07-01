@@ -4,10 +4,15 @@ ARIA - Profil de P&L selon le niveau du spot
 
 from dataclasses import dataclass
 
+import os
 import pandas as pd
 
 from portfolio import Portfolio
 from scenario_analysis import run_scenario
+
+
+print("PNL_PROFILE UTILISE =", os.path.abspath(__file__))
+print("VERSION TEST = PNL_PROFILE_CORRIGE_2026")
 
 
 @dataclass
@@ -25,30 +30,22 @@ def normalize_pnl_columns(
 ) -> pd.DataFrame:
     """
     Normalise les noms de colonnes du profil de P&L.
-
-    Objectif :
-    - eviter les bugs d'encodage avec les accents ;
-    - accepter les anciens noms comme "Spot stressé" ;
-    - utiliser en interne uniquement des noms ASCII.
     """
 
-    column_aliases = {
-        "Spot stressé": "Spot stresse",
-        "Spot stressÃ©": "Spot stresse",
-        "Spot stresse": "Spot stresse",
+    data = pnl_data.copy()
 
-        "Valeur stressée": "Valeur stressee",
-        "Valeur stressÃ©e": "Valeur stressee",
-        "Valeur stressee": "Valeur stressee",
-
-        "Résultat": "Resultat",
-        "RÃ©sultat": "Resultat",
-        "Resultat": "Resultat",
-    }
-
-    return pnl_data.rename(
-        columns=column_aliases
+    data = data.rename(
+        columns={
+            "Spot stressé": "Spot stressé",
+            "Spot stressÃ©": "Spot stressé",
+            "Spot stresse": "Spot stressé",
+            "Valeur stressée": "Valeur stressee",
+            "Valeur stressÃ©e": "Valeur stressee",
+            "Valeur stressee": "Valeur stressee",
+        }
     )
+
+    return data
 
 
 def calculate_pnl_profile(
@@ -60,8 +57,6 @@ def calculate_pnl_profile(
 ) -> list[PnLPoint]:
     """
     Calcule le P&L pour plusieurs niveaux du spot.
-
-    La volatilite reste constante.
     """
 
     if current_spot <= 0:
@@ -118,19 +113,15 @@ def pnl_profile_to_dataframe(
 ) -> pd.DataFrame:
     """
     Transforme le profil de P&L en tableau.
-
-    Important :
-    les noms de colonnes internes sont volontairement sans accents.
-    Cela evite les erreurs de type KeyError avec pandas.
     """
 
     return pd.DataFrame(
         [
             {
                 "Variation spot": point.spot_change_percent,
-                "Spot stresse": point.stressed_spot,
+                "Spot stressé": point.stressed_spot,
                 "Profit / Perte": point.profit_and_loss,
-                "Valeur stressee": point.stressed_value
+                "Valeur stresséé": point.stressed_value
             }
             for point in points
         ]
@@ -142,36 +133,28 @@ def find_breakeven_spots(
 ) -> list[float]:
     """
     Trouve les spots ou le P&L traverse zero.
-
-    La methode utilise une interpolation lineaire entre deux points.
     """
 
     pnl_data = normalize_pnl_columns(
         pnl_data
     )
 
-    required_columns = [
-        "Spot stresse",
-        "Profit / Perte"
-    ]
-
-    missing_columns = [
-        column
-        for column in required_columns
-        if column not in pnl_data.columns
-    ]
-
-    if missing_columns:
+    if "Spot stressé" not in pnl_data.columns:
         raise KeyError(
-            "Colonnes manquantes dans le profil de P&L : "
-            f"{missing_columns}. "
+            "Colonne 'Spot stressé' introuvable. "
+            f"Colonnes disponibles : {list(pnl_data.columns)}"
+        )
+
+    if "Profit / Perte" not in pnl_data.columns:
+        raise KeyError(
+            "Colonne 'Profit / Perte' introuvable. "
             f"Colonnes disponibles : {list(pnl_data.columns)}"
         )
 
     breakeven_spots = []
 
     sorted_data = pnl_data.sort_values(
-        "Spot stresse"
+        "Spot stressé"
     ).reset_index(
         drop=True
     )
@@ -182,12 +165,12 @@ def find_breakeven_spots(
 
         spot_1 = sorted_data.loc[
             index,
-            "Spot stresse"
+            "Spot stressé"
         ]
 
         spot_2 = sorted_data.loc[
             index + 1,
-            "Spot stresse"
+            "Spot stressé"
         ]
 
         pnl_1 = sorted_data.loc[
