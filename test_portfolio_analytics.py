@@ -19,6 +19,9 @@ def test_model_portfolios_are_available_and_weights_sum_to_one():
 
     assert "Conservative Balanced Portfolio" in names
     assert "Crisis-Resilient Portfolio" in names
+    assert "AI & Semiconductors Portfolio" in names
+    assert "Global ETF Core Portfolio" in names
+    assert "Long-Term Compounders Portfolio" in names
 
     for name in names:
         model = get_model_portfolio(name)
@@ -93,6 +96,14 @@ def test_exposure_weights_sum_to_one():
 
     assert exposure["Gross weight"].sum() == pytest.approx(1.0)
     assert exposure["Ticker"].nunique() == len(model.target_weights)
+    for column in [
+        "Name",
+        "Currency",
+        "Quantity",
+        "Price",
+        "Data source",
+    ]:
+        assert column in exposure.columns
 
 
 def test_portfolio_diagnosis_identifies_concentration():

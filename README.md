@@ -42,6 +42,11 @@ and keeps the Streamlit app focused on orchestration and visualization.
 - Demo option strategies and realistic books ready to load in the dashboard:
   tech options book, hedged equity portfolio, volatility book and
   crisis-sensitive portfolio.
+- Professional stock / ETF model portfolios for conservative, growth,
+  defensive, ESG, inflation-aware, AI / semiconductor and global core profiles.
+- Guided AI portfolio builder with validation, duplicate ticker merging,
+  weight normalization to 100% and an automatic fallback when no API key is
+  configured.
 - Downloadable executive Markdown and PDF risk reports.
 - Optional LLM-based risk commentary.
 - Automated tests, Ruff linting and project diagnostics.
@@ -81,7 +86,10 @@ and keeps the Streamlit app focused on orchestration and visualization.
 ARIA now includes a more professional portfolio workflow designed for a private
 banking / advisory-style first risk review:
 
-- stable manual portfolio editor backed by `st.session_state`;
+- three clear workflows: manual import / edit, demo portfolio loading and
+  AI-assisted portfolio creation;
+- stable manual portfolio editor backed by `st.session_state` with technical
+  legacy columns hidden from the user interface;
 - clear distinction between `stock` and `option` rows;
 - stock rows require ticker, quantity, price, currency and optional sector;
 - option rows require underlying, option type, strike, maturity, volatility,
@@ -95,6 +103,9 @@ banking / advisory-style first risk review:
   reduce or increase;
 - recommendations phrased as risk-management actions, not direct investment
   orders.
+- generated portfolios are validated before being loaded into ARIA: duplicate
+  tickers are merged, weights are normalized to 100% and unrealistic outputs are
+  corrected or replaced by a diversified fallback.
 
 The analytics engine does not promise returns. Expected return, volatility,
 drawdown and diversification scores are model assumptions intended to guide
@@ -124,10 +135,40 @@ ARIA also includes professional stock / ETF model allocations:
 - Hedged Equity Portfolio
 - Low Volatility Portfolio
 - Crisis-Resilient Portfolio
+- ESG Sustainable Portfolio
+- AI & Semiconductors Portfolio
+- European Quality Portfolio
+- US Blue Chips Portfolio
+- Global ETF Core Portfolio
+- Inflation Protection Portfolio
+- Long-Term Compounders Portfolio
 
 Each model portfolio includes target weights, estimated return, estimated
 volatility, indicative drawdown, diversification score and a plain-English
 investor profile.
+
+## AI Portfolio Builder
+
+The "Creer avec l'IA" tab helps a user build a personalized simulation before
+launching the normal ARIA analysis. The form captures horizon, risk level,
+preferred instruments, style, geography, sectors to include or avoid, names to
+include or exclude and simulated portfolio size.
+
+When `OPENAI_API_KEY` and `ARIA_LLM_MODEL` are configured, ARIA asks the LLM for
+a structured JSON portfolio. When the API is unavailable, ARIA uses a controlled
+local fallback so demonstrations still work. In both cases the output is
+validated before use:
+
+- required fields: ticker, name, weight, asset class and sector;
+- no negative weights;
+- duplicate tickers merged;
+- weights normalized to 100%;
+- concentration reduced when a generated position is excessive;
+- educational disclaimer displayed before loading into the app.
+
+The generated allocation can be loaded into the portfolio editor or launched
+directly through the standard ARIA workflow: exposure, Greeks, VaR, stress
+tests, alerts, LLM report and PDF exports.
 
 ## Market Data Architecture
 

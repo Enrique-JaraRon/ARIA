@@ -325,6 +325,277 @@ MODEL_PORTFOLIOS: dict[str, ModelPortfolio] = {
             "VIG": 190.0,
         },
     ),
+    "ESG Sustainable Portfolio": ModelPortfolio(
+        name="ESG Sustainable Portfolio",
+        risk_level="Moderate",
+        expected_return=0.061,
+        volatility=0.13,
+        drawdown=-0.21,
+        diversification_score=81,
+        investor_profile="Investor seeking diversified equity exposure with an ESG tilt.",
+        explanation=(
+            "A global ESG-oriented allocation combining broad sustainable equity "
+            "funds, clean energy exposure and a bond sleeve to control volatility."
+        ),
+        target_weights={
+            "ESGU": 0.35,
+            "ESGD": 0.18,
+            "ICLN": 0.08,
+            "VTI": 0.17,
+            "BND": 0.17,
+            "GLD": 0.05,
+        },
+        sectors={
+            "ESGU": "US ESG equities",
+            "ESGD": "Developed ESG equities",
+            "ICLN": "Clean energy",
+            "VTI": "US equities",
+            "BND": "Core bonds",
+            "GLD": "Gold",
+        },
+        prices={
+            "ESGU": 123.0,
+            "ESGD": 86.0,
+            "ICLN": 14.0,
+            "VTI": 285.0,
+            "BND": 72.0,
+            "GLD": 220.0,
+        },
+    ),
+    "AI & Semiconductors Portfolio": ModelPortfolio(
+        name="AI & Semiconductors Portfolio",
+        risk_level="High",
+        expected_return=0.105,
+        volatility=0.255,
+        drawdown=-0.42,
+        diversification_score=55,
+        investor_profile="Long-term growth investor comfortable with sector concentration.",
+        explanation=(
+            "A high-conviction technology allocation focused on AI infrastructure, "
+            "semiconductors and software, balanced by broad-market and bond exposure."
+        ),
+        target_weights={
+            "SMH": 0.28,
+            "QQQ": 0.24,
+            "NVDA": 0.12,
+            "MSFT": 0.10,
+            "AVGO": 0.08,
+            "VTI": 0.10,
+            "BND": 0.08,
+        },
+        sectors={
+            "SMH": "Semiconductors ETF",
+            "QQQ": "Growth equities",
+            "NVDA": "AI chips",
+            "MSFT": "Cloud software",
+            "AVGO": "Semiconductors",
+            "VTI": "US equities",
+            "BND": "Core bonds",
+        },
+        prices={
+            "SMH": 260.0,
+            "QQQ": 455.0,
+            "NVDA": 125.0,
+            "MSFT": 430.0,
+            "AVGO": 170.0,
+            "VTI": 285.0,
+            "BND": 72.0,
+        },
+    ),
+    "European Quality Portfolio": ModelPortfolio(
+        name="European Quality Portfolio",
+        risk_level="Moderate",
+        expected_return=0.057,
+        volatility=0.135,
+        drawdown=-0.22,
+        diversification_score=78,
+        investor_profile="Investor seeking European quality, healthcare and industrial exposure.",
+        explanation=(
+            "A Europe-focused allocation built around broad European equities, "
+            "quality global franchises and a stabilizing bond sleeve."
+        ),
+        target_weights={
+            "VGK": 0.35,
+            "IEUR": 0.20,
+            "EWQ": 0.10,
+            "EWL": 0.08,
+            "BNDX": 0.20,
+            "GLD": 0.07,
+        },
+        sectors={
+            "VGK": "Europe equities",
+            "IEUR": "Europe equities",
+            "EWQ": "France equities",
+            "EWL": "Switzerland equities",
+            "BNDX": "Global bonds",
+            "GLD": "Gold",
+        },
+        prices={
+            "VGK": 71.0,
+            "IEUR": 59.0,
+            "EWQ": 42.0,
+            "EWL": 52.0,
+            "BNDX": 49.0,
+            "GLD": 220.0,
+        },
+    ),
+    "US Blue Chips Portfolio": ModelPortfolio(
+        name="US Blue Chips Portfolio",
+        risk_level="Moderate to high",
+        expected_return=0.073,
+        volatility=0.165,
+        drawdown=-0.28,
+        diversification_score=70,
+        investor_profile="Investor seeking liquid US large-cap leaders with some diversification.",
+        explanation=(
+            "A liquid US blue-chip allocation diversified across technology, "
+            "healthcare, consumer and broad-market exposure."
+        ),
+        target_weights={
+            "SPY": 0.35,
+            "MSFT": 0.12,
+            "AAPL": 0.10,
+            "JNJ": 0.08,
+            "JPM": 0.08,
+            "PG": 0.07,
+            "BND": 0.15,
+            "SHV": 0.05,
+        },
+        sectors={
+            "SPY": "US large caps",
+            "MSFT": "Software",
+            "AAPL": "Hardware",
+            "JNJ": "Healthcare",
+            "JPM": "Financials",
+            "PG": "Consumer staples",
+            "BND": "Core bonds",
+            "SHV": "Cash equivalents",
+        },
+        prices={
+            "SPY": 500.0,
+            "MSFT": 430.0,
+            "AAPL": 195.0,
+            "JNJ": 155.0,
+            "JPM": 205.0,
+            "PG": 165.0,
+            "BND": 72.0,
+            "SHV": 110.0,
+        },
+    ),
+    "Global ETF Core Portfolio": ModelPortfolio(
+        name="Global ETF Core Portfolio",
+        risk_level="Moderate",
+        expected_return=0.058,
+        volatility=0.11,
+        drawdown=-0.17,
+        diversification_score=94,
+        investor_profile="Long-term investor seeking a simple global core allocation.",
+        explanation=(
+            "A simple global ETF core with world equities, bonds, real estate, "
+            "gold and short-duration bonds."
+        ),
+        target_weights={
+            "VT": 0.45,
+            "BND": 0.25,
+            "GLD": 0.10,
+            "VNQ": 0.10,
+            "SHY": 0.10,
+        },
+        sectors={
+            "VT": "Global equities",
+            "BND": "Core bonds",
+            "GLD": "Gold",
+            "VNQ": "Real estate",
+            "SHY": "Short-duration treasuries",
+        },
+        prices={
+            "VT": 118.0,
+            "BND": 72.0,
+            "GLD": 220.0,
+            "VNQ": 88.0,
+            "SHY": 82.0,
+        },
+    ),
+    "Inflation Protection Portfolio": ModelPortfolio(
+        name="Inflation Protection Portfolio",
+        risk_level="Moderate defensive",
+        expected_return=0.052,
+        volatility=0.105,
+        drawdown=-0.15,
+        diversification_score=87,
+        investor_profile="Investor concerned about inflation, rates and purchasing-power risk.",
+        explanation=(
+            "A real-asset and inflation-aware allocation using TIPS, commodities, "
+            "gold, energy and short-duration bonds."
+        ),
+        target_weights={
+            "TIP": 0.28,
+            "DBC": 0.12,
+            "GLD": 0.15,
+            "XLE": 0.10,
+            "VTI": 0.20,
+            "SHY": 0.15,
+        },
+        sectors={
+            "TIP": "Inflation-linked bonds",
+            "DBC": "Commodities",
+            "GLD": "Gold",
+            "XLE": "Energy",
+            "VTI": "US equities",
+            "SHY": "Short-duration treasuries",
+        },
+        prices={
+            "TIP": 108.0,
+            "DBC": 23.0,
+            "GLD": 220.0,
+            "XLE": 93.0,
+            "VTI": 285.0,
+            "SHY": 82.0,
+        },
+    ),
+    "Long-Term Compounders Portfolio": ModelPortfolio(
+        name="Long-Term Compounders Portfolio",
+        risk_level="High quality growth",
+        expected_return=0.082,
+        volatility=0.18,
+        drawdown=-0.30,
+        diversification_score=72,
+        investor_profile="Long-horizon investor seeking quality growth franchises.",
+        explanation=(
+            "A concentrated but diversified set of high-quality compounders, "
+            "balanced with broad equity and bond exposure."
+        ),
+        target_weights={
+            "VTI": 0.25,
+            "MSFT": 0.12,
+            "AAPL": 0.10,
+            "GOOGL": 0.09,
+            "COST": 0.08,
+            "LLY": 0.08,
+            "BRK-B": 0.10,
+            "BND": 0.18,
+        },
+        sectors={
+            "VTI": "US equities",
+            "MSFT": "Software",
+            "AAPL": "Hardware",
+            "GOOGL": "Digital advertising",
+            "COST": "Consumer staples",
+            "LLY": "Healthcare",
+            "BRK-B": "Diversified financials",
+            "BND": "Core bonds",
+        },
+        prices={
+            "VTI": 285.0,
+            "MSFT": 430.0,
+            "AAPL": 195.0,
+            "GOOGL": 180.0,
+            "COST": 850.0,
+            "LLY": 880.0,
+            "BRK-B": 410.0,
+            "BND": 72.0,
+        },
+    ),
 }
 
 
@@ -540,6 +811,7 @@ def portfolio_exposure_table(table: pd.DataFrame) -> pd.DataFrame:
             _row_value(row, "Asset type", "Instrument", default="stock")
         )
         ticker = str(_row_value(row, "Ticker", "Sous-jacent", default="")).strip()
+        name = str(_row_value(row, "Nom", default=ticker)).strip()
         quantity = _row_value(row, "Quantity", "Quantite")
         price = _row_value(row, "Price", "Spot")
 
@@ -547,16 +819,25 @@ def portfolio_exposure_table(table: pd.DataFrame) -> pd.DataFrame:
             continue
 
         sector = str(_row_value(row, "Sector", default="Unclassified")).strip()
+        currency = str(_row_value(row, "Currency", default="USD")).strip()
         market_value = _market_value(row)
         rows.append(
             {
                 "Ticker": ticker,
+                "Name": name or ticker,
                 "Asset type": asset_type,
                 "Sector": sector or "Unclassified",
+                "Currency": currency or "USD",
+                "Quantity": float(quantity),
+                "Price": float(price),
                 "Market value": market_value,
                 "Gross exposure": abs(market_value),
+                "Data source": "Manual / demo",
             }
         )
+
+    if not rows:
+        return pd.DataFrame()
 
     exposure = pd.DataFrame(rows)
     gross_total = max(float(exposure["Gross exposure"].sum()), 1.0)

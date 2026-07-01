@@ -37,6 +37,13 @@ from pnl_profile import (
     pnl_profile_to_dataframe,
 )
 from portfolio import Portfolio
+from portfolio_ai_generator import (
+    DISCLAIMER as AI_PORTFOLIO_DISCLAIMER,
+)
+from portfolio_ai_generator import (
+    generate_ai_portfolio,
+    generated_portfolio_to_aria_table,
+)
 from portfolio_analytics import (
     PROFESSIONAL_COLUMNS,
     get_model_portfolio,
@@ -78,6 +85,24 @@ st.set_page_config(
     page_icon="📊",
     layout="wide",
 )
+
+PORTFOLIO_EDITOR_COLUMNS = [
+    "Asset type",
+    "Ticker",
+    "Nom",
+    "Sector",
+    "Currency",
+    "Quantity",
+    "Price",
+    "Option type",
+    "Strike",
+    "Maturity",
+    "Volatility",
+    "Rate",
+    "Contract size",
+]
+
+PORTFOLIO_INTERNAL_COLUMNS = PROFESSIONAL_COLUMNS
 
 ensure_runtime_directories()
 
@@ -237,7 +262,7 @@ def normalize_portfolio_table(
     normalized = normalize_dataframe_columns(table)
     normalized = normalized.dropna(
         how="all",
-    )
+    ).copy()
 
     quantity_columns = [
         column
@@ -280,18 +305,24 @@ def normalize_portfolio_table(
         "Asset type": "stock",
         "Ticker": "SPY",
         "Sous-jacent": "SPY",
+        "Nom": "Position",
         "Sector": "Unclassified",
         "Currency": "USD",
         "Spot": default_spot_value,
         "Price": default_spot_value,
+        "Strike": pd.NA,
+        "Option type": pd.NA,
+        "Type option": pd.NA,
         "Volatilite": default_volatility_value,
         "Volatility": default_volatility_value,
         "Rate": 0.05,
         "Contract size": 1,
         "Quantite": 1,
         "Quantity": 1,
+        "Multiplicateur": 1,
         "Maturite": 0.25,
         "Maturity": 0.25,
+        "Instrument": "Action",
     }
 
     for column, value in defaults.items():
@@ -305,6 +336,17 @@ def normalize_portfolio_table(
         }
     )
 
+    normalized["Ticker"] = normalized["Ticker"].fillna(
+        normalized["Sous-jacent"]
+    )
+    normalized["Ticker"] = normalized["Ticker"].fillna("SPY")
+    normalized["Sous-jacent"] = normalized["Sous-jacent"].fillna(
+        normalized["Ticker"]
+    )
+    normalized["Nom"] = normalized["Nom"].fillna(normalized["Ticker"])
+    normalized["Sector"] = normalized["Sector"].fillna("Unclassified")
+    normalized["Currency"] = normalized["Currency"].fillna("USD")
+
     normalized["Asset type"] = normalized.apply(
         lambda row: "option"
         if str(row.get("Instrument", "")).strip().lower() == "option"
@@ -317,9 +359,6 @@ def normalize_portfolio_table(
         if str(value).strip().lower() == "option"
         else "Action"
     )
-    normalized["Sous-jacent"] = normalized["Ticker"].fillna(
-        normalized["Sous-jacent"]
-    )
     normalized["Quantity"] = normalized["Quantity"].fillna(
         normalized["Quantite"]
     )
@@ -329,7 +368,7 @@ def normalize_portfolio_table(
     )
     normalized["Spot"] = normalized["Price"]
     normalized["Option type"] = normalized["Option type"].fillna(
-        normalized.get("Type option", "")
+        normalized["Type option"]
     )
     normalized["Type option"] = normalized["Option type"]
     normalized["Volatility"] = normalized["Volatility"].fillna(
@@ -341,11 +380,64 @@ def normalize_portfolio_table(
     )
     normalized["Maturite"] = normalized["Maturity"]
     normalized["Contract size"] = normalized["Contract size"].fillna(
-        normalized.get("Multiplicateur", 1)
+        normalized["Multiplicateur"]
     )
     normalized["Multiplicateur"] = normalized["Contract size"]
 
-    desired_columns = PROFESSIONAL_COLUMNS
+    option_mask = normalized["Asset type"].astype(str).str.lower().eq("option")
+    stock_mask = ~option_mask
+
+    normalized.loc[stock_mask, ["Option type", "Type option"]] = pd.NA
+    normalized.loc[stock_mask, ["Strike", "Maturity", "Maturite"]] = pd.NA
+    normalized.loc[stock_mask, ["Volatility", "Volatilite", "Rate"]] = pd.NA
+    normalized.loc[stock_mask, ["Contract size", "Multiplicateur"]] = 1
+
+    normalized.loc[option_mask, "Option type"] = normalized.loc[
+        option_mask,
+        "Option type",
+    ].fillna("call")
+    normalized.loc[option_mask, "Type option"] = normalized.loc[
+        option_mask,
+        "Option type",
+    ]
+    normalized.loc[option_mask, "Strike"] = normalized.loc[
+        option_mask,
+        "Strike",
+    ].fillna(normalized.loc[option_mask, "Price"])
+    normalized.loc[option_mask, "Volatility"] = normalized.loc[
+        option_mask,
+        "Volatility",
+    ].fillna(default_volatility_value)
+    normalized.loc[option_mask, "Volatilite"] = normalized.loc[
+        option_mask,
+        "Volatility",
+    ]
+    normalized.loc[option_mask, "Maturity"] = normalized.loc[
+        option_mask,
+        "Maturity",
+    ].fillna(0.25)
+    normalized.loc[option_mask, "Maturite"] = normalized.loc[
+        option_mask,
+        "Maturity",
+    ]
+    normalized.loc[option_mask, "Rate"] = normalized.loc[
+        option_mask,
+        "Rate",
+    ].fillna(0.05)
+    normalized.loc[option_mask, "Contract size"] = normalized.loc[
+        option_mask,
+        "Contract size",
+    ].fillna(100)
+    normalized.loc[option_mask, "Multiplicateur"] = normalized.loc[
+        option_mask,
+        "Contract size",
+    ]
+
+    normalized = normalized.drop_duplicates(
+        ignore_index=True,
+    )
+
+    desired_columns = PORTFOLIO_INTERNAL_COLUMNS
 
     existing_columns = [
         column
@@ -1336,119 +1428,279 @@ st.session_state.portfolio_data = normalize_portfolio_table(
 
 render_section_title(
     "Composition du portefeuille",
-    "Charge une strategie de demonstration ou ajuste manuellement les positions.",
+    "Importe, charge une allocation modele ou genere un portefeuille assiste par IA.",
 )
 
-demo_col_1, demo_col_2 = st.columns([3, 1])
-
-selected_demo_portfolio = demo_col_1.selectbox(
-    "Portefeuille de demonstration",
-    options=get_demo_portfolio_names(),
+manual_tab, demo_tab, ai_tab = st.tabs(
+    [
+        "A. Modifier / importer",
+        "B. Portefeuilles de demonstration",
+        "C. Creer avec l'IA",
+    ]
 )
 
-load_demo_portfolio = demo_col_2.button(
-    "Charger",
-    width="stretch",
-)
+with manual_tab:
+    portfolio_file_path = st.text_input(
+        "Fichier portefeuille CSV",
+        value=relative_to_project(DEFAULT_PORTFOLIO_PATH),
+    )
 
-if load_demo_portfolio:
+    portfolio_action_col_1, portfolio_action_col_2, portfolio_action_col_3 = st.columns(3)
+
+    if portfolio_action_col_1.button(
+        "Sauvegarder le portefeuille",
+        width="stretch",
+    ):
+        portfolio_path = resolve_project_path(portfolio_file_path)
+        portfolio_path.parent.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        st.session_state.portfolio_data.reindex(
+            columns=PORTFOLIO_EDITOR_COLUMNS
+        ).to_csv(
+            portfolio_path,
+            index=False,
+        )
+
+        st.success(f"Portefeuille sauvegarde : {portfolio_file_path}")
+
+    if portfolio_action_col_2.button(
+        "Charger le portefeuille",
+        width="stretch",
+    ):
+        portfolio_path = resolve_project_path(portfolio_file_path)
+
+        if not portfolio_path.exists():
+            st.error(f"Fichier introuvable : {portfolio_file_path}")
+            st.stop()
+
+        loaded_portfolio = pd.read_csv(portfolio_path)
+
+        st.session_state.portfolio_data = normalize_portfolio_table(
+            loaded_portfolio,
+            default_spot_value=current_spot,
+            default_volatility_value=current_volatility,
+        )
+
+        if "portfolio_editor" in st.session_state:
+            del st.session_state["portfolio_editor"]
+
+        st.rerun()
+
+    if portfolio_action_col_3.button(
+        "Reinitialiser",
+        width="stretch",
+    ):
+        st.session_state.portfolio_data = default_portfolio()
+
+        if "portfolio_editor" in st.session_state:
+            del st.session_state["portfolio_editor"]
+
+        st.rerun()
+
+    render_info_card(
+        "Lecture des positions",
+        (
+            "Une quantite positive correspond a une position achetee. "
+            "Une quantite negative correspond a une position vendue. "
+            "Les colonnes techniques necessaires au moteur ARIA sont "
+            "reconstruites automatiquement."
+        ),
+    )
+
+with demo_tab:
+    selected_demo_portfolio = st.selectbox(
+        "Portefeuille de demonstration",
+        options=get_demo_portfolio_names(),
+    )
+
     if selected_demo_portfolio in get_model_portfolio_names():
-        loaded_demo_data = model_portfolio_to_dataframe(
-            get_model_portfolio(selected_demo_portfolio)
+        selected_model = get_model_portfolio(selected_demo_portfolio)
+        demo_kpi_1, demo_kpi_2, demo_kpi_3, demo_kpi_4 = st.columns(4)
+        demo_kpi_1.metric("Risque", selected_model.risk_level)
+        demo_kpi_2.metric("Horizon", "Long terme")
+        demo_kpi_3.metric("Vol. estimee", f"{selected_model.volatility:.1%}")
+        demo_kpi_4.metric("Drawdown", f"{selected_model.drawdown:.1%}")
+        st.info(
+            f"{selected_model.explanation} Profil : "
+            f"{selected_model.investor_profile}"
         )
-    else:
-        demo_portfolio = create_demo_portfolio(
-            name=selected_demo_portfolio,
-            spot=current_spot,
-            maturity=0.25,
-            rate=risk_free_rate,
-            volatility=current_volatility,
+
+    if st.button(
+        "Charger ce portefeuille",
+        width="stretch",
+    ):
+        if selected_demo_portfolio in get_model_portfolio_names():
+            loaded_demo_data = model_portfolio_to_dataframe(
+                get_model_portfolio(selected_demo_portfolio)
+            )
+        else:
+            demo_portfolio = create_demo_portfolio(
+                name=selected_demo_portfolio,
+                spot=current_spot,
+                maturity=0.25,
+                rate=risk_free_rate,
+                volatility=current_volatility,
+            )
+            loaded_demo_data = portfolio_to_dataframe(demo_portfolio)
+
+        st.session_state.portfolio_data = normalize_portfolio_table(
+            loaded_demo_data,
+            default_spot_value=current_spot,
+            default_volatility_value=current_volatility,
         )
-        loaded_demo_data = portfolio_to_dataframe(demo_portfolio)
 
-    st.session_state.portfolio_data = normalize_portfolio_table(
-        loaded_demo_data,
-        default_spot_value=current_spot,
-        default_volatility_value=current_volatility,
-    )
+        if "portfolio_editor" in st.session_state:
+            del st.session_state["portfolio_editor"]
 
-    if "portfolio_editor" in st.session_state:
-        del st.session_state["portfolio_editor"]
+        st.rerun()
 
-    st.rerun()
+with ai_tab:
+    st.caption(AI_PORTFOLIO_DISCLAIMER)
 
-portfolio_file_path = st.text_input(
-    "Fichier portefeuille CSV",
-    value=relative_to_project(DEFAULT_PORTFOLIO_PATH),
+    with st.form("ai_portfolio_form"):
+        ai_col_1, ai_col_2 = st.columns(2)
+        horizon = ai_col_1.selectbox(
+            "Horizon",
+            ["Long term", "Medium term", "Short term"],
+        )
+        risk_level = ai_col_2.selectbox(
+            "Niveau de risque",
+            ["Moderate", "Low", "High"],
+        )
+        instruments = ai_col_1.multiselect(
+            "Instruments preferes",
+            ["ETF", "Stocks", "Bonds", "Commodities", "Options"],
+            default=["ETF", "Stocks", "Bonds"],
+        )
+        style = ai_col_2.selectbox(
+            "Style",
+            [
+                "Balanced",
+                "Growth",
+                "Defensive",
+                "Dividend",
+                "ESG",
+                "AI / Semiconductors",
+                "Inflation protection",
+            ],
+        )
+        geography = ai_col_1.selectbox(
+            "Zone geographique",
+            ["Global", "US", "Europe", "Emerging markets"],
+        )
+        simulated_amount = ai_col_2.number_input(
+            "Montant simule",
+            min_value=1_000,
+            value=100_000,
+            step=5_000,
+        )
+        preferred_sectors = st.text_input(
+            "Secteurs a privilegier",
+            value="technology, healthcare, quality equities",
+        )
+        avoided_sectors = st.text_input(
+            "Secteurs a eviter",
+            value="",
+        )
+        included_names = st.text_input(
+            "Entreprises ou ETF a inclure si coherent",
+            value="",
+        )
+        excluded_names = st.text_input(
+            "Entreprises ou ETF a exclure",
+            value="",
+        )
+        submitted_ai_portfolio = st.form_submit_button(
+            "Generer le portefeuille",
+            width="stretch",
+        )
+
+    if submitted_ai_portfolio:
+        st.session_state.ai_portfolio_result = generate_ai_portfolio(
+            {
+                "horizon": horizon,
+                "risk_level": risk_level,
+                "instruments": instruments,
+                "style": style,
+                "geography": geography,
+                "simulated_amount": simulated_amount,
+                "preferred_sectors": preferred_sectors,
+                "avoided_sectors": avoided_sectors,
+                "included_names": included_names,
+                "excluded_names": excluded_names,
+            }
+        )
+
+    if "ai_portfolio_result" in st.session_state:
+        ai_result = st.session_state.ai_portfolio_result
+        st.success(
+            "Portefeuille genere avec le LLM."
+            if ai_result["used_llm"]
+            else "Portefeuille genere en mode structure local."
+        )
+        st.write(ai_result["strategy"])
+        if ai_result["warnings"]:
+            for warning in ai_result["warnings"]:
+                st.warning(warning)
+        st.dataframe(
+            ai_result["portfolio"],
+            hide_index=True,
+            width="stretch",
+        )
+        if ai_result["limits"]:
+            st.caption("Limites : " + " | ".join(ai_result["limits"]))
+
+        use_ai_col_1, use_ai_col_2 = st.columns(2)
+        if use_ai_col_1.button(
+            "Utiliser ce portefeuille dans ARIA",
+            width="stretch",
+        ):
+            st.session_state.portfolio_data = normalize_portfolio_table(
+                generated_portfolio_to_aria_table(
+                    ai_result["portfolio"],
+                    total_value=float(simulated_amount),
+                ),
+                default_spot_value=current_spot,
+                default_volatility_value=current_volatility,
+            )
+
+            if "portfolio_editor" in st.session_state:
+                del st.session_state["portfolio_editor"]
+
+            st.rerun()
+        if use_ai_col_2.button(
+            "Lancer l'analyse ARIA",
+            width="stretch",
+        ):
+            st.session_state.portfolio_data = normalize_portfolio_table(
+                generated_portfolio_to_aria_table(
+                    ai_result["portfolio"],
+                    total_value=float(simulated_amount),
+                ),
+                default_spot_value=current_spot,
+                default_volatility_value=current_volatility,
+            )
+            st.session_state.launch_analysis_requested = True
+
+            if "portfolio_editor" in st.session_state:
+                del st.session_state["portfolio_editor"]
+
+            st.rerun()
+
+editor_data = st.session_state.portfolio_data.reindex(
+    columns=PORTFOLIO_EDITOR_COLUMNS
 )
-
-portfolio_action_col_1, portfolio_action_col_2 = st.columns(2)
-
-if portfolio_action_col_1.button(
-    "Sauvegarder le portefeuille",
-    width="stretch",
-):
-    portfolio_path = resolve_project_path(portfolio_file_path)
-    portfolio_path.parent.mkdir(
-        parents=True,
-        exist_ok=True,
-    )
-
-    normalize_dataframe_columns(st.session_state.portfolio_data).to_csv(
-        portfolio_path,
-        index=False,
-    )
-
-    st.success(f"Portefeuille sauvegarde : {portfolio_file_path}")
-
-if portfolio_action_col_2.button(
-    "Charger le portefeuille",
-    width="stretch",
-):
-    portfolio_path = resolve_project_path(portfolio_file_path)
-
-    if not portfolio_path.exists():
-        st.error(f"Fichier introuvable : {portfolio_file_path}")
-        st.stop()
-
-    loaded_portfolio = pd.read_csv(portfolio_path)
-
-    st.session_state.portfolio_data = normalize_portfolio_table(
-        loaded_portfolio,
-        default_spot_value=current_spot,
-        default_volatility_value=current_volatility,
-    )
-
-    if "portfolio_editor" in st.session_state:
-        del st.session_state["portfolio_editor"]
-
-    st.rerun()
-
-render_info_card(
-    "Lecture des quantites",
-    (
-        "Une quantite positive correspond a une position achetee. "
-        "Une quantite negative correspond a une position vendue. "
-        "Pour une option, l'exposition reelle est egale a quantite "
-        "multipliee par multiplicateur."
-    ),
-)
-
-if st.button("Reinitialiser le portefeuille"):
-    st.session_state.portfolio_data = default_portfolio()
-
-    if "portfolio_editor" in st.session_state:
-        del st.session_state["portfolio_editor"]
-
-    st.rerun()
-
 
 edited_portfolio = st.data_editor(
-    st.session_state.portfolio_data,
+    editor_data,
     key="portfolio_editor",
     num_rows="dynamic",
     hide_index=True,
     width="stretch",
+    column_order=PORTFOLIO_EDITOR_COLUMNS,
     column_config={
         "Asset type": st.column_config.SelectboxColumn(
             "Asset type",
@@ -1456,13 +1708,7 @@ edited_portfolio = st.data_editor(
             required=True,
         ),
         "Ticker": st.column_config.TextColumn("Ticker"),
-        "Instrument": st.column_config.SelectboxColumn(
-            "Instrument",
-            options=["Option", "Action"],
-            disabled=True,
-        ),
-        "Sous-jacent": st.column_config.TextColumn("Sous-jacent"),
-        "Nom": st.column_config.TextColumn("Position name"),
+        "Nom": st.column_config.TextColumn("Name"),
         "Sector": st.column_config.TextColumn("Sector"),
         "Currency": st.column_config.SelectboxColumn(
             "Currency",
@@ -1488,7 +1734,7 @@ edited_portfolio = st.data_editor(
             step=1.0,
         ),
         "Maturity": st.column_config.NumberColumn(
-            "Maturity in years",
+            "Maturity",
             min_value=0.001,
             step=0.05,
             format="%.3f",
@@ -1509,44 +1755,6 @@ edited_portfolio = st.data_editor(
             min_value=1,
             step=1,
             format="%d",
-        ),
-        "Type option": st.column_config.SelectboxColumn(
-            "Type d'option",
-            options=["call", "put"],
-            disabled=True,
-        ),
-        "Quantite": st.column_config.NumberColumn(
-            "Quantite",
-            step=1,
-            format="%d",
-            disabled=True,
-        ),
-        "Multiplicateur": st.column_config.NumberColumn(
-            "Multiplicateur",
-            min_value=1,
-            step=1,
-            format="%d",
-            disabled=True,
-        ),
-        "Spot": st.column_config.NumberColumn(
-            "Spot",
-            min_value=0.01,
-            step=1.0,
-            disabled=True,
-        ),
-        "Volatilite": st.column_config.NumberColumn(
-            "Volatilite",
-            min_value=0.0001,
-            step=0.01,
-            format="%.2f",
-            disabled=True,
-        ),
-        "Maturite": st.column_config.NumberColumn(
-            "Maturite en annees",
-            min_value=0.001,
-            step=0.05,
-            format="%.3f",
-            disabled=True,
         ),
     },
 )
@@ -1671,9 +1879,15 @@ analyse_button = st.button(
     type="primary",
     width="stretch",
 )
+auto_launch_analysis = bool(
+    st.session_state.pop(
+        "launch_analysis_requested",
+        False,
+    )
+)
 
 
-if analyse_button:
+if analyse_button or auto_launch_analysis:
     if portfolio_validation_errors:
         st.error(
             "Corrige les erreurs de portefeuille avant de lancer l'analyse ARIA."
