@@ -808,6 +808,126 @@ def validate_portfolio_table(table: pd.DataFrame) -> list[str]:
     return errors
 
 
+def validate_portfolio_coherence(
+    table: pd.DataFrame,
+    risk_profile: str = "Équilibré",
+    horizon: str = "Long terme",
+) -> tuple[list[str], list[str]]:
+    """Validate business coherence before the ARIA analysis is launched."""
+
+    errors = []
+    warnings = []
+
+    if table.empty:
+        return ["Le portefeuille est vide."], warnings
+
+    working_table = table.copy()
+    weight_values = pd.to_numeric(
+        working_table.get("Weight", pd.Series(dtype=float)),
+        errors="coerce",
+    )
+
+    for index, row in working_table.iterrows():
+        line_number = index + 1
+        ticker = str(_row_value(row, "Ticker", "Sous-jacent", default="")).strip()
+        name = str(_row_value(row, "Nom", default="")).strip()
+        asset_class = str(_row_value(row, "Asset class", default="")).strip()
+        sector = str(_row_value(row, "Sector", default="")).strip()
+        currency = str(_row_value(row, "Currency", default="")).strip()
+        price = _row_value(row, "Price", "Spot")
+        value = _row_value(row, "Value")
+        weight = _row_value(row, "Weight")
+
+        if not ticker:
+            errors.append(f"Ligne {line_number} : ticker manquant.")
+
+        if not name:
+            errors.append(f"Ligne {line_number} : nom de l'actif manquant.")
+
+        if not asset_class:
+            errors.append(f"Ligne {line_number} : classe d'actif manquante.")
+
+        if not sector:
+            warnings.append(f"Ligne {line_number} : secteur manquant, classé par défaut.")
+
+        if not currency:
+            errors.append(f"Ligne {line_number} : devise manquante.")
+
+        if price is None or float(price) <= 0:
+            errors.append(f"Ligne {line_number} : prix invalide.")
+
+        if value is None or float(value) < 0:
+            errors.append(f"Ligne {line_number} : valeur manquante ou négative.")
+
+        if weight is None or float(weight) < 0:
+            errors.append(f"Ligne {line_number} : poids manquant ou négatif.")
+
+        if weight is not None and float(weight) > 60:
+            warnings.append(
+                f"Ligne {line_number} : poids très concentré ({float(weight):.1f} %)."
+            )
+
+    duplicate_mask = working_table.duplicated(
+        subset=["Asset type", "Ticker"],
+        keep=False,
+    )
+    duplicated_rows = working_table[duplicate_mask]
+    duplicated_stock_tickers = sorted(
+        {
+            str(row["Ticker"])
+            for _, row in duplicated_rows.iterrows()
+            if _clean_asset_type(row.get("Asset type", "stock")) == "stock"
+        }
+    )
+    if duplicated_stock_tickers:
+        errors.append(
+            "Actifs en double à fusionner : "
+            + ", ".join(duplicated_stock_tickers)
+        )
+
+    weight_total = float(weight_values.fillna(0).sum())
+    if abs(weight_total - 100.0) > 0.05:
+        errors.append(
+            f"La somme des poids doit être égale à 100 %. Total actuel : {weight_total:.2f} %."
+        )
+
+    exposure = portfolio_exposure_table(working_table)
+    if not exposure.empty:
+        stock_or_equity_text = (
+            working_table.get("Asset class", pd.Series(dtype=str))
+            .fillna("")
+            .astype(str)
+            .str.lower()
+        )
+        risky_assets = stock_or_equity_text.str.contains(
+            "action|equity|growth|semi|tech|option",
+            regex=True,
+        )
+        risky_weight = float(weight_values[risky_assets].fillna(0).sum())
+        bond_or_cash = stock_or_equity_text.str.contains(
+            "bond|obligation|cash|monétaire|tresor|treasury",
+            regex=True,
+        )
+        defensive_weight = float(weight_values[bond_or_cash].fillna(0).sum())
+
+        if risk_profile.lower().startswith("prudent") and risky_weight > 65:
+            warnings.append(
+                "Profil prudent : la part d'actifs risqués semble élevée."
+            )
+
+        if risk_profile.lower().startswith("dynamique") and defensive_weight > 70:
+            warnings.append(
+                "Profil dynamique : la poche défensive domine le portefeuille."
+            )
+
+        if horizon.lower().startswith("court") and risky_weight > 70:
+            warnings.append(
+                "Horizon court terme : réduire la part d'actifs volatils peut être pertinent."
+            )
+
+    return errors, warnings
+
+
 def portfolio_exposure_table(table: pd.DataFrame) -> pd.DataFrame:
     """Return position-level exposure, weights and concentration metrics."""
 

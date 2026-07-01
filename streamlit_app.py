@@ -52,6 +52,7 @@ from portfolio_analytics import (
     portfolio_diagnosis,
     portfolio_exposure_table,
     rebalancing_recommendations,
+    validate_portfolio_coherence,
     validate_portfolio_table,
 )
 from pricing_BS import OptionContract
@@ -114,6 +115,30 @@ PORTFOLIO_OPTION_COLUMNS = [
 ]
 
 PORTFOLIO_INTERNAL_COLUMNS = PROFESSIONAL_COLUMNS
+
+RISK_PROFILE_TO_MODEL = {
+    "Prudent": "Conservative Balanced Portfolio",
+    "Équilibré": "Moderate Growth Portfolio",
+    "Dynamique": "Tech Growth Portfolio",
+}
+
+DEMO_PORTFOLIO_LABELS = {
+    "Conservative Balanced Portfolio": "Portefeuille équilibré prudent",
+    "Moderate Growth Portfolio": "Portefeuille croissance modérée",
+    "Global Diversified Portfolio": "Portefeuille mondial diversifié",
+    "Tech Growth Portfolio": "Portefeuille technologie et IA",
+    "Defensive Dividend Portfolio": "Portefeuille dividendes défensifs",
+    "Hedged Equity Portfolio": "Portefeuille actions couvert",
+    "Low Volatility Portfolio": "Portefeuille faible volatilité",
+    "Crisis-Resilient Portfolio": "Portefeuille résilient en crise",
+    "ESG Sustainable Portfolio": "Portefeuille ESG durable",
+    "AI & Semiconductors Portfolio": "Portefeuille IA et semi-conducteurs",
+    "European Quality Portfolio": "Portefeuille actions européennes de qualité",
+    "US Blue Chips Portfolio": "Portefeuille grandes capitalisations américaines",
+    "Global ETF Core Portfolio": "Portefeuille ETF mondial",
+    "Inflation Protection Portfolio": "Portefeuille protection inflation",
+    "Long-Term Compounders Portfolio": "Portefeuille long terme compounders",
+}
 
 ensure_runtime_directories()
 
@@ -1347,31 +1372,32 @@ render_header(
 )
 
 
-st.sidebar.header("Donnees de marche")
+st.sidebar.header("Configuration ARIA")
 
-market_source = st.sidebar.selectbox(
-    "Source de donnees de marche",
-    options=[
-        "Manuel",
-        "Yahoo Finance",
-        "CSV local",
-        "Bloomberg optionnel",
-    ],
-    index=0,
-)
-
-market_ticker = st.sidebar.text_input(
-    "Ticker",
-    value="SPY",
-)
-
-csv_market_data_path = None
-
-if market_source == "CSV local":
-    csv_market_data_path = st.sidebar.text_input(
-        "Chemin du CSV local",
-        value=relative_to_project(DEFAULT_MARKET_DATA_PATH),
+with st.sidebar.expander("Données de marché", expanded=False):
+    market_source = st.selectbox(
+        "Source de données",
+        options=[
+            "Manuel",
+            "Yahoo Finance",
+            "CSV local",
+            "Bloomberg optionnel",
+        ],
+        index=0,
     )
+
+    market_ticker = st.text_input(
+        "Ticker de référence",
+        value="SPY",
+    )
+
+    csv_market_data_path = None
+
+    if market_source == "CSV local":
+        csv_market_data_path = st.text_input(
+            "Chemin du CSV local",
+            value=relative_to_project(DEFAULT_MARKET_DATA_PATH),
+        )
 
 market_snapshot = None
 market_data_status = "Manual Mode"
@@ -1408,34 +1434,33 @@ if market_source in {"Yahoo Finance", "CSV local", "Bloomberg optionnel"}:
         st.sidebar.info(str(error))
 
 
-st.sidebar.header("Marche")
+with st.sidebar.expander("Hypothèses de marché", expanded=False):
+    current_spot = st.number_input(
+        "Prix du sous-jacent",
+        min_value=0.01,
+        value=float(default_spot),
+        step=1.0,
+    )
 
-current_spot = st.sidebar.number_input(
-    "Prix du sous-jacent",
-    min_value=0.01,
-    value=float(default_spot),
-    step=1.0,
-)
+    current_volatility_percent = st.number_input(
+        "Volatilité utilisée en %",
+        min_value=0.01,
+        value=float(default_volatility_percent),
+        step=1.0,
+    )
 
-current_volatility_percent = st.sidebar.number_input(
-    "Volatilite utilisee en %",
-    min_value=0.01,
-    value=float(default_volatility_percent),
-    step=1.0,
-)
+    risk_free_rate_percent = st.number_input(
+        "Taux sans risque en %",
+        value=5.0,
+        step=0.25,
+    )
 
-risk_free_rate_percent = st.sidebar.number_input(
-    "Taux sans risque en %",
-    value=5.0,
-    step=0.25,
-)
-
-dividend_yield_percent = st.sidebar.number_input(
-    "Rendement du dividende en %",
-    min_value=0.0,
-    value=0.0,
-    step=0.25,
-)
+    dividend_yield_percent = st.number_input(
+        "Rendement du dividende en %",
+        min_value=0.0,
+        value=0.0,
+        step=0.25,
+    )
 
 current_volatility = current_volatility_percent / 100
 risk_free_rate = risk_free_rate_percent / 100
@@ -1450,133 +1475,123 @@ if market_source == "Manuel":
     market_data_status = market_snapshot.status
 
 
-st.sidebar.header("Limites de risque")
+with st.sidebar.expander("Limites et scénario avancés", expanded=False):
+    delta_limit = st.number_input(
+        "Limite de delta",
+        min_value=0.0,
+        value=10.0,
+        step=1.0,
+    )
 
-delta_limit = st.sidebar.number_input(
-    "Limite de delta",
-    min_value=0.0,
-    value=10.0,
-    step=1.0,
-)
+    gamma_limit = st.number_input(
+        "Limite de gamma",
+        min_value=0.0,
+        value=1.0,
+        step=0.1,
+    )
 
-gamma_limit = st.sidebar.number_input(
-    "Limite de gamma",
-    min_value=0.0,
-    value=1.0,
-    step=0.1,
-)
+    vega_limit = st.number_input(
+        "Limite de vega",
+        min_value=0.0,
+        value=20.0,
+        step=1.0,
+    )
 
-vega_limit = st.sidebar.number_input(
-    "Limite de vega",
-    min_value=0.0,
-    value=20.0,
-    step=1.0,
-)
+    spot_move_limit_percent = st.number_input(
+        "Variation maximale du spot en %",
+        min_value=0.1,
+        value=3.0,
+        step=0.5,
+    )
 
-spot_move_limit_percent = st.sidebar.number_input(
-    "Variation maximale du spot en %",
-    min_value=0.1,
-    value=3.0,
-    step=0.5,
-)
+    volatility_move_limit_percent = st.number_input(
+        "Variation maximale de volatilité en points",
+        min_value=0.1,
+        value=5.0,
+        step=0.5,
+    )
 
-volatility_move_limit_percent = st.sidebar.number_input(
-    "Variation maximale de volatilite en points",
-    min_value=0.1,
-    value=5.0,
-    step=0.5,
-)
+    z_score_limit = st.number_input(
+        "Limite du z-score",
+        min_value=0.5,
+        value=2.5,
+        step=0.1,
+    )
 
-z_score_limit = st.sidebar.number_input(
-    "Limite du z-score",
-    min_value=0.5,
-    value=2.5,
-    step=0.1,
-)
+    custom_spot_change_percent = st.number_input(
+        "Choc du spot en %",
+        value=-10.0,
+        step=1.0,
+    )
 
+    custom_volatility_change_points = st.number_input(
+        "Choc de volatilité en points",
+        value=15.0,
+        step=1.0,
+    )
 
-st.sidebar.header("Scenario personnalise")
+with st.sidebar.expander("VaR et analyse probabiliste", expanded=False):
+    var_confidence_percent = st.selectbox(
+        "Niveau de confiance",
+        options=[95, 99],
+        index=0,
+    )
 
-custom_spot_change_percent = st.sidebar.number_input(
-    "Choc du spot en %",
-    value=-10.0,
-    step=1.0,
-)
+    var_horizon_days = st.number_input(
+        "Horizon en jours",
+        min_value=1,
+        value=1,
+        step=1,
+    )
 
-custom_volatility_change_points = st.sidebar.number_input(
-    "Choc de volatilite en points",
-    value=15.0,
-    step=1.0,
-)
+    var_simulations = st.number_input(
+        "Nombre de simulations VaR",
+        min_value=100,
+        max_value=10000,
+        value=1000,
+        step=100,
+    )
 
+    probabilistic_horizon_label = st.selectbox(
+        "Horizon probabiliste",
+        options=[
+            "1 jour",
+            "1 semaine",
+            "1 mois",
+            "3 mois",
+            "6 mois",
+            "1 an",
+        ],
+        index=2,
+    )
 
-st.sidebar.header("VaR / Expected Shortfall")
+    probabilistic_horizon_days = {
+        "1 jour": 1,
+        "1 semaine": 5,
+        "1 mois": 21,
+        "3 mois": 63,
+        "6 mois": 126,
+        "1 an": 252,
+    }[probabilistic_horizon_label]
 
-var_confidence_percent = st.sidebar.selectbox(
-    "Niveau de confiance",
-    options=[95, 99],
-    index=0,
-)
+    probabilistic_simulations_count = st.selectbox(
+        "Simulations probabilistes",
+        options=[
+            1000,
+            5000,
+            10000,
+        ],
+        index=1,
+    )
 
-var_horizon_days = st.sidebar.number_input(
-    "Horizon en jours",
-    min_value=1,
-    value=1,
-    step=1,
-)
-
-var_simulations = st.sidebar.number_input(
-    "Nombre de simulations",
-    min_value=100,
-    max_value=10000,
-    value=1000,
-    step=100,
-)
-
-st.sidebar.header("Probabilistic Risk")
-
-probabilistic_horizon_label = st.sidebar.selectbox(
-    "Horizon probabiliste",
-    options=[
-        "1 jour",
-        "1 semaine",
-        "1 mois",
-        "3 mois",
-        "6 mois",
-        "1 an",
-    ],
-    index=2,
-)
-
-probabilistic_horizon_days = {
-    "1 jour": 1,
-    "1 semaine": 5,
-    "1 mois": 21,
-    "3 mois": 63,
-    "6 mois": 126,
-    "1 an": 252,
-}[probabilistic_horizon_label]
-
-probabilistic_simulations_count = st.sidebar.selectbox(
-    "Simulations probabilistes",
-    options=[
-        1000,
-        5000,
-        10000,
-    ],
-    index=1,
-)
-
-probabilistic_confidence_percent = st.sidebar.selectbox(
-    "Confiance probabiliste",
-    options=[
-        95,
-        99,
-    ],
-    index=0,
-)
-
-st.sidebar.header("LLM")
+    probabilistic_confidence_percent = st.selectbox(
+        "Confiance probabiliste",
+        options=[
+            95,
+            99,
+        ],
+        index=0,
+    )
 
 enable_llm_commentary = st.sidebar.checkbox(
     "Activer le commentaire LLM",
@@ -1593,6 +1608,69 @@ st.session_state.portfolio_data = normalize_portfolio_table(
     default_volatility_value=current_volatility,
 )
 
+render_section_title(
+    "Parcours guidé",
+    "Construisez un portefeuille en quelques étapes, puis lancez l'analyse ARIA.",
+)
+
+guided_col_1, guided_col_2, guided_col_3, guided_col_4 = st.columns(4)
+
+investor_profile = guided_col_1.selectbox(
+    "1. Profil investisseur",
+    ["Préservation du capital", "Équilibre", "Croissance"],
+    index=1,
+)
+
+investment_horizon = guided_col_2.selectbox(
+    "2. Horizon",
+    ["Court terme", "Moyen terme", "Long terme"],
+    index=2,
+)
+
+risk_profile = guided_col_3.selectbox(
+    "3. Risque accepté",
+    ["Prudent", "Équilibré", "Dynamique"],
+    index=1,
+)
+
+preferred_themes = guided_col_4.multiselect(
+    "4. Thèmes souhaités",
+    [
+        "Monde",
+        "États-Unis",
+        "Europe",
+        "Technologie",
+        "Santé",
+        "Dividendes",
+        "ESG",
+        "Inflation",
+        "Obligations",
+    ],
+    default=["Monde"],
+)
+
+guided_action_col_1, guided_action_col_2 = st.columns([1, 2])
+
+if guided_action_col_1.button(
+    "Créer un portefeuille adapté",
+    type="primary",
+    width="stretch",
+):
+    model_name = RISK_PROFILE_TO_MODEL[risk_profile]
+    st.session_state.portfolio_data = normalize_portfolio_table(
+        model_portfolio_to_dataframe(get_model_portfolio(model_name)),
+        default_spot_value=current_spot,
+        default_volatility_value=current_volatility,
+    )
+    if "portfolio_editor" in st.session_state:
+        del st.session_state["portfolio_editor"]
+    st.rerun()
+
+guided_action_col_2.info(
+    "ARIA vérifie automatiquement les poids, les doublons, les champs obligatoires "
+    "et la cohérence entre profil, horizon et composition."
+)
+
 
 render_section_title(
     "Portefeuille client",
@@ -1601,9 +1679,9 @@ render_section_title(
 
 manual_tab, demo_tab, ai_tab = st.tabs(
     [
-        "A. Modifier / importer",
-        "B. Portefeuilles de démonstration",
-        "C. Créer avec l'IA",
+        "Modifier le portefeuille",
+        "Charger une démonstration",
+        "Générer avec l'IA",
     ]
 )
 
@@ -1682,6 +1760,7 @@ with demo_tab:
     selected_demo_portfolio = st.selectbox(
         "Portefeuille de démonstration",
         options=get_demo_portfolio_names(),
+        format_func=lambda name: DEMO_PORTFOLIO_LABELS.get(name, name),
     )
 
     if selected_demo_portfolio in get_model_portfolio_names():
@@ -1732,57 +1811,61 @@ with ai_tab:
         ai_col_1, ai_col_2 = st.columns(2)
         horizon = ai_col_1.selectbox(
             "Horizon",
-            ["Long term", "Medium term", "Short term"],
+            ["Court terme", "Moyen terme", "Long terme"],
+            index=["Court terme", "Moyen terme", "Long terme"].index(
+                investment_horizon
+            ),
         )
         risk_level = ai_col_2.selectbox(
             "Niveau de risque",
-            ["Moderate", "Low", "High"],
+            ["Prudent", "Équilibré", "Dynamique"],
+            index=["Prudent", "Équilibré", "Dynamique"].index(risk_profile),
         )
         instruments = ai_col_1.multiselect(
-            "Instruments preferes",
-            ["ETF", "Stocks", "Bonds", "Commodities", "Options"],
-            default=["ETF", "Stocks", "Bonds"],
+            "Instruments préférés",
+            ["ETF", "Actions", "Obligations", "Matières premières", "Options"],
+            default=["ETF", "Actions", "Obligations"],
         )
         style = ai_col_2.selectbox(
             "Style",
             [
-                "Balanced",
-                "Growth",
-                "Defensive",
-                "Dividend",
+                "Équilibré",
+                "Croissance",
+                "Défensif",
+                "Dividendes",
                 "ESG",
-                "AI / Semiconductors",
-                "Inflation protection",
+                "IA / semi-conducteurs",
+                "Protection inflation",
             ],
         )
         geography = ai_col_1.selectbox(
-            "Zone geographique",
-            ["Global", "US", "Europe", "Emerging markets"],
+            "Zone géographique",
+            ["Monde", "États-Unis", "Europe", "Marchés émergents"],
         )
         simulated_amount = ai_col_2.number_input(
-            "Montant simule",
+            "Montant simulé",
             min_value=1_000,
             value=100_000,
             step=5_000,
         )
         preferred_sectors = st.text_input(
-            "Secteurs a privilegier",
-            value="technology, healthcare, quality equities",
+            "Secteurs à privilégier",
+            value=", ".join(preferred_themes),
         )
         avoided_sectors = st.text_input(
-            "Secteurs a eviter",
+            "Secteurs à éviter",
             value="",
         )
         included_names = st.text_input(
-            "Entreprises ou ETF a inclure si coherent",
+            "Entreprises ou ETF à inclure si cohérent",
             value="",
         )
         excluded_names = st.text_input(
-            "Entreprises ou ETF a exclure",
+            "Entreprises ou ETF à exclure",
             value="",
         )
         submitted_ai_portfolio = st.form_submit_button(
-            "Generer le portefeuille",
+            "Générer le portefeuille",
             width="stretch",
         )
 
@@ -1808,9 +1891,9 @@ with ai_tab:
     if "ai_portfolio_result" in st.session_state:
         ai_result = st.session_state.ai_portfolio_result
         st.success(
-            "Portefeuille genere avec le LLM."
+            "Portefeuille généré avec le LLM."
             if ai_result["used_llm"]
-            else "Portefeuille genere en mode structure local."
+            else "Portefeuille généré en mode structuré local."
         )
         st.write(ai_result["strategy"])
         if ai_result["warnings"]:
@@ -1940,14 +2023,39 @@ st.session_state.portfolio_data = normalize_portfolio_table(
 portfolio_validation_errors = validate_portfolio_table(
     st.session_state.portfolio_data
 )
+coherence_errors, coherence_warnings = validate_portfolio_coherence(
+    st.session_state.portfolio_data,
+    risk_profile=risk_profile,
+    horizon=investment_horizon,
+)
 
-if portfolio_validation_errors:
-    render_section_title(
-        "Validation du portefeuille",
-        "ARIA bloque les incohérences avant de lancer les calculs de risque.",
-    )
-    for validation_error in portfolio_validation_errors:
-        st.error(validation_error)
+blocking_validation_errors = portfolio_validation_errors + coherence_errors
+
+validation_col_1, validation_col_2, validation_col_3 = st.columns(3)
+portfolio_weight_total = pd.to_numeric(
+    st.session_state.portfolio_data["Weight"],
+    errors="coerce",
+).fillna(0).sum()
+validation_col_1.metric("Somme des poids", f"{portfolio_weight_total:.2f} %")
+validation_col_2.metric(
+    "Statut",
+    "Prêt" if not blocking_validation_errors else "À corriger",
+)
+validation_col_3.metric(
+    "Alertes",
+    len(coherence_warnings),
+)
+
+if blocking_validation_errors:
+    with st.expander("Corrections obligatoires avant analyse", expanded=True):
+        for validation_error in blocking_validation_errors:
+            st.error(validation_error)
+elif coherence_warnings:
+    with st.expander("Points d'attention non bloquants", expanded=False):
+        for warning in coherence_warnings:
+            st.warning(warning)
+else:
+    st.success("Portefeuille validé : poids, actifs et champs obligatoires sont cohérents.")
 
 render_section_title(
     "Diagnostic rapide du portefeuille",
@@ -2076,7 +2184,7 @@ auto_launch_analysis = bool(
 
 
 if analyse_button or auto_launch_analysis:
-    if portfolio_validation_errors:
+    if blocking_validation_errors:
         st.error(
             "Corrige les erreurs de portefeuille avant de lancer l'analyse ARIA."
         )

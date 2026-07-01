@@ -14,7 +14,9 @@ Projet développé par **Enrique Jara Ron**.
 
 ## Fonctionnalités principales
 
-- Page principale centrée sur le portefeuille client.
+- Page principale centrée sur un parcours guidé portefeuille client.
+- Parcours simple : profil investisseur, horizon, risque, thèmes souhaités,
+  création ou chargement du portefeuille, validation, analyse ARIA.
 - Import, modification, sauvegarde et chargement CSV.
 - Portefeuilles de démonstration professionnels prêts à analyser.
 - Générateur de portefeuille assisté par IA avec validation automatique.
@@ -168,6 +170,19 @@ ARIA_LLM_MODEL=gpt-5-mini
 
 Le commentaire LLM reste optionnel. Sans clé API, l'application continue de
 fonctionner avec les calculs ARIA et les commentaires locaux.
+
+## Utilisation rapide
+
+1. Choisir le profil investisseur, l'horizon, le niveau de risque et les thèmes.
+2. Cliquer sur **Créer un portefeuille adapté**, charger une démonstration ou
+   générer un portefeuille avec l'IA.
+3. Ajuster les actifs, poids, valeurs ou commentaires dans le tableau.
+4. Vérifier que la validation indique **Prêt** et que les poids totalisent 100 %.
+5. Cliquer sur **Lancer l'analyse ARIA**.
+
+Les paramètres avancés de marché, limites, stress tests, VaR et simulation
+probabiliste sont repliés dans la barre latérale afin de garder l'interface
+principale claire.
 
 ## Déploiement Streamlit Cloud
 

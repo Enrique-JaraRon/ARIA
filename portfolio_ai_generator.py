@@ -183,7 +183,14 @@ def fallback_portfolio(preferences: dict[str, Any]) -> dict[str, Any]:
     style = str(preferences.get("style", "")).lower()
     sectors = str(preferences.get("preferred_sectors", "")).lower()
 
-    if "ai" in sectors or "semi" in sectors or "tech" in style:
+    if (
+        "ai" in sectors
+        or "ia" in sectors
+        or "semi" in sectors
+        or "tech" in style
+        or "croissance" in style
+        or "dynamique" in risk_level
+    ):
         rows = [
             ("QQQ", "Nasdaq 100 ETF", 28, "Equity ETF", "Growth equities"),
             ("SMH", "VanEck Semiconductor ETF", 18, "Equity ETF", "Semiconductors"),
@@ -194,7 +201,14 @@ def fallback_portfolio(preferences: dict[str, Any]) -> dict[str, Any]:
             ("GLD", "SPDR Gold Shares", 6, "Commodity ETF", "Gold"),
         ]
         strategy = "Allocation croissance avec biais IA et semi-conducteurs."
-    elif "low" in risk_level or "faible" in risk_level or "defensive" in style:
+    elif (
+        "low" in risk_level
+        or "faible" in risk_level
+        or "prudent" in risk_level
+        or "defensive" in style
+        or "défensif" in style
+        or "defensif" in style
+    ):
         rows = [
             ("BND", "Vanguard Total Bond Market ETF", 32, "Bond ETF", "Core bonds"),
             ("SHV", "iShares Short Treasury Bond ETF", 18, "Cash/Bond ETF", "Cash"),
@@ -204,7 +218,7 @@ def fallback_portfolio(preferences: dict[str, Any]) -> dict[str, Any]:
             ("VTI", "Vanguard Total Stock Market ETF", 8, "Equity ETF", "US equities"),
         ]
         strategy = "Allocation défensive centrée sur la maîtrise du drawdown."
-    elif "esg" in style or "sustainable" in style:
+    elif "esg" in style or "sustainable" in style or "durable" in style:
         rows = [
             ("ESGU", "iShares ESG Aware MSCI USA ETF", 34, "Equity ETF", "US ESG"),
             ("ESGD", "iShares ESG Aware MSCI EAFE ETF", 18, "Equity ETF", "Developed ESG"),

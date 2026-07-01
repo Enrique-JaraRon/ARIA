@@ -10,6 +10,7 @@ from portfolio_analytics import (
     portfolio_diagnosis,
     portfolio_exposure_table,
     rebalancing_recommendations,
+    validate_portfolio_coherence,
     validate_portfolio_table,
 )
 
@@ -160,3 +161,40 @@ def test_rebalancing_recommendations_are_coherent():
     assert "Reduce" in recommendations["Action"].to_list()
     assert summary["target_model"] == "Conservative Balanced Portfolio"
     assert summary["target_diversification_score"] == target.diversification_score
+
+
+def test_portfolio_coherence_accepts_clean_model_portfolio():
+    model = get_model_portfolio("Conservative Balanced Portfolio")
+    data = model_portfolio_to_dataframe(model)
+
+    errors, warnings = validate_portfolio_coherence(
+        data,
+        risk_profile="Prudent",
+        horizon="Long terme",
+    )
+
+    assert errors == []
+    assert isinstance(warnings, list)
+
+
+def test_portfolio_coherence_rejects_invalid_weights():
+    data = pd.DataFrame(
+        [
+            {
+                "Asset type": "stock",
+                "Asset class": "Action",
+                "Ticker": "AAPL",
+                "Nom": "Apple",
+                "Sector": "Technologie",
+                "Currency": "USD",
+                "Weight": 40,
+                "Value": 40_000,
+                "Quantity": 100,
+                "Price": 400,
+            }
+        ]
+    )
+
+    errors, _ = validate_portfolio_coherence(data)
+
+    assert any("100 %" in error for error in errors)
