@@ -27,3 +27,6 @@ data/risk_history.csv
 
 # Notebooks éventuels
 .ipynb_checkpoints/
+
+# Fichiers temporaires locaux
+tmp/*.log

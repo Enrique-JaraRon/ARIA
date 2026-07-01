@@ -30,6 +30,7 @@ class LLMExplainer:
         risk_score_result=None,
         scenario_results=None,
         var_result=None,
+        probabilistic_result=None,
         hedge_result=None,
         market_snapshot=None,
         language: str = "fr"
@@ -106,6 +107,63 @@ class LLMExplainer:
                     f"- VaR : {var_result.var_amount:.2f}",
                     f"- Expected Shortfall : {var_result.expected_shortfall:.2f}",
                     f"- Pire perte simulée : {var_result.worst_loss:.2f}",
+                ]
+            )
+
+        if probabilistic_result is not None:
+            context_lines.extend(
+                [
+                    (
+                        "- Analyse probabiliste Monte Carlo : "
+                        f"{probabilistic_result.number_of_simulations} simulations, "
+                        f"horizon {probabilistic_result.horizon_days} jours"
+                    ),
+                    (
+                        "- Probabilite estimee de perte : "
+                        f"{probabilistic_result.probability_of_loss:.2%}"
+                    ),
+                    (
+                        "- Probabilite de perte > 5% : "
+                        f"{probabilistic_result.probability_loss_gt_5:.2%}"
+                    ),
+                    (
+                        "- Probabilite de perte > 10% : "
+                        f"{probabilistic_result.probability_loss_gt_10:.2%}"
+                    ),
+                    (
+                        "- Probabilite de perte > 20% : "
+                        f"{probabilistic_result.probability_loss_gt_20:.2%}"
+                    ),
+                    (
+                        "- Rendement moyen simule : "
+                        f"{probabilistic_result.mean_return:.2%}"
+                    ),
+                    (
+                        "- Volatilite simulee : "
+                        f"{probabilistic_result.simulated_volatility:.2%}"
+                    ),
+                    f"- VaR 95% probabiliste : {probabilistic_result.var_95:.2%}",
+                    (
+                        "- Expected Shortfall 95% probabiliste : "
+                        f"{probabilistic_result.expected_shortfall_95:.2%}"
+                    ),
+                    f"- VaR 99% probabiliste : {probabilistic_result.var_99:.2%}",
+                    (
+                        "- Expected Shortfall 99% probabiliste : "
+                        f"{probabilistic_result.expected_shortfall_99:.2%}"
+                    ),
+                    (
+                        "- Pire rendement simule : "
+                        f"{probabilistic_result.worst_return:.2%}"
+                    ),
+                    (
+                        "- Meilleur rendement simule : "
+                        f"{probabilistic_result.best_return:.2%}"
+                    ),
+                    (
+                        "- Principal moteur de risque probabiliste : "
+                        f"{probabilistic_result.main_risk_driver}"
+                    ),
                 ]
             )
 
@@ -218,6 +276,7 @@ Termine par un avertissement clair : ces pistes sont une aide a la decision de g
         risk_score_result=None,
         scenario_results=None,
         var_result=None,
+        probabilistic_result=None,
         hedge_result=None,
         market_snapshot=None,
         language: str = "fr"
@@ -230,6 +289,7 @@ Termine par un avertissement clair : ces pistes sont une aide a la decision de g
             risk_score_result=risk_score_result,
             scenario_results=scenario_results,
             var_result=var_result,
+            probabilistic_result=probabilistic_result,
             hedge_result=hedge_result,
             market_snapshot=market_snapshot,
             language=language

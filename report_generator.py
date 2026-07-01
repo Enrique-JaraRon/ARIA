@@ -415,6 +415,66 @@ def generate_var_section(
     )
 
 
+def generate_probabilistic_section(
+    probabilistic_result: Any | None
+) -> str:
+    """Generate the probabilistic risk analysis section."""
+
+    if probabilistic_result is None:
+        return ""
+
+    lines = [
+        "## Probabilistic Risk Analysis",
+        "",
+        "| Measure | Value |",
+        "|---|---:|",
+        f"| Horizon | {probabilistic_result.horizon_days} day(s) |",
+        f"| Simulations | {probabilistic_result.number_of_simulations} |",
+        f"| Probability of loss | {format_percent(probabilistic_result.probability_of_loss)} |",
+        f"| Probability of loss > 5% | {format_percent(probabilistic_result.probability_loss_gt_5)} |",
+        f"| Probability of loss > 10% | {format_percent(probabilistic_result.probability_loss_gt_10)} |",
+        f"| Probability of loss > 20% | {format_percent(probabilistic_result.probability_loss_gt_20)} |",
+        f"| Mean simulated return | {format_percent(probabilistic_result.mean_return)} |",
+        f"| Simulated volatility | {format_percent(probabilistic_result.simulated_volatility)} |",
+        f"| VaR 95% | {format_percent(probabilistic_result.var_95)} |",
+        f"| Expected Shortfall 95% | {format_percent(probabilistic_result.expected_shortfall_95)} |",
+        f"| VaR 99% | {format_percent(probabilistic_result.var_99)} |",
+        f"| Expected Shortfall 99% | {format_percent(probabilistic_result.expected_shortfall_99)} |",
+        f"| Worst simulated return | {format_percent(probabilistic_result.worst_return)} |",
+        f"| Best simulated return | {format_percent(probabilistic_result.best_return)} |",
+        f"| Main risk driver | {probabilistic_result.main_risk_driver} |",
+        "",
+        probabilistic_result.interpretation,
+        "",
+    ]
+
+    if probabilistic_result.top_contributors:
+        lines.extend(
+            [
+                "| Position | Underlying | Contribution | Share |",
+                "|---|---|---:|---:|",
+            ]
+        )
+        for contribution in probabilistic_result.top_contributors[:8]:
+            lines.append(
+                "| "
+                f"{contribution.name} | "
+                f"{contribution.underlying} | "
+                f"{format_number(contribution.downside_contribution)} | "
+                f"{format_percent(contribution.contribution_percent)} |"
+            )
+        lines.append("")
+
+    lines.append(
+        "The probabilities above are model outputs, not certain predictions."
+    )
+    lines.append("")
+
+    return "\n".join(
+        lines
+    )
+
+
 def generate_hedge_section(
     hedge_result: Any
 ) -> str:
@@ -649,6 +709,7 @@ def generate_risk_report(
     parametric_var: float,
     hedge_result: Any,
     risk_score_result: Any,
+    probabilistic_result: Any | None = None,
     market_snapshot: Any | None = None,
     llm_analysis: str | None = None
 ) -> str:
@@ -695,6 +756,9 @@ def generate_risk_report(
             var_result,
             parametric_var
         ),
+        generate_probabilistic_section(
+            probabilistic_result
+        ),
         generate_hedge_section(
             hedge_result
         ),
@@ -732,6 +796,7 @@ def generate_executive_risk_report(
     parametric_var: float,
     hedge_result: Any,
     risk_score_result: Any,
+    probabilistic_result: Any | None = None,
     market_snapshot: Any | None = None,
     llm_analysis: str | None = None
 ) -> str:
@@ -745,6 +810,7 @@ def generate_executive_risk_report(
         scenario_results=scenario_results,
         var_result=var_result,
         parametric_var=parametric_var,
+        probabilistic_result=probabilistic_result,
         hedge_result=hedge_result,
         risk_score_result=risk_score_result,
         market_snapshot=market_snapshot,
@@ -1271,7 +1337,8 @@ def _key_metric_rows(
     parametric_var: float,
     hedge_result: Any,
     risk_score_result: Any,
-    language: str
+    probabilistic_result: Any | None = None,
+    language: str = "fr"
 ) -> list[list[str]]:
     """Build appendix key metrics."""
 
@@ -1366,6 +1433,28 @@ def _key_metric_rows(
             [
                 "Pire stress" if language == "fr" else "Worst stress",
                 f"{worst_scenario.name}: {format_number(worst_scenario.profit_and_loss)}",
+            ]
+        )
+
+    if probabilistic_result is not None:
+        rows.extend(
+            [
+                [
+                    "Probabilite de perte" if language == "fr" else "Probability of loss",
+                    format_percent(
+                        probabilistic_result.probability_of_loss
+                    ),
+                ],
+                [
+                    "Perte > 10%" if language == "fr" else "Loss > 10%",
+                    format_percent(
+                        probabilistic_result.probability_loss_gt_10
+                    ),
+                ],
+                [
+                    "Moteur probabiliste" if language == "fr" else "Probabilistic driver",
+                    probabilistic_result.main_risk_driver,
+                ],
             ]
         )
 
@@ -1511,6 +1600,7 @@ def generate_professional_pdf_report(
     parametric_var: float,
     hedge_result: Any,
     risk_score_result: Any,
+    probabilistic_result: Any | None = None,
     market_snapshot: Any | None = None,
     llm_analysis: str | None = None,
     language: str = "fr",
@@ -1586,6 +1676,7 @@ def generate_professional_pdf_report(
                 parametric_var=parametric_var,
                 hedge_result=hedge_result,
                 risk_score_result=risk_score_result,
+                probabilistic_result=probabilistic_result,
                 language=language
             )[:8],
             widths=[
@@ -1782,6 +1873,108 @@ def generate_professional_pdf_report(
         )
     )
 
+    if probabilistic_result is not None:
+        _section(
+            story,
+            "Analyse probabiliste Monte Carlo" if language == "fr" else "Monte Carlo Probabilistic Analysis",
+            styles
+        )
+        story.append(
+            _table(
+                [
+                    [
+                        "Mesure" if language == "fr" else "Measure",
+                        "Valeur" if language == "fr" else "Value",
+                    ],
+                    [
+                        "Probabilite de perte" if language == "fr" else "Probability of loss",
+                        format_percent(
+                            probabilistic_result.probability_of_loss
+                        ),
+                    ],
+                    [
+                        "Probabilite perte > 10%" if language == "fr" else "Probability loss > 10%",
+                        format_percent(
+                            probabilistic_result.probability_loss_gt_10
+                        ),
+                    ],
+                    [
+                        "VaR 95%",
+                        format_percent(
+                            probabilistic_result.var_95
+                        ),
+                    ],
+                    [
+                        "Expected Shortfall 95%",
+                        format_percent(
+                            probabilistic_result.expected_shortfall_95
+                        ),
+                    ],
+                    [
+                        "Rendement moyen simule" if language == "fr" else "Mean simulated return",
+                        format_percent(
+                            probabilistic_result.mean_return
+                        ),
+                    ],
+                    [
+                        "Volatilite simulee" if language == "fr" else "Simulated volatility",
+                        format_percent(
+                            probabilistic_result.simulated_volatility
+                        ),
+                    ],
+                    [
+                        "Moteur principal" if language == "fr" else "Main risk driver",
+                        probabilistic_result.main_risk_driver,
+                    ],
+                ],
+                widths=[
+                    7.2 * cm,
+                    8.8 * cm
+                ],
+            )
+        )
+        story.append(
+            Spacer(
+                1,
+                8
+            )
+        )
+        story.append(
+            _p(
+                probabilistic_result.interpretation,
+                styles["callout"]
+            )
+        )
+
+        if probabilistic_result.top_contributors:
+            contribution_rows = [
+                [
+                    "Position",
+                    "Sous-jacent" if language == "fr" else "Underlying",
+                    "Part" if language == "fr" else "Share",
+                ]
+            ]
+            for contribution in probabilistic_result.top_contributors[:6]:
+                contribution_rows.append(
+                    [
+                        contribution.name,
+                        contribution.underlying,
+                        format_percent(
+                            contribution.contribution_percent
+                        ),
+                    ]
+                )
+            story.append(
+                _table(
+                    contribution_rows,
+                    widths=[
+                        7.2 * cm,
+                        4.0 * cm,
+                        4.8 * cm
+                    ],
+                )
+            )
+
     _section(
         story,
         "Greeks et couverture" if language == "fr" else "Greeks and Hedging",
@@ -1892,6 +2085,7 @@ def generate_professional_pdf_report(
                 parametric_var=parametric_var,
                 hedge_result=hedge_result,
                 risk_score_result=risk_score_result,
+                probabilistic_result=probabilistic_result,
                 language=language
             ),
             widths=[

@@ -2,14 +2,13 @@
 ARIA - Profil de P&L selon le niveau du spot
 """
 
+import os
 from dataclasses import dataclass
 
-import os
 import pandas as pd
 
 from portfolio import Portfolio
 from scenario_analysis import run_scenario
-
 
 print("PNL_PROFILE UTILISE =", os.path.abspath(__file__))
 print("VERSION TEST = PNL_PROFILE_CORRIGE_2026")

@@ -2,8 +2,8 @@
 ARIA - Application Streamlit
 """
 
-from pathlib import Path
 import unicodedata
+from pathlib import Path
 
 import altair as alt
 import pandas as pd
@@ -31,6 +31,11 @@ from pnl_profile import (
 )
 from portfolio import Portfolio
 from pricing_BS import OptionContract
+from probabilistic_risk import (
+    contribution_table,
+    probabilistic_metrics_table,
+    simulate_probabilistic_risk,
+)
 from report_generator import generate_professional_pdf_report, generate_risk_report
 from risk_history import RiskHistory
 from risk_score import calculate_risk_score
@@ -50,7 +55,6 @@ from ui_components import (
     render_status_pill,
 )
 from var_analysis import calculate_var_es, parametric_var_estimate
-
 
 st.set_page_config(
     page_title="ARIA Risk Agent",
@@ -604,6 +608,112 @@ def create_pnl_profile_chart(
     )
 
 
+def create_probabilistic_distribution_chart(
+    simulations_data: pd.DataFrame,
+    selected_var: float,
+    selected_es: float,
+) -> alt.Chart:
+    """Create the Monte Carlo return distribution chart."""
+
+    chart_data = simulations_data.copy()
+    chart_data["Portfolio return percent"] = chart_data["Portfolio return"] * 100
+    selected_var_percent = selected_var * 100
+    selected_es_percent = selected_es * 100
+
+    histogram = alt.Chart(chart_data).mark_bar(
+        color="#155E75",
+        opacity=0.82,
+    ).encode(
+        x=alt.X(
+            "Portfolio return percent:Q",
+            bin=alt.Bin(maxbins=55),
+            title="Rendement simulé du portefeuille (%)",
+        ),
+        y=alt.Y(
+            "count():Q",
+            title="Nombre de simulations",
+        ),
+        tooltip=[
+            alt.Tooltip("count():Q", title="Simulations"),
+        ],
+    )
+
+    thresholds = pd.DataFrame(
+        [
+            {
+                "Threshold": "VaR",
+                "Return": selected_var_percent,
+            },
+            {
+                "Threshold": "Expected Shortfall",
+                "Return": selected_es_percent,
+            },
+        ]
+    )
+
+    rules = alt.Chart(thresholds).mark_rule(
+        strokeWidth=2.5,
+    ).encode(
+        x="Return:Q",
+        color=alt.Color(
+            "Threshold:N",
+            scale=alt.Scale(
+                domain=[
+                    "VaR",
+                    "Expected Shortfall",
+                ],
+                range=[
+                    "#B91C1C",
+                    "#7C2D12",
+                ],
+            ),
+            legend=alt.Legend(
+                title=None,
+                orient="top",
+            ),
+        ),
+        tooltip=[
+            alt.Tooltip(
+                "Threshold:N",
+                title="Seuil",
+            ),
+            alt.Tooltip(
+                "Return:Q",
+                title="Rendement",
+                format=".2f",
+            ),
+        ],
+    )
+
+    return (
+        histogram + rules
+    ).properties(
+        height=340,
+        title=alt.TitleParams(
+            text="Distribution Monte Carlo des rendements",
+            subtitle="Chaque barre regroupe des scénarios simulés sur l'horizon sélectionné",
+            fontSize=20,
+            subtitleFontSize=13,
+            anchor="start",
+            offset=18,
+        ),
+    ).configure_view(
+        strokeWidth=0,
+    ).configure_axis(
+        labelColor="#475569",
+        titleColor="#334155",
+        gridColor="rgba(100, 116, 139, 0.18)",
+    ).configure_title(
+        color="#172033",
+        subtitleColor="#64748B",
+    ).configure_legend(
+        labelColor="#475569",
+        titleColor="#334155",
+    ).configure(
+        background="transparent",
+    )
+
+
 def create_greeks_profile_chart(
     greeks_data: pd.DataFrame,
     current_spot: float,
@@ -1051,6 +1161,49 @@ var_simulations = st.sidebar.number_input(
     step=100,
 )
 
+st.sidebar.header("Probabilistic Risk")
+
+probabilistic_horizon_label = st.sidebar.selectbox(
+    "Horizon probabiliste",
+    options=[
+        "1 jour",
+        "1 semaine",
+        "1 mois",
+        "3 mois",
+        "6 mois",
+        "1 an",
+    ],
+    index=2,
+)
+
+probabilistic_horizon_days = {
+    "1 jour": 1,
+    "1 semaine": 5,
+    "1 mois": 21,
+    "3 mois": 63,
+    "6 mois": 126,
+    "1 an": 252,
+}[probabilistic_horizon_label]
+
+probabilistic_simulations_count = st.sidebar.selectbox(
+    "Simulations probabilistes",
+    options=[
+        1000,
+        5000,
+        10000,
+    ],
+    index=1,
+)
+
+probabilistic_confidence_percent = st.sidebar.selectbox(
+    "Confiance probabiliste",
+    options=[
+        95,
+        99,
+    ],
+    index=0,
+)
+
 st.sidebar.header("LLM")
 
 enable_llm_commentary = st.sidebar.checkbox(
@@ -1298,6 +1451,13 @@ if analyse_button:
         horizon_days=var_horizon_days,
     )
 
+    probabilistic_result, probabilistic_simulations = simulate_probabilistic_risk(
+        portfolio=portfolio,
+        horizon_days=probabilistic_horizon_days,
+        number_of_simulations=probabilistic_simulations_count,
+        confidence_level=probabilistic_confidence_percent / 100,
+    )
+
     scenario_results = run_standard_scenarios(portfolio)
 
     scenario_results.extend(
@@ -1338,10 +1498,18 @@ if analyse_button:
     updated_history = clean_history_dataframe(updated_history)
     history_summary = get_history_summary(updated_history)
 
-    overview_tab, stress_tab, profiles_tab, history_tab, alerts_tab = st.tabs(
+    (
+        overview_tab,
+        stress_tab,
+        probabilistic_tab,
+        profiles_tab,
+        history_tab,
+        alerts_tab,
+    ) = st.tabs(
         [
             "Vue generale",
             "Stress tests",
+            "Probabilistic risk",
             "Profils de risque",
             "Historique",
             "Alertes & LLM",
@@ -1735,6 +1903,144 @@ if analyse_button:
                 width="stretch",
             )
 
+    with probabilistic_tab:
+        render_section_title(
+            "Probabilistic Risk Analysis",
+            "Probabilité de perte, VaR, Expected Shortfall et moteurs de risque par simulation Monte Carlo.",
+        )
+
+        selected_var = (
+            probabilistic_result.var_95
+            if probabilistic_confidence_percent == 95
+            else probabilistic_result.var_99
+        )
+        selected_es = (
+            probabilistic_result.expected_shortfall_95
+            if probabilistic_confidence_percent == 95
+            else probabilistic_result.expected_shortfall_99
+        )
+
+        prob_col_1, prob_col_2, prob_col_3, prob_col_4 = st.columns(4)
+
+        prob_col_1.metric(
+            "Probabilité de perte",
+            f"{probabilistic_result.probability_of_loss:.1%}",
+        )
+        prob_col_2.metric(
+            "Perte > 10%",
+            f"{probabilistic_result.probability_loss_gt_10:.1%}",
+        )
+        prob_col_3.metric(
+            f"VaR {probabilistic_confidence_percent}%",
+            f"{selected_var:.1%}",
+        )
+        prob_col_4.metric(
+            f"ES {probabilistic_confidence_percent}%",
+            f"{selected_es:.1%}",
+        )
+
+        prob_col_5, prob_col_6, prob_col_7, prob_col_8 = st.columns(4)
+
+        prob_col_5.metric(
+            "Rendement moyen simulé",
+            f"{probabilistic_result.mean_return:.1%}",
+        )
+        prob_col_6.metric(
+            "Volatilité simulée",
+            f"{probabilistic_result.simulated_volatility:.1%}",
+        )
+        prob_col_7.metric(
+            "Pire rendement",
+            f"{probabilistic_result.worst_return:.1%}",
+        )
+        prob_col_8.metric(
+            "Moteur principal",
+            probabilistic_result.main_risk_driver,
+        )
+
+        distribution_chart = create_probabilistic_distribution_chart(
+            simulations_data=probabilistic_simulations,
+            selected_var=selected_var,
+            selected_es=selected_es,
+        )
+        st.altair_chart(
+            distribution_chart,
+            width="stretch",
+        )
+
+        st.info(probabilistic_result.interpretation)
+
+        metrics_table = probabilistic_metrics_table(probabilistic_result)
+        metrics_display = metrics_table.copy()
+        metrics_display["Value"] = metrics_display.apply(
+            lambda row: (
+                f"{row['Value']:.2%}"
+                if row["Format"] == "percent"
+                else f"{row['Value']:,.2f}"
+            ),
+            axis=1,
+        )
+
+        st.dataframe(
+            metrics_display[
+                [
+                    "Metric",
+                    "Value",
+                ]
+            ],
+            hide_index=True,
+            width="stretch",
+        )
+
+        render_section_title(
+            "Positions les plus risquées",
+            "Contribution moyenne aux pertes dans les pires 5% des simulations.",
+        )
+
+        contributors = contribution_table(probabilistic_result).head(8)
+        if contributors.empty:
+            st.info("Aucun contributeur de risque significatif détecté.")
+        else:
+            st.dataframe(
+                contributors,
+                hide_index=True,
+                width="stretch",
+            )
+
+        render_section_title(
+            "Recommandations de risk management",
+            "Pistes prudentes à étudier, basées uniquement sur les résultats simulés.",
+        )
+
+        recommendation_lines = [
+            (
+                f"Surveiller en priorité {probabilistic_result.main_risk_driver}, "
+                "car cette ligne ressort comme le principal moteur de perte dans la queue de distribution."
+            ),
+            (
+                "Comparer la probabilité de perte et l'Expected Shortfall avec l'objectif du portefeuille "
+                "avant d'augmenter l'exposition."
+            ),
+            (
+                "Si la perte simulée semble trop élevée, étudier une réduction de concentration, "
+                "une couverture par options ou une baisse de l'exposition Delta/Vega."
+            ),
+            (
+                "Ces probabilités dépendent du modèle Monte Carlo, des volatilités et des corrélations; "
+                "elles ne sont pas des prédictions certaines."
+            ),
+        ]
+
+        for recommendation in recommendation_lines:
+            st.write(f"- {recommendation}")
+
+        with st.expander("Voir les simulations probabilistes"):
+            st.dataframe(
+                probabilistic_simulations,
+                hide_index=True,
+                width="stretch",
+            )
+
     with profiles_tab:
         render_section_title(
             "Profil de P&L",
@@ -1752,7 +2058,7 @@ if analyse_button:
         pnl_data = normalize_dataframe_columns(
             pnl_profile_to_dataframe(pnl_points)
         )
-        
+
         pnl_data = pnl_data.rename(
             columns={
                 "Spot stressé": "Spot stressé",
@@ -1764,10 +2070,6 @@ if analyse_button:
             }
         )
 
-        st.write(
-            "DEBUG colonnes pnl_data :",
-            pnl_data.columns.tolist()
-        )
         breakeven_spots = find_breakeven_spots(pnl_data)
 
         pnl_chart = create_pnl_profile_chart(
@@ -2011,6 +2313,7 @@ if analyse_button:
                     risk_score_result=risk_score_result,
                     scenario_results=scenario_results,
                     var_result=var_result,
+                    probabilistic_result=probabilistic_result,
                     hedge_result=hedge_result,
                     market_snapshot=market_snapshot,
                     language="fr",
@@ -2022,6 +2325,7 @@ if analyse_button:
                     risk_score_result=risk_score_result,
                     scenario_results=scenario_results,
                     var_result=var_result,
+                    probabilistic_result=probabilistic_result,
                     hedge_result=hedge_result,
                     market_snapshot=market_snapshot,
                     language="en",
@@ -2065,6 +2369,7 @@ if analyse_button:
             scenario_results=scenario_results,
             var_result=var_result,
             parametric_var=parametric_var,
+            probabilistic_result=probabilistic_result,
             hedge_result=hedge_result,
             risk_score_result=risk_score_result,
             market_snapshot=market_snapshot,
@@ -2079,6 +2384,7 @@ if analyse_button:
             scenario_results=scenario_results,
             var_result=var_result,
             parametric_var=parametric_var,
+            probabilistic_result=probabilistic_result,
             hedge_result=hedge_result,
             risk_score_result=risk_score_result,
             market_snapshot=market_snapshot,
@@ -2094,6 +2400,7 @@ if analyse_button:
             scenario_results=scenario_results,
             var_result=var_result,
             parametric_var=parametric_var,
+            probabilistic_result=probabilistic_result,
             hedge_result=hedge_result,
             risk_score_result=risk_score_result,
             market_snapshot=market_snapshot,

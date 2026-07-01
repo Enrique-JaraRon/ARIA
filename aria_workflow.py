@@ -85,6 +85,7 @@ def generate_llm_analysis(
     risk_score_result=None,
     scenario_results=None,
     var_result=None,
+    probabilistic_result=None,
     hedge_result=None,
     market_snapshot=None,
     language: str = "fr"
@@ -138,6 +139,7 @@ def generate_llm_analysis(
             risk_score_result=risk_score_result,
             scenario_results=scenario_results,
             var_result=var_result,
+            probabilistic_result=probabilistic_result,
             hedge_result=hedge_result,
             market_snapshot=market_snapshot,
             language=language
