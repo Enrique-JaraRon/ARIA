@@ -626,6 +626,11 @@ PROFESSIONAL_COLUMNS = [
     "Spot",
     "Volatilite",
     "Maturite",
+    "Position",
+    "Prime",
+    "Exposition notionnelle",
+    "Delta",
+    "Objectif option",
 ]
 
 
@@ -758,7 +763,7 @@ def validate_portfolio_table(table: pd.DataFrame) -> list[str]:
         )
 
         if not asset_type:
-            errors.append(f"Line {index + 1}: asset type is missing.")
+            errors.append(f"Ligne {index + 1} : type d'actif manquant.")
             continue
 
         ticker = str(_row_value(row, "Ticker", "Sous-jacent", default="")).strip()
@@ -766,19 +771,19 @@ def validate_portfolio_table(table: pd.DataFrame) -> list[str]:
         price = _row_value(row, "Price", "Spot")
 
         if not ticker:
-            errors.append(f"Line {index + 1}: ticker / underlying is missing.")
+            errors.append(f"Ligne {index + 1} : ticker ou sous-jacent manquant.")
 
         if quantity is None:
-            errors.append(f"Line {index + 1}: quantity is missing.")
+            errors.append(f"Ligne {index + 1} : quantité manquante.")
 
         if price is None or float(price) <= 0:
-            errors.append(f"Line {index + 1}: price must be positive.")
+            errors.append(f"Ligne {index + 1} : prix ou spot invalide.")
 
         if asset_type == "stock":
             continue
 
         if asset_type != "option":
-            errors.append(f"Line {index + 1}: asset type must be stock or option.")
+            errors.append(f"Ligne {index + 1} : type d'actif invalide.")
             continue
 
         option_type = str(_row_value(row, "Option type", "Type option", default="")).strip()
@@ -791,19 +796,19 @@ def validate_portfolio_table(table: pd.DataFrame) -> list[str]:
             "call",
             "put",
         }:
-            errors.append(f"Line {index + 1}: option type must be call or put.")
+            errors.append(f"Ligne {index + 1} : le type d'option doit être call ou put.")
 
         if strike is None or float(strike) <= 0:
-            errors.append(f"Line {index + 1}: strike must be positive for an option.")
+            errors.append(f"Ligne {index + 1} : strike obligatoire pour une option.")
 
         if maturity is None or float(maturity) <= 0:
-            errors.append(f"Line {index + 1}: maturity must be positive for an option.")
+            errors.append(f"Ligne {index + 1} : maturité obligatoire pour une option.")
 
         if volatility is None or float(volatility) <= 0:
-            errors.append(f"Line {index + 1}: volatility must be positive for an option.")
+            errors.append(f"Ligne {index + 1} : volatilité obligatoire pour une option.")
 
         if rate is None:
-            errors.append(f"Line {index + 1}: rate is required for an option.")
+            errors.append(f"Ligne {index + 1} : taux requis pour une option.")
 
     return errors
 

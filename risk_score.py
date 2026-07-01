@@ -164,7 +164,7 @@ def _greeks_penalty(
     return _clamp(penalty, 0, 22), drivers
 
 
-def _composition_penalty(
+def _composition_penalty_v2(
     portfolio: Portfolio,
 ) -> tuple[float, list[str]]:
     """Ajoute concentration, diversification et complexité instrumentale."""
@@ -236,6 +236,101 @@ def _composition_penalty(
     return _clamp(penalty, 0, 20), drivers
 
 
+def _composition_penalty(
+    portfolio: Portfolio,
+) -> tuple[float, list[str]]:
+    """Ajoute concentration, diversification, levier et complexite instrumentale."""
+
+    if not portfolio.positions:
+        return 0.0, ["Aucune position dans le portefeuille"]
+
+    market_values = [abs(position.market_value()) for position in portfolio.positions]
+    gross_value = sum(market_values)
+
+    if gross_value <= 0:
+        return 0.0, ["Valeur brute insuffisante pour mesurer la concentration"]
+
+    weights = [value / gross_value for value in market_values]
+    top_weight = max(weights)
+    underlyings = {
+        getattr(position, "underlying", getattr(position, "name", "Inconnu"))
+        for position in portfolio.positions
+    }
+    option_weight = sum(
+        value
+        for value, position in zip(market_values, portfolio.positions, strict=False)
+        if isinstance(position, OptionPosition)
+    ) / gross_value
+    stock_weight = sum(
+        value
+        for value, position in zip(market_values, portfolio.positions, strict=False)
+        if isinstance(position, StockPosition)
+    ) / gross_value
+    short_weight = sum(
+        value
+        for value, position in zip(market_values, portfolio.positions, strict=False)
+        if position.market_value() < 0
+    ) / gross_value
+    net_value = abs(portfolio.total_market_value())
+    leverage_ratio = gross_value / net_value if net_value > 0 else 1.0
+    short_maturity_weight = sum(
+        value
+        for value, position in zip(market_values, portfolio.positions, strict=False)
+        if isinstance(position, OptionPosition)
+        and position.quantity < 0
+        and position.contract.T <= 0.20
+    ) / gross_value
+    option_notional = sum(
+        abs(position.quantity) * position.multiplier * position.contract.S
+        for position in portfolio.positions
+        if isinstance(position, OptionPosition)
+    )
+    notional_ratio = option_notional / gross_value if gross_value > 0 else 0.0
+
+    penalty = 0.0
+    drivers = []
+
+    if top_weight > 0.45:
+        penalty += min((top_weight - 0.45) * 35, 12)
+        drivers.append(
+            f"Concentration elevee sur une position ({top_weight:.1%} de l'exposition brute)"
+        )
+
+    if len(underlyings) <= 2:
+        penalty += 6
+        drivers.append("Diversification limitee entre sous-jacents")
+    elif len(underlyings) >= 6:
+        penalty -= 2
+
+    if option_weight > 0.50:
+        penalty += 7
+        drivers.append("Poids important des options dans l'exposition brute")
+    elif 0.15 <= option_weight <= 0.35:
+        penalty += 3
+        drivers.append("Options presentes : verifier les strikes, maturites et sens")
+    elif stock_weight > 0.90 and len(underlyings) <= 3:
+        penalty += 4
+        drivers.append("Portefeuille actions concentre sur peu de sous-jacents")
+
+    if leverage_ratio > 1.30:
+        penalty += _clamp((leverage_ratio - 1.0) * 10, 0, 8)
+        drivers.append(f"Effet de levier brut estime a {leverage_ratio:.1f}x")
+
+    if short_weight > 0.20:
+        penalty += 4
+        drivers.append("Exposition vendeuse significative")
+
+    if short_maturity_weight > 0:
+        penalty += 3
+        drivers.append("Options vendues a maturite courte")
+
+    if notional_ratio > 2.0:
+        penalty += _clamp((notional_ratio - 2.0) * 3, 0, 7)
+        drivers.append("Exposition notionnelle optionnelle elevee")
+
+    return _clamp(penalty, 0, 28), drivers
+
+
 def calculate_risk_score(
     portfolio: Portfolio,
     alerts: list[Any],
@@ -265,7 +360,7 @@ def calculate_risk_score(
         scenario_results=scenario_results,
         portfolio_value=portfolio.total_market_value(),
     )
-    composition_score, composition_drivers = _composition_penalty(portfolio)
+    composition_score, composition_drivers = _composition_penalty_v2(portfolio)
 
     score = int(
         round(

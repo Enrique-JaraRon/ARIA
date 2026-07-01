@@ -69,3 +69,27 @@ def test_fallback_portfolio_is_diversified_and_loadable_in_aria_schema():
     assert {"Ticker", "Quantity", "Price", "Instrument"}.issubset(
         aria_table.columns
     )
+
+
+def test_fallback_portfolio_generates_real_option_rows_when_requested():
+    result = fallback_portfolio(
+        {
+            "risk_level": "Équilibré",
+            "objective": "Couverture",
+            "instruments": ["ETF", "Options"],
+        }
+    )
+
+    aria_table = generated_portfolio_to_aria_table(
+        result["portfolio"],
+        total_value=100_000,
+    )
+    option_rows = aria_table[aria_table["Asset type"] == "option"]
+
+    assert not option_rows.empty
+    assert set(option_rows["Option type"]).issubset({"call", "put"})
+    assert option_rows["Strike"].notna().all()
+    assert option_rows["Maturity"].notna().all()
+    assert option_rows["Prime"].notna().all()
+    assert option_rows["Position"].isin(["Long", "Short"]).all()
+    assert aria_table["Weight"].sum() == pytest.approx(100.0)

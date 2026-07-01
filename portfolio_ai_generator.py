@@ -21,11 +21,30 @@ REQUIRED_GENERATED_COLUMNS = [
     "sector",
 ]
 
+OPTION_GENERATED_COLUMNS = [
+    "instrument_type",
+    "underlying",
+    "option_type",
+    "position",
+    "spot",
+    "strike",
+    "maturity",
+    "premium",
+    "implied_volatility",
+    "contract_size",
+    "quantity",
+    "currency",
+    "notional_exposure",
+    "delta",
+    "option_objective",
+]
+
+GENERATED_COLUMNS = REQUIRED_GENERATED_COLUMNS + OPTION_GENERATED_COLUMNS + ["rationale"]
+
 DISCLAIMER = (
-    "Ce portefeuille est une simulation éducative générée à partir des "
-    "préférences indiquées. Il ne constitue pas un conseil en investissement. "
-    "Les performances passées ou estimées ne préjugent pas des performances "
-    "futures."
+    "Ce portefeuille est une simulation educative generee a partir des preferences "
+    "indiquees. Il ne constitue pas un conseil en investissement. Les performances "
+    "passees ou estimees ne prejugent pas des performances futures."
 )
 
 PRICE_FALLBACKS = {
@@ -68,6 +87,24 @@ PRICE_FALLBACKS = {
     "PG": 165.0,
 }
 
+GENERATED_COLUMN_ALIASES = {
+    "symbol": "ticker",
+    "underlying_ticker": "underlying",
+    "asset_type": "instrument_type",
+    "instrument": "instrument_type",
+    "type": "instrument_type",
+    "call_put": "option_type",
+    "option": "option_type",
+    "side": "position",
+    "sens": "position",
+    "objective": "option_objective",
+    "objectif": "option_objective",
+    "iv": "implied_volatility",
+    "volatility": "implied_volatility",
+    "contractsize": "contract_size",
+    "notional": "notional_exposure",
+}
+
 
 def _clean_ticker(value: Any) -> str:
     return str(value or "").strip().upper()
@@ -90,27 +127,105 @@ def _normalize_weight_series(weights: pd.Series) -> pd.Series:
     return numeric / total * 100.0
 
 
+def _wants_options(preferences: dict[str, Any]) -> bool:
+    text = " ".join(
+        [
+            str(preferences.get("instruments", "")),
+            str(preferences.get("free_prompt", "")),
+            str(preferences.get("style", "")),
+            str(preferences.get("objective", "")),
+        ]
+    ).lower()
+    return any(
+        keyword in text
+        for keyword in [
+            "option",
+            "options",
+            "call",
+            "put",
+            "couverture",
+            "hedge",
+            "protection",
+            "covered call",
+            "collar",
+        ]
+    )
+
+
+def _normalize_generated_column_names(portfolio_df: pd.DataFrame) -> pd.DataFrame:
+    data = portfolio_df.copy()
+    cleaned_columns = []
+    for column in data.columns:
+        clean = str(column).strip().lower().replace(" ", "_").replace("-", "_")
+        cleaned_columns.append(GENERATED_COLUMN_ALIASES.get(clean, clean))
+    data.columns = cleaned_columns
+    return data
+
+
+def _complete_option_fields(data: pd.DataFrame) -> pd.DataFrame:
+    option_mask = data["instrument_type"].eq("option")
+
+    for index, row in data.loc[option_mask].iterrows():
+        underlying = _clean_ticker(row.get("underlying") or row.get("ticker"))
+        spot = pd.to_numeric(row.get("spot"), errors="coerce")
+        if pd.isna(spot) or float(spot) <= 0:
+            spot = PRICE_FALLBACKS.get(underlying, 100.0)
+            data.loc[index, "spot"] = spot
+
+        option_type = str(row.get("option_type") or "").lower()
+        if option_type not in {"call", "put"}:
+            option_type = "put"
+            data.loc[index, "option_type"] = option_type
+
+        strike = pd.to_numeric(row.get("strike"), errors="coerce")
+        if pd.isna(strike) or float(strike) <= 0:
+            data.loc[index, "strike"] = round(
+                float(spot) * (0.95 if option_type == "put" else 1.05),
+                2,
+            )
+
+        maturity = pd.to_numeric(row.get("maturity"), errors="coerce")
+        if pd.isna(maturity) or float(maturity) <= 0:
+            data.loc[index, "maturity"] = 0.25
+
+        volatility = pd.to_numeric(row.get("implied_volatility"), errors="coerce")
+        if pd.isna(volatility) or float(volatility) <= 0:
+            data.loc[index, "implied_volatility"] = 0.24
+
+        contract_size = pd.to_numeric(row.get("contract_size"), errors="coerce")
+        if pd.isna(contract_size) or float(contract_size) <= 0:
+            data.loc[index, "contract_size"] = 100
+
+        premium = pd.to_numeric(row.get("premium"), errors="coerce")
+        if pd.isna(premium) or float(premium) <= 0:
+            data.loc[index, "premium"] = round(float(spot) * 0.018, 2)
+
+        if str(row.get("option_objective") or "").strip() == "":
+            data.loc[index, "option_objective"] = (
+                "Simulation d'option pour couverture ou rendement"
+            )
+
+    return data
+
+
 def validate_generated_portfolio(
     portfolio_df: pd.DataFrame,
 ) -> tuple[pd.DataFrame, list[str]]:
     """
     Validate and normalize a generated portfolio before loading it into ARIA.
-
-    The output uses lowercase advisory columns:
-    ticker, name, weight, asset_class, sector, rationale.
     """
 
     warnings = []
-    data = portfolio_df.copy()
-    data.columns = [str(column).strip().lower() for column in data.columns]
+    data = _normalize_generated_column_names(portfolio_df)
 
     for column in REQUIRED_GENERATED_COLUMNS:
         if column not in data.columns:
             data[column] = ""
             warnings.append(f"Colonne manquante remplie automatiquement : {column}")
 
-    if "rationale" not in data.columns:
-        data["rationale"] = ""
+    for column in OPTION_GENERATED_COLUMNS + ["rationale"]:
+        if column not in data.columns:
+            data[column] = ""
 
     data["ticker"] = data["ticker"].map(_clean_ticker)
     data = data[data["ticker"] != ""].copy()
@@ -118,7 +233,7 @@ def validate_generated_portfolio(
     if data.empty:
         data = fallback_portfolio({})["portfolio"]
         warnings.append(
-            "La génération était vide : ARIA a utilisé un portefeuille diversifié de secours."
+            "La generation etait vide : ARIA a utilise un portefeuille diversifie de secours."
         )
 
     data["weight"] = pd.to_numeric(
@@ -127,25 +242,81 @@ def validate_generated_portfolio(
     ).fillna(0.0)
 
     data["name"] = data["name"].fillna(data["ticker"])
-    data["asset_class"] = data["asset_class"].replace("", "Equity / ETF")
-    data["sector"] = data["sector"].replace("", "Diversified")
+    data["asset_class"] = data["asset_class"].replace("", "ETF / action")
+    data["sector"] = data["sector"].replace("", "Diversifie")
     data["rationale"] = data["rationale"].fillna("")
+    data["instrument_type"] = (
+        data["instrument_type"]
+        .fillna("")
+        .astype(str)
+        .str.lower()
+        .replace(
+            {
+                "": "stock",
+                "equity": "stock",
+                "action": "stock",
+                "etf": "stock",
+                "option": "option",
+                "options": "option",
+            }
+        )
+    )
+    data["underlying"] = data["underlying"].fillna("").astype(str)
+    data.loc[data["underlying"].str.strip().eq(""), "underlying"] = data.loc[
+        data["underlying"].str.strip().eq(""),
+        "ticker",
+    ]
+    data["option_type"] = data["option_type"].fillna("").astype(str).str.lower()
+    data["position"] = (
+        data["position"]
+        .fillna("long")
+        .astype(str)
+        .str.lower()
+        .replace(
+            {
+                "achete": "long",
+                "acheté": "long",
+                "achetee": "long",
+                "vendu": "short",
+                "vendue": "short",
+                "sell": "short",
+            }
+        )
+    )
+    data["currency"] = data["currency"].replace("", "USD").fillna("USD")
 
-    duplicated_tickers = data[data["ticker"].duplicated()]["ticker"].unique().tolist()
-    if duplicated_tickers:
+    identity_columns = [
+        "ticker",
+        "instrument_type",
+        "option_type",
+        "position",
+        "strike",
+        "maturity",
+    ]
+    duplicated_assets = data[data.duplicated(identity_columns)]["ticker"].unique().tolist()
+    if duplicated_assets:
         warnings.append(
-            "Tickers en double fusionnés : "
-            + ", ".join(sorted(duplicated_tickers))
+            "Tickers en double fusionnes : " + ", ".join(sorted(duplicated_assets))
         )
 
     data = (
-        data.groupby("ticker", as_index=False)
+        data.groupby(identity_columns, as_index=False, dropna=False)
         .agg(
             {
+                "underlying": "first",
                 "name": "first",
                 "weight": "sum",
                 "asset_class": "first",
                 "sector": "first",
+                "spot": "first",
+                "premium": "first",
+                "implied_volatility": "first",
+                "contract_size": "first",
+                "quantity": "first",
+                "currency": "first",
+                "notional_exposure": "first",
+                "delta": "first",
+                "option_objective": "first",
                 "rationale": "first",
             }
         )
@@ -154,9 +325,7 @@ def validate_generated_portfolio(
     )
 
     if float(data["weight"].max()) > 80.0:
-        warnings.append(
-            "Une position trop concentrée a été réduite pendant la validation."
-        )
+        warnings.append("Une position trop concentree a ete reduite pendant la validation.")
         excess_index = data["weight"].idxmax()
         excess = float(data.loc[excess_index, "weight"] - 45.0)
         data.loc[excess_index, "weight"] = 45.0
@@ -173,7 +342,146 @@ def validate_generated_portfolio(
             4,
         )
 
-    return data[REQUIRED_GENERATED_COLUMNS + ["rationale"]], warnings
+    data = _complete_option_fields(data)
+    return data[GENERATED_COLUMNS], warnings
+
+
+def _option_strategy_rows(preferences: dict[str, Any]) -> tuple[list[dict[str, Any]], str]:
+    risk_level = str(preferences.get("risk_level", "Equilibre")).lower()
+    objective = str(preferences.get("objective", "")).lower()
+    base_ticker = "SPY"
+    spot = PRICE_FALLBACKS[base_ticker]
+
+    if "agressif" in risk_level or "speculation" in objective:
+        return (
+            [
+                _generated_row("SPY", "SPDR S&P 500 ETF", 55, "ETF / action", "US equities"),
+                _generated_row("QQQ", "Nasdaq 100 ETF", 25, "ETF / action", "Growth equities"),
+                _generated_row(
+                    "SPY",
+                    "SPY call 3 mois 105%",
+                    12,
+                    "Option",
+                    "Index options",
+                    instrument_type="option",
+                    underlying=base_ticker,
+                    option_type="call",
+                    position="long",
+                    spot=spot,
+                    strike=spot * 1.05,
+                    maturity=0.25,
+                    premium=12.5,
+                    implied_volatility=0.26,
+                    contract_size=100,
+                    delta=0.52,
+                    option_objective="Participation haussiere avec risque limite a la prime",
+                ),
+                _generated_row(
+                    "SPY",
+                    "SPY put 3 mois 95%",
+                    8,
+                    "Option",
+                    "Index options",
+                    instrument_type="option",
+                    underlying=base_ticker,
+                    option_type="put",
+                    position="long",
+                    spot=spot,
+                    strike=spot * 0.95,
+                    maturity=0.25,
+                    premium=9.0,
+                    implied_volatility=0.28,
+                    contract_size=100,
+                    delta=-0.34,
+                    option_objective="Protection partielle en cas de baisse rapide",
+                ),
+            ],
+            "Portefeuille offensif avec options listees simulees : participation actions, calls achetes et puts de protection.",
+        )
+
+    return (
+        [
+            _generated_row("SPY", "SPDR S&P 500 ETF", 60, "ETF / action", "US equities"),
+            _generated_row("BND", "Vanguard Total Bond Market ETF", 20, "ETF / action", "Core bonds"),
+            _generated_row("GLD", "SPDR Gold Shares", 8, "ETF / action", "Gold"),
+            _generated_row(
+                "SPY",
+                "SPY put protecteur 3 mois 95%",
+                7,
+                "Option",
+                "Index options",
+                instrument_type="option",
+                underlying=base_ticker,
+                option_type="put",
+                position="long",
+                spot=spot,
+                strike=spot * 0.95,
+                maturity=0.25,
+                premium=9.0,
+                implied_volatility=0.25,
+                contract_size=100,
+                delta=-0.35,
+                option_objective="Protection contre une baisse marquee",
+            ),
+            _generated_row(
+                "SPY",
+                "SPY call couvert 3 mois 108%",
+                5,
+                "Option",
+                "Index options",
+                instrument_type="option",
+                underlying=base_ticker,
+                option_type="call",
+                position="short",
+                spot=spot,
+                strike=spot * 1.08,
+                maturity=0.25,
+                premium=7.0,
+                implied_volatility=0.23,
+                contract_size=100,
+                delta=0.28,
+                option_objective="Financement partiel de la protection via prime encaissee",
+            ),
+        ],
+        "Portefeuille couvert de type collar : exposition actions, poche defensive et options simulees avec hypotheses visibles.",
+    )
+
+
+def _generated_row(
+    ticker: str,
+    name: str,
+    weight: float,
+    asset_class: str,
+    sector: str,
+    **kwargs: Any,
+) -> dict[str, Any]:
+    row = {
+        "ticker": ticker,
+        "name": name,
+        "weight": weight,
+        "asset_class": asset_class,
+        "sector": sector,
+        "rationale": (
+            "Selectionne pour respecter le profil de risque tout en preservant la diversification."
+        ),
+        "instrument_type": "stock",
+        "underlying": ticker,
+        "option_type": "",
+        "position": "long",
+        "spot": PRICE_FALLBACKS.get(ticker, 100.0),
+        "strike": "",
+        "maturity": "",
+        "premium": "",
+        "implied_volatility": "",
+        "contract_size": 1,
+        "quantity": "",
+        "currency": "USD",
+        "notional_exposure": "",
+        "delta": "",
+        "option_objective": "",
+    }
+    row.update(kwargs)
+    return row
 
 
 def fallback_portfolio(preferences: dict[str, Any]) -> dict[str, Any]:
@@ -183,7 +491,9 @@ def fallback_portfolio(preferences: dict[str, Any]) -> dict[str, Any]:
     style = str(preferences.get("style", "")).lower()
     sectors = str(preferences.get("preferred_sectors", "")).lower()
 
-    if (
+    if _wants_options(preferences):
+        rows, strategy = _option_strategy_rows(preferences)
+    elif (
         "ai" in sectors
         or "ia" in sectors
         or "semi" in sectors
@@ -192,13 +502,13 @@ def fallback_portfolio(preferences: dict[str, Any]) -> dict[str, Any]:
         or "dynamique" in risk_level
     ):
         rows = [
-            ("QQQ", "Nasdaq 100 ETF", 28, "Equity ETF", "Growth equities"),
-            ("SMH", "VanEck Semiconductor ETF", 18, "Equity ETF", "Semiconductors"),
-            ("MSFT", "Microsoft", 10, "Stock", "Software"),
-            ("NVDA", "NVIDIA", 8, "Stock", "AI chips"),
-            ("VTI", "Vanguard Total Stock Market ETF", 18, "Equity ETF", "US equities"),
-            ("BND", "Vanguard Total Bond Market ETF", 12, "Bond ETF", "Core bonds"),
-            ("GLD", "SPDR Gold Shares", 6, "Commodity ETF", "Gold"),
+            _generated_row("QQQ", "Nasdaq 100 ETF", 28, "Equity ETF", "Growth equities"),
+            _generated_row("SMH", "VanEck Semiconductor ETF", 18, "Equity ETF", "Semiconductors"),
+            _generated_row("MSFT", "Microsoft", 10, "Stock", "Software"),
+            _generated_row("NVDA", "NVIDIA", 8, "Stock", "AI chips"),
+            _generated_row("VTI", "Vanguard Total Stock Market ETF", 18, "Equity ETF", "US equities"),
+            _generated_row("BND", "Vanguard Total Bond Market ETF", 12, "Bond ETF", "Core bonds"),
+            _generated_row("GLD", "SPDR Gold Shares", 6, "Commodity ETF", "Gold"),
         ]
         strategy = "Allocation croissance avec biais IA et semi-conducteurs."
     elif (
@@ -206,56 +516,39 @@ def fallback_portfolio(preferences: dict[str, Any]) -> dict[str, Any]:
         or "faible" in risk_level
         or "prudent" in risk_level
         or "defensive" in style
-        or "défensif" in style
         or "defensif" in style
     ):
         rows = [
-            ("BND", "Vanguard Total Bond Market ETF", 32, "Bond ETF", "Core bonds"),
-            ("SHV", "iShares Short Treasury Bond ETF", 18, "Cash/Bond ETF", "Cash"),
-            ("USMV", "iShares MSCI USA Min Vol ETF", 18, "Equity ETF", "Low volatility"),
-            ("VIG", "Vanguard Dividend Appreciation ETF", 12, "Equity ETF", "Dividend equities"),
-            ("GLD", "SPDR Gold Shares", 12, "Commodity ETF", "Gold"),
-            ("VTI", "Vanguard Total Stock Market ETF", 8, "Equity ETF", "US equities"),
+            _generated_row("BND", "Vanguard Total Bond Market ETF", 32, "Bond ETF", "Core bonds"),
+            _generated_row("SHV", "iShares Short Treasury Bond ETF", 18, "Cash/Bond ETF", "Cash"),
+            _generated_row("USMV", "iShares MSCI USA Min Vol ETF", 18, "Equity ETF", "Low volatility"),
+            _generated_row("VIG", "Vanguard Dividend Appreciation ETF", 12, "Equity ETF", "Dividend equities"),
+            _generated_row("GLD", "SPDR Gold Shares", 12, "Commodity ETF", "Gold"),
+            _generated_row("VTI", "Vanguard Total Stock Market ETF", 8, "Equity ETF", "US equities"),
         ]
-        strategy = "Allocation défensive centrée sur la maîtrise du drawdown."
+        strategy = "Allocation defensive centree sur la maitrise du drawdown."
     elif "esg" in style or "sustainable" in style or "durable" in style:
         rows = [
-            ("ESGU", "iShares ESG Aware MSCI USA ETF", 34, "Equity ETF", "US ESG"),
-            ("ESGD", "iShares ESG Aware MSCI EAFE ETF", 18, "Equity ETF", "Developed ESG"),
-            ("VTI", "Vanguard Total Stock Market ETF", 16, "Equity ETF", "US equities"),
-            ("BND", "Vanguard Total Bond Market ETF", 20, "Bond ETF", "Core bonds"),
-            ("ICLN", "iShares Global Clean Energy ETF", 6, "Equity ETF", "Clean energy"),
-            ("GLD", "SPDR Gold Shares", 6, "Commodity ETF", "Gold"),
+            _generated_row("ESGU", "iShares ESG Aware MSCI USA ETF", 34, "Equity ETF", "US ESG"),
+            _generated_row("ESGD", "iShares ESG Aware MSCI EAFE ETF", 18, "Equity ETF", "Developed ESG"),
+            _generated_row("VTI", "Vanguard Total Stock Market ETF", 16, "Equity ETF", "US equities"),
+            _generated_row("BND", "Vanguard Total Bond Market ETF", 20, "Bond ETF", "Core bonds"),
+            _generated_row("ICLN", "iShares Global Clean Energy ETF", 6, "Equity ETF", "Clean energy"),
+            _generated_row("GLD", "SPDR Gold Shares", 6, "Commodity ETF", "Gold"),
         ]
-        strategy = "Allocation ESG diversifiée avec une poche obligataire stabilisatrice."
+        strategy = "Allocation ESG diversifiee avec une poche obligataire stabilisatrice."
     else:
         rows = [
-            ("VT", "Vanguard Total World Stock ETF", 42, "Equity ETF", "Global equities"),
-            ("BND", "Vanguard Total Bond Market ETF", 24, "Bond ETF", "Core bonds"),
-            ("VTI", "Vanguard Total Stock Market ETF", 14, "Equity ETF", "US equities"),
-            ("VEA", "Vanguard Developed Markets ETF", 8, "Equity ETF", "Developed equities"),
-            ("GLD", "SPDR Gold Shares", 7, "Commodity ETF", "Gold"),
-            ("SHY", "iShares 1-3 Year Treasury Bond ETF", 5, "Cash/Bond ETF", "Short bonds"),
+            _generated_row("VT", "Vanguard Total World Stock ETF", 42, "Equity ETF", "Global equities"),
+            _generated_row("BND", "Vanguard Total Bond Market ETF", 24, "Bond ETF", "Core bonds"),
+            _generated_row("VTI", "Vanguard Total Stock Market ETF", 14, "Equity ETF", "US equities"),
+            _generated_row("VEA", "Vanguard Developed Markets ETF", 8, "Equity ETF", "Developed equities"),
+            _generated_row("GLD", "SPDR Gold Shares", 7, "Commodity ETF", "Gold"),
+            _generated_row("SHY", "iShares 1-3 Year Treasury Bond ETF", 5, "Cash/Bond ETF", "Short bonds"),
         ]
-        strategy = "Allocation mondiale équilibrée coeur-satellite."
+        strategy = "Allocation mondiale equilibree coeur-satellite."
 
-    portfolio = pd.DataFrame(
-        [
-            {
-                "ticker": ticker,
-                "name": name,
-                "weight": weight,
-                "asset_class": asset_class,
-                "sector": sector,
-                "rationale": (
-                    "Sélectionné pour respecter le profil de risque tout en "
-                    "préservant la diversification."
-                ),
-            }
-            for ticker, name, weight, asset_class, sector in rows
-        ]
-    )
-    portfolio, warnings = validate_generated_portfolio(portfolio)
+    portfolio, warnings = validate_generated_portfolio(pd.DataFrame(rows))
 
     return {
         "portfolio": portfolio,
@@ -264,8 +557,8 @@ def fallback_portfolio(preferences: dict[str, Any]) -> dict[str, Any]:
         "horizon": preferences.get("horizon", "Long term"),
         "strategy": strategy,
         "limits": [
-            "Les hypothèses du modèle sont simplifiées.",
-            "Les prix sont indicatifs lorsque la donnée de marché n'est pas disponible.",
+            "Les hypotheses du modele sont simplifiees.",
+            "Les prix et primes d'options sont indicatifs lorsque la donnee de marche n'est pas disponible.",
             "Aucun rendement n'est garanti.",
         ],
         "disclaimer": DISCLAIMER,
@@ -290,9 +583,6 @@ def _extract_json_payload(text: str) -> dict[str, Any]:
 def generate_ai_portfolio(preferences: dict[str, Any]) -> dict[str, Any]:
     """
     Generate a portfolio proposal with the configured LLM, then validate it.
-
-    Falls back to a deterministic portfolio when the API is not configured or
-    the LLM returns invalid data.
     """
 
     model = get_runtime_setting("ARIA_LLM_MODEL")
@@ -308,14 +598,16 @@ def generate_ai_portfolio(preferences: dict[str, Any]) -> dict[str, Any]:
         prompt = {
             "role": "user",
             "content": (
-                "Create an educational investment portfolio proposal for ARIA. "
-                "Réponds en français. Return only valid JSON with keys: "
-                "portfolio, risk_level, horizon, strategy, limits. portfolio "
-                "must be a list of objects with ticker, name, weight, "
-                "asset_class, sector, rationale. Rules: weights sum to 100, "
-                "no negative weights, no guaranteed returns, no personalized "
-                "financial advice, use liquid listed tickers or broad ETFs. "
-                "Preferences: "
+                "Tu es un assistant de construction de portefeuille pour ARIA. "
+                "Reponds uniquement en JSON valide avec les cles portfolio, risk_level, "
+                "horizon, strategy, limits. Chaque ligne portfolio doit contenir ticker, "
+                "name, weight, asset_class, sector, rationale. Si des options sont demandees, "
+                "ajoute de vraies lignes d'options avec instrument_type='option', underlying, "
+                "option_type call/put, position long/short, spot, strike, maturity, premium, "
+                "implied_volatility, contract_size, quantity si possible, currency, "
+                "notional_exposure, delta et option_objective. Regles: poids total 100, "
+                "pas de ticker vide, pas de doublon, instruments liquides, aucune promesse "
+                "de performance, conseil educatif seulement. Preferences: "
                 + json.dumps(preferences, ensure_ascii=True)
             ),
         }
@@ -341,7 +633,7 @@ def generate_ai_portfolio(preferences: dict[str, Any]) -> dict[str, Any]:
     except Exception as error:
         result = fallback_portfolio(preferences)
         result["warnings"].append(
-            f"Génération LLM indisponible, portefeuille de secours utilisé : {error}"
+            f"Generation LLM indisponible, portefeuille de secours utilise : {error}"
         )
         return result
 
@@ -357,8 +649,64 @@ def generated_portfolio_to_aria_table(
 
     for _, row in clean_df.iterrows():
         ticker = _clean_ticker(row["ticker"])
+        instrument_type = str(row.get("instrument_type") or "stock").lower()
+        currency = str(row.get("currency") or "USD").upper()
+        weight = float(row["weight"])
+        budget = total_value * weight / 100.0
+
+        if instrument_type == "option":
+            underlying = _clean_ticker(row.get("underlying") or ticker)
+            spot = float(pd.to_numeric(row.get("spot"), errors="coerce") or PRICE_FALLBACKS.get(underlying, 100.0))
+            premium = float(pd.to_numeric(row.get("premium"), errors="coerce") or max(spot * 0.018, 1.0))
+            contract_size = float(pd.to_numeric(row.get("contract_size"), errors="coerce") or 100.0)
+            quantity = pd.to_numeric(row.get("quantity"), errors="coerce")
+            if pd.isna(quantity) or float(quantity) == 0:
+                quantity = max(round(abs(budget) / max(premium * contract_size, 1.0), 0), 1)
+            if str(row.get("position") or "long").lower() == "short":
+                quantity = -abs(float(quantity))
+            else:
+                quantity = abs(float(quantity))
+            value = round(premium * quantity * contract_size, 2)
+            notional = round(abs(quantity) * spot * contract_size, 2)
+            rows.append(
+                {
+                    "Asset type": "option",
+                    "Asset class": "Option",
+                    "Ticker": underlying,
+                    "Sous-jacent": underlying,
+                    "Nom": row["name"],
+                    "Sector": row["sector"],
+                    "Currency": currency,
+                    "Weight": round(weight, 4),
+                    "Value": value,
+                    "Quantity": quantity,
+                    "Price": spot,
+                    "Data source": "IA ARIA - simulation options",
+                    "Commentaire": row["rationale"],
+                    "Option type": str(row.get("option_type") or "put").lower(),
+                    "Strike": round(float(row.get("strike")), 4),
+                    "Maturity": round(float(row.get("maturity")), 4),
+                    "Volatility": round(float(row.get("implied_volatility")), 4),
+                    "Rate": 0.05,
+                    "Contract size": contract_size,
+                    "Instrument": "Option",
+                    "Type option": str(row.get("option_type") or "put").lower(),
+                    "Quantite": quantity,
+                    "Multiplicateur": contract_size,
+                    "Spot": spot,
+                    "Volatilite": round(float(row.get("implied_volatility")), 4),
+                    "Maturite": round(float(row.get("maturity")), 4),
+                    "Position": "Short" if quantity < 0 else "Long",
+                    "Prime": premium,
+                    "Exposition notionnelle": notional,
+                    "Delta": row.get("delta"),
+                    "Objectif option": row.get("option_objective"),
+                }
+            )
+            continue
+
         price = PRICE_FALLBACKS.get(ticker, 100.0)
-        quantity = round(total_value * float(row["weight"]) / 100.0 / price, 4)
+        quantity = round(budget / price, 4)
         rows.append(
             {
                 "Asset type": "stock",
@@ -367,9 +715,9 @@ def generated_portfolio_to_aria_table(
                 "Sous-jacent": ticker,
                 "Nom": row["name"],
                 "Sector": row["sector"],
-                "Currency": "USD",
-                "Weight": round(float(row["weight"]), 4),
-                "Value": round(total_value * float(row["weight"]) / 100.0, 2),
+                "Currency": currency,
+                "Weight": round(weight, 4),
+                "Value": round(budget, 2),
                 "Quantity": quantity,
                 "Price": price,
                 "Data source": "IA ARIA",
@@ -387,6 +735,11 @@ def generated_portfolio_to_aria_table(
                 "Spot": price,
                 "Volatilite": None,
                 "Maturite": None,
+                "Position": "Long",
+                "Prime": None,
+                "Exposition notionnelle": round(abs(quantity) * price, 2),
+                "Delta": None,
+                "Objectif option": "",
             }
         )
 

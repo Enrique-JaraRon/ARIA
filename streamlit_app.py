@@ -103,15 +103,16 @@ PORTFOLIO_EDITOR_COLUMNS = [
 ]
 
 PORTFOLIO_OPTION_COLUMNS = [
-    "Ticker",
-    "Nom",
-    "Asset type",
     "Option type",
+    "Position",
     "Strike",
     "Maturity",
+    "Prime",
     "Volatility",
-    "Rate",
     "Contract size",
+    "Exposition notionnelle",
+    "Delta",
+    "Objectif option",
 ]
 
 PORTFOLIO_INTERNAL_COLUMNS = PROFESSIONAL_COLUMNS
@@ -1627,24 +1628,36 @@ investment_horizon = guided_col_2.selectbox(
     index=2,
 )
 
-risk_profile = guided_col_3.selectbox(
-    "3. Risque accepté",
+investment_objective = guided_col_3.selectbox(
+    "3. Objectif",
+    [
+        "Croissance",
+        "Préservation du capital",
+        "Couverture",
+    ],
+    index=0,
+)
+
+risk_profile = guided_col_4.selectbox(
+    "4. Risque accepté",
     ["Prudent", "Équilibré", "Dynamique"],
     index=1,
 )
 
-preferred_themes = guided_col_4.multiselect(
-    "4. Thèmes souhaités",
+guided_col_5, guided_col_6 = st.columns(2)
+
+allowed_asset_types = guided_col_5.multiselect(
+    "5. Types d'actifs autorisés",
+    ["ETF", "Actions", "Options"],
+    default=["ETF", "Actions"],
+)
+
+preferred_themes = guided_col_6.multiselect(
+    "6. Thèmes souhaités",
     [
         "Monde",
-        "États-Unis",
-        "Europe",
         "Technologie",
-        "Santé",
-        "Dividendes",
-        "ESG",
-        "Inflation",
-        "Obligations",
+        "Protection",
     ],
     default=["Monde"],
 )
@@ -1808,7 +1821,12 @@ with ai_tab:
     st.caption(AI_PORTFOLIO_DISCLAIMER)
 
     with st.form("ai_portfolio_form"):
-        ai_col_1, ai_col_2 = st.columns(2)
+        ai_mode = st.radio(
+            "Mode de génération",
+            ["Guidé", "Libre"],
+            horizontal=True,
+        )
+        ai_col_1, ai_col_2, ai_col_3 = st.columns(3)
         horizon = ai_col_1.selectbox(
             "Horizon",
             ["Court terme", "Moyen terme", "Long terme"],
@@ -1817,14 +1835,29 @@ with ai_tab:
             ),
         )
         risk_level = ai_col_2.selectbox(
-            "Niveau de risque",
+            "Profil de risque",
             ["Prudent", "Équilibré", "Dynamique"],
-            index=["Prudent", "Équilibré", "Dynamique"].index(risk_profile),
+            index=["Prudent", "Équilibré", "Dynamique"].index(
+                risk_profile
+            ),
+        )
+        objective = ai_col_3.selectbox(
+            "Objectif",
+            [
+                "Croissance",
+                "Préservation du capital",
+                "Couverture",
+            ],
+            index=[
+                "Croissance",
+                "Préservation du capital",
+                "Couverture",
+            ].index(investment_objective),
         )
         instruments = ai_col_1.multiselect(
-            "Instruments préférés",
-            ["ETF", "Actions", "Obligations", "Matières premières", "Options"],
-            default=["ETF", "Actions", "Obligations"],
+            "Classes d'actifs autorisées",
+            ["ETF", "Actions", "Options"],
+            default=allowed_asset_types,
         )
         style = ai_col_2.selectbox(
             "Style",
@@ -1832,37 +1865,63 @@ with ai_tab:
                 "Équilibré",
                 "Croissance",
                 "Défensif",
-                "Dividendes",
-                "ESG",
-                "IA / semi-conducteurs",
-                "Protection inflation",
             ],
         )
-        geography = ai_col_1.selectbox(
+        geography = ai_col_3.selectbox(
             "Zone géographique",
-            ["Monde", "États-Unis", "Europe", "Marchés émergents"],
+            ["Monde", "États-Unis", "Europe"],
         )
-        simulated_amount = ai_col_2.number_input(
+        amount_col, liquidity_col, drawdown_col = st.columns(3)
+        simulated_amount = amount_col.number_input(
             "Montant simulé",
             min_value=1_000,
             value=100_000,
             step=5_000,
         )
+        liquidity_need = liquidity_col.selectbox(
+            "Besoin de liquidité",
+            ["Faible", "Moyen", "Élevé"],
+            index=1,
+        )
+        drawdown_tolerance = drawdown_col.slider(
+            "Drawdown toléré (%)",
+            min_value=5,
+            max_value=60,
+            value=20,
+            step=5,
+        )
+        constraint_col_1, constraint_col_2 = st.columns(2)
+        max_line_weight = constraint_col_1.slider(
+            "Concentration max par ligne (%)",
+            min_value=5,
+            max_value=60,
+            value=25,
+            step=5,
+        )
+        max_sector_weight = constraint_col_2.slider(
+            "Exposition max par secteur (%)",
+            min_value=10,
+            max_value=80,
+            value=40,
+            step=5,
+        )
         preferred_sectors = st.text_input(
             "Secteurs à privilégier",
             value=", ".join(preferred_themes),
         )
-        avoided_sectors = st.text_input(
-            "Secteurs à éviter",
-            value="",
-        )
-        included_names = st.text_input(
-            "Entreprises ou ETF à inclure si cohérent",
-            value="",
-        )
-        excluded_names = st.text_input(
-            "Entreprises ou ETF à exclure",
-            value="",
+        avoided_sectors = st.text_input("Secteurs à éviter", value="")
+        included_names = st.text_input("Entreprises ou ETF à inclure si cohérent", value="")
+        excluded_names = st.text_input("Entreprises ou ETF à exclure", value="")
+        esg_constraints = st.checkbox("Appliquer une contrainte ESG", value=False)
+        free_prompt = st.text_area(
+            "Demande libre",
+            value=(
+                "Exemple : construire un portefeuille mondial avec ETF, obligations "
+                "et une protection par puts SPY."
+                if ai_mode == "Libre"
+                else ""
+            ),
+            disabled=ai_mode != "Libre",
         )
         submitted_ai_portfolio = st.form_submit_button(
             "Générer le portefeuille",
@@ -1872,16 +1931,25 @@ with ai_tab:
     if submitted_ai_portfolio:
         st.session_state.ai_portfolio_result = generate_ai_portfolio(
             {
-            "horizon": horizon,
-            "risk_level": risk_level,
+                "mode": ai_mode,
+                "objective": objective,
+                "horizon": horizon,
+                "risk_level": risk_level,
                 "instruments": instruments,
                 "style": style,
                 "geography": geography,
                 "simulated_amount": simulated_amount,
+                "currency": "USD",
                 "preferred_sectors": preferred_sectors,
                 "avoided_sectors": avoided_sectors,
                 "included_names": included_names,
                 "excluded_names": excluded_names,
+                "liquidity_need": liquidity_need,
+                "drawdown_tolerance": drawdown_tolerance,
+                "max_line_weight": max_line_weight,
+                "max_sector_weight": max_sector_weight,
+                "esg_constraints": esg_constraints,
+                "free_prompt": free_prompt,
             }
         )
         st.session_state.ai_portfolio_result["simulated_amount"] = float(
@@ -1906,11 +1974,41 @@ with ai_tab:
                 "weight": "Poids (%)",
                 "asset_class": "Classe d'actif",
                 "sector": "Secteur",
+                "instrument_type": "Instrument",
+                "option_type": "Type option",
+                "position": "Position",
+                "strike": "Strike",
+                "maturity": "Maturité",
+                "premium": "Prime",
+                "implied_volatility": "Volatilité implicite",
+                "option_objective": "Objectif option",
                 "rationale": "Justification",
             }
         )
+        visible_ai_columns = [
+            "Ticker",
+            "Nom",
+            "Poids (%)",
+            "Classe d'actif",
+            "Secteur",
+            "Justification",
+        ]
+        if "option" in ai_result["portfolio"]["instrument_type"].astype(str).str.lower().to_list():
+            visible_ai_columns = [
+                "Ticker",
+                "Nom",
+                "Instrument",
+                "Type option",
+                "Position",
+                "Poids (%)",
+                "Strike",
+                "Maturité",
+                "Prime",
+                "Volatilité implicite",
+                "Objectif option",
+            ]
         st.dataframe(
-            ai_display,
+            ai_display.reindex(columns=visible_ai_columns),
             hide_index=True,
             width="stretch",
         )
@@ -1958,9 +2056,31 @@ with ai_tab:
 
             st.rerun()
 
-editor_data = st.session_state.portfolio_data.reindex(
-    columns=PORTFOLIO_EDITOR_COLUMNS
+portfolio_contains_options = (
+    st.session_state.portfolio_data.get("Asset type", pd.Series(dtype=str))
+    .fillna("")
+    .astype(str)
+    .str.lower()
+    .eq("option")
+    .any()
 )
+editor_columns = PORTFOLIO_EDITOR_COLUMNS.copy()
+if portfolio_contains_options:
+    editor_columns = [
+        *PORTFOLIO_EDITOR_COLUMNS,
+        *[column for column in PORTFOLIO_OPTION_COLUMNS if column not in PORTFOLIO_EDITOR_COLUMNS],
+    ]
+
+editor_data = st.session_state.portfolio_data.reindex(
+    columns=editor_columns
+)
+for text_column in [
+    "Option type",
+    "Position",
+    "Objectif option",
+]:
+    if text_column in editor_data.columns:
+        editor_data[text_column] = editor_data[text_column].fillna("").astype(str)
 
 edited_portfolio = st.data_editor(
     editor_data,
@@ -1968,7 +2088,7 @@ edited_portfolio = st.data_editor(
     num_rows="dynamic",
     hide_index=True,
     width="stretch",
-    column_order=PORTFOLIO_EDITOR_COLUMNS,
+    column_order=editor_columns,
     column_config={
         "Ticker": st.column_config.TextColumn("Ticker"),
         "Nom": st.column_config.TextColumn("Nom"),
@@ -1983,7 +2103,6 @@ edited_portfolio = st.data_editor(
         ),
         "Value": st.column_config.NumberColumn(
             "Valeur",
-            min_value=0.0,
             step=100.0,
             format="%.2f",
         ),
@@ -2008,6 +2127,39 @@ edited_portfolio = st.data_editor(
             options=["stock", "option"],
             required=True,
         ),
+        "Option type": st.column_config.SelectboxColumn(
+            "Type d'option",
+            options=["", "call", "put"],
+        ),
+        "Position": st.column_config.SelectboxColumn(
+            "Position",
+            options=["", "Long", "Short"],
+        ),
+        "Strike": st.column_config.NumberColumn("Strike", min_value=0.01, step=1.0),
+        "Maturity": st.column_config.NumberColumn(
+            "Maturité en années",
+            min_value=0.01,
+            step=0.05,
+            format="%.4f",
+        ),
+        "Prime": st.column_config.NumberColumn("Prime", min_value=0.0, step=0.5),
+        "Volatility": st.column_config.NumberColumn(
+            "Volatilité implicite",
+            min_value=0.01,
+            step=0.01,
+            format="%.4f",
+        ),
+        "Contract size": st.column_config.NumberColumn(
+            "Taille contrat",
+            min_value=1,
+            step=1,
+        ),
+        "Exposition notionnelle": st.column_config.NumberColumn(
+            "Exposition notionnelle",
+            step=1000.0,
+        ),
+        "Delta": st.column_config.NumberColumn("Delta", step=0.05, format="%.4f"),
+        "Objectif option": st.column_config.TextColumn("Objectif option"),
     },
 )
 

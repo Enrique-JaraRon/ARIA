@@ -83,11 +83,11 @@ def test_option_validation_requires_option_fields():
 
     errors = validate_portfolio_table(data)
 
-    assert any("option type" in error for error in errors)
+    assert any("type d'option" in error for error in errors)
     assert any("strike" in error for error in errors)
-    assert any("maturity" in error for error in errors)
-    assert any("volatility" in error for error in errors)
-    assert any("rate" in error for error in errors)
+    assert any("maturité" in error for error in errors)
+    assert any("volatilité" in error for error in errors)
+    assert any("taux" in error for error in errors)
 
 
 def test_exposure_weights_sum_to_one():
