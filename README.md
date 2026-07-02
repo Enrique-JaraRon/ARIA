@@ -1,71 +1,55 @@
 # ARIA - Adaptive Risk Intelligence Agent
 
-ARIA est une application Streamlit d'analyse de portefeuille financier. Elle est
-concue pour une demonstration claire en entretien : construire ou charger un
-portefeuille, verifier sa coherence, lancer une analyse de risque, puis exporter
-un rapport.
+ARIA est une application Streamlit simple pour presenter une analyse de risque
+de portefeuille en entretien finance.
 
 Projet developpe par **Enrique Jara Ron**.
 
-> ARIA est un prototype educatif et professionnel. Les resultats ne constituent
-> pas un conseil en investissement. Les performances passees, simulees ou
-> estimees ne prejugent pas des performances futures.
+> Prototype educatif. Les resultats ne constituent pas un conseil en
+> investissement et ne garantissent aucune performance future.
 
-## Ce que fait l'application
+## Ce que fait ARIA
 
-- Edition d'un portefeuille client dans un tableau simple.
-- Chargement de quelques portefeuilles de demonstration pertinents.
-- Generation IA simplifiee avec horizon, risque, objectif, style et instruments.
-- Validation automatique des poids, tickers, valeurs, doublons et champs options.
-- Analyse ARIA : score de risque, stress tests, risque probabiliste, alertes et
-  rapport PDF.
-- Gestion des options quand elles sont utiles : call/put, long/short, strike,
-  maturite, prime, volatilite implicite et taille de contrat.
-- Fonctionnement local avec `.env` et Streamlit Cloud avec `st.secrets`.
+- Composer ou modifier un portefeuille actions / ETF / options.
+- Charger un portefeuille de demonstration propre.
+- Valider les champs essentiels avant analyse.
+- Lancer une analyse de risque lisible.
+- Consulter les resultats par onglets :
+  - Vue generale et score de risque ;
+  - Stress tests ;
+  - VaR / Expected Shortfall ;
+  - Sensibilites : P&L par rapport au spot et evolution des Greeks ;
+  - Risque probabiliste ;
+  - Alertes, commentaire LLM optionnel et rapport PDF.
 
-## Portefeuilles de demonstration conserves
+## Portefeuilles de demonstration
 
-La liste est volontairement courte pour garder une interface professionnelle :
+L'interface garde seulement quatre exemples utiles :
 
-- `Conservative Balanced Portfolio` : portefeuille defensif.
-- `Global Diversified Portfolio` : allocation mondiale diversifiee.
-- `Tech Growth Portfolio` : portefeuille croissance / technologie.
-- `Covered Call` : exemple simple avec options.
+- `Conservative Balanced Portfolio` ;
+- `Global Diversified Portfolio` ;
+- `Tech Growth Portfolio` ;
+- `Covered Call`.
 
-## Captures d'ecran
+## Captures
 
-### Portefeuille client
+### Portefeuille
 
-![Portefeuille client](screenshots/dashboard.png)
+![Portefeuille](screenshots/dashboard.png)
 
-### Generation IA
+### Analyse ARIA
 
-![Generation IA](screenshots/portfolio_analysis.png)
+![Analyse ARIA](screenshots/portfolio_analysis.png)
 
 ### Stress tests
 
 ![Stress tests](screenshots/stress_testing.png)
 
-### Rapport de risque
+### Rapport
 
-![Rapport de risque](screenshots/risk_report.png)
+![Rapport](screenshots/risk_report.png)
 
-## Generation IA
-
-La generation IA a ete simplifiee pour rester stable :
-
-- horizon : court, moyen ou long terme ;
-- risque : prudent, equilibre ou dynamique ;
-- objectif : croissance, preservation du capital ou couverture ;
-- instruments : ETF, actions ou options ;
-- style : equilibre, croissance ou defensif ;
-- zone geographique : monde, Etats-Unis ou Europe.
-
-Si le LLM n'est pas disponible ou ne renvoie pas un JSON exploitable, ARIA charge
-un portefeuille local coherent. L'utilisateur ne voit pas de message technique
-brut.
-
-## Installation locale
+## Installation
 
 ```powershell
 python -m venv .venv
@@ -74,21 +58,21 @@ python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-## Lancer l'application
+## Lancement
 
 ```powershell
 streamlit run streamlit_app.py
 ```
 
-Ou sur le port utilise en local :
+Ou :
 
 ```powershell
 streamlit run streamlit_app.py --server.port 8502
 ```
 
-## Variables d'environnement
+## API / LLM
 
-En local, copier `.env.example` vers `.env` :
+Le commentaire LLM est optionnel. En local, copier `.env.example` vers `.env` :
 
 ```powershell
 Copy-Item .env.example .env
@@ -101,12 +85,9 @@ OPENAI_API_KEY=sk-...
 ARIA_LLM_MODEL=gpt-5-mini
 ```
 
-Sans cle API, l'application reste utilisable avec le generateur local et les
-analyses quantitatives.
+Sans API, ARIA reste utilisable pour l'analyse quantitative.
 
 ## Streamlit Cloud
-
-Parametres recommandes :
 
 - Repository : `Enrique-JaraRon/ARIA`
 - Branch : `main`
@@ -119,18 +100,8 @@ OPENAI_API_KEY = "sk-..."
 ARIA_LLM_MODEL = "gpt-5-mini"
 ```
 
-Ne jamais envoyer `.env` sur GitHub. Le fichier est ignore par `.gitignore`.
-
-## Controle qualite
+## Qualite
 
 ```powershell
 .\.venv\Scripts\python.exe quality_check.py
-```
-
-Commandes separees :
-
-```powershell
-.\.venv\Scripts\python.exe -m ruff check .
-.\.venv\Scripts\python.exe -m pytest -v
-.\.venv\Scripts\python.exe project_diagnostics.py
 ```
