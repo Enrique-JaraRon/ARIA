@@ -46,9 +46,25 @@ L'interface garde seulement quatre exemples utiles :
 
 ![Stress tests](screenshots/stress_testing.png)
 
+### Matrice de stress
+
+![Matrice de stress](screenshots/risk_matrix.png)
+
 ### Rapport et anomalies
 
 ![Rapport](screenshots/risk_report.png)
+
+## Structure du projet
+
+```text
+app/                Interface, configuration, LLM et reporting
+portfolio_engine/   Portefeuilles, instruments, pricing Black-Scholes
+risk_engine/        Stress tests, VaR, Greeks, probabilités, score de risque
+tests/              Tests unitaires et contrôles quantitatifs
+tools/              Diagnostic et contrôle qualité
+scripts/            Scripts de lancement local
+screenshots/        Captures utilisées dans le README
+```
 
 ## Installation
 
@@ -104,5 +120,5 @@ ARIA_LLM_MODEL = "gpt-5-mini"
 ## Qualite
 
 ```powershell
-.\.venv\Scripts\python.exe quality_check.py
+.\.venv\Scripts\python.exe tools\quality_check.py
 ```

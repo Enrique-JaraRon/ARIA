@@ -8,8 +8,7 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 
-from anomaly_detector import AnomalyDetector, create_snapshot
-from app_config import (
+from app.app_config import (
     DEFAULT_MARKET_DATA_PATH,
     DEFAULT_PORTFOLIO_PATH,
     RISK_HISTORY_PATH,
@@ -17,21 +16,23 @@ from app_config import (
     relative_to_project,
     resolve_project_path,
 )
-from aria_workflow import generate_llm_analysis
-from demo_portfolios import (
+from app.aria_workflow import generate_llm_analysis
+from app.report_generator import generate_professional_pdf_report, generate_risk_report
+from app.ui_components import (
+    inject_custom_css,
+    render_header,
+    render_info_card,
+    render_metric_row,
+    render_risk_badge,
+    render_section_title,
+)
+from portfolio_engine.demo_portfolios import (
     create_demo_portfolio,
     portfolio_to_dataframe,
 )
-from greeks_profile import calculate_greeks_profile, greeks_profile_to_dataframe
-from hedging_analysis import calculate_delta_hedge
-from market_data import ManualMarketDataProvider, get_provider
-from pnl_profile import (
-    calculate_pnl_profile,
-    find_breakeven_spots,
-    pnl_profile_to_dataframe,
-)
-from portfolio import Portfolio
-from portfolio_analytics import (
+from portfolio_engine.market_data import ManualMarketDataProvider, get_provider
+from portfolio_engine.portfolio import Portfolio
+from portfolio_engine.portfolio_analytics import (
     PROFESSIONAL_COLUMNS,
     get_model_portfolio,
     get_model_portfolio_names,
@@ -40,30 +41,32 @@ from portfolio_analytics import (
     validate_portfolio_coherence,
     validate_portfolio_table,
 )
-from pricing_BS import OptionContract
-from probabilistic_risk import (
+from portfolio_engine.pricing_BS import OptionContract
+from risk_engine.anomaly_detector import AnomalyDetector, create_snapshot
+from risk_engine.greeks_profile import (
+    calculate_greeks_profile,
+    greeks_profile_to_dataframe,
+)
+from risk_engine.hedging_analysis import calculate_delta_hedge
+from risk_engine.pnl_profile import (
+    calculate_pnl_profile,
+    find_breakeven_spots,
+    pnl_profile_to_dataframe,
+)
+from risk_engine.probabilistic_risk import (
     contribution_table,
     probabilistic_metrics_table,
     simulate_probabilistic_risk,
 )
-from report_generator import generate_professional_pdf_report, generate_risk_report
-from risk_history import RiskHistory
-from risk_score import calculate_risk_score
-from risk_surface import calculate_risk_surface, surface_to_dataframe
-from scenario_analysis import (
+from risk_engine.risk_history import RiskHistory
+from risk_engine.risk_score import calculate_risk_score
+from risk_engine.risk_surface import calculate_risk_surface, surface_to_dataframe
+from risk_engine.scenario_analysis import (
     run_historical_scenarios,
     run_scenario,
     run_standard_scenarios,
 )
-from ui_components import (
-    inject_custom_css,
-    render_header,
-    render_info_card,
-    render_metric_row,
-    render_risk_badge,
-    render_section_title,
-)
-from var_analysis import calculate_var_es, parametric_var_estimate
+from risk_engine.var_analysis import calculate_var_es, parametric_var_estimate
 
 st.set_page_config(
     page_title="ARIA Risk Agent",
@@ -761,7 +764,7 @@ def build_portfolio_from_table(
 
 def create_stress_chart(scenario_results) -> alt.Chart:
     """Cree un graphique des profits et pertes par scenario."""
-    chart_data = pd.DataFrame(
+    full_data = pd.DataFrame(
         [
             {
                 "Scenario": result.name,
@@ -771,18 +774,32 @@ def create_stress_chart(scenario_results) -> alt.Chart:
             for result in scenario_results
         ]
     )
-    chart_data["Impact absolu"] = chart_data["Profit / Perte"].abs()
+    losses = full_data.nsmallest(
+        6,
+        "Profit / Perte",
+    )
+    gains = full_data.nlargest(
+        3,
+        "Profit / Perte",
+    )
     chart_data = (
-        chart_data.sort_values(
-            ["Impact absolu", "Profit / Perte"],
-            ascending=[False, True],
+        pd.concat(
+            [
+                losses,
+                gains,
+            ],
+            ignore_index=True,
         )
-        .head(9)
+        .drop_duplicates("Scenario")
         .sort_values("Profit / Perte")
+    )
+    max_abs_impact = max(
+        float(chart_data["Profit / Perte"].abs().max()),
+        1.0,
     )
     chart_data["Scenario court"] = chart_data["Scenario"].str.replace(
         "Global Financial Crisis",
-        "Crise financière 2008",
+        "Crise 2008",
         regex=False,
     )
     chart_data["Scenario court"] = chart_data["Scenario court"].str.replace(
@@ -791,10 +808,11 @@ def create_stress_chart(scenario_results) -> alt.Chart:
         regex=False,
     )
     chart_data["Scenario court"] = chart_data["Scenario court"].str.slice(0, 32)
+    chart_data["Zero"] = 0.0
 
-    bars = alt.Chart(chart_data).mark_bar(
-        cornerRadiusEnd=6,
-        size=24,
+    stems = alt.Chart(chart_data).mark_rule(
+        strokeWidth=2.5,
+        opacity=0.85,
     ).encode(
         y=alt.Y(
             "Scenario court:N",
@@ -807,6 +825,60 @@ def create_stress_chart(scenario_results) -> alt.Chart:
         x=alt.X(
             "Profit / Perte:Q",
             title="Profit / Perte du portefeuille",
+            stack=False,
+            scale=alt.Scale(
+                domain=[
+                    -max_abs_impact * 1.08,
+                    max_abs_impact * 1.08,
+                ],
+                nice=False,
+            ),
+        ),
+        x2="Zero:Q",
+        color=alt.Color(
+            "Resultat:N",
+            scale=alt.Scale(
+                domain=["Gain", "Perte"],
+                range=["#19A974", "#E05252"],
+            ),
+            legend=alt.Legend(
+                title=None,
+                orient="top",
+            ),
+        ),
+        tooltip=[
+            alt.Tooltip("Scenario:N", title="Scenario"),
+            alt.Tooltip(
+                "Profit / Perte:Q",
+                title="Profit / Perte",
+                format=",.2f",
+            ),
+        ],
+    )
+
+    points = alt.Chart(chart_data).mark_circle(
+        size=150,
+        stroke="#FFFFFF",
+        strokeWidth=1.5,
+    ).encode(
+        y=alt.Y(
+            "Scenario court:N",
+            sort=alt.SortField(
+                field="Profit / Perte",
+                order="ascending",
+            ),
+            title=None,
+        ),
+        x=alt.X(
+            "Profit / Perte:Q",
+            stack=False,
+            scale=alt.Scale(
+                domain=[
+                    -max_abs_impact * 1.08,
+                    max_abs_impact * 1.08,
+                ],
+                nice=False,
+            ),
         ),
         color=alt.Color(
             "Resultat:N",
@@ -838,14 +910,59 @@ def create_stress_chart(scenario_results) -> alt.Chart:
         x="x:Q",
     )
 
+    loss_labels = alt.Chart(
+        chart_data[chart_data["Profit / Perte"] < 0]
+    ).mark_text(
+        baseline="middle",
+        fontSize=12,
+        fontWeight="bold",
+        dx=-10,
+        align="right",
+    ).encode(
+        y=alt.Y(
+            "Scenario court:N",
+            sort=alt.SortField(
+                field="Profit / Perte",
+                order="ascending",
+            ),
+        ),
+        x=alt.X("Profit / Perte:Q", stack=False),
+        text=alt.Text("Profit / Perte:Q", format=",.0f"),
+        color=alt.value("#172033"),
+    )
+
+    gain_labels = alt.Chart(
+        chart_data[chart_data["Profit / Perte"] >= 0]
+    ).mark_text(
+        baseline="middle",
+        fontSize=12,
+        fontWeight="bold",
+        dx=10,
+        align="left",
+    ).encode(
+        y=alt.Y(
+            "Scenario court:N",
+            sort=alt.SortField(
+                field="Profit / Perte",
+                order="ascending",
+            ),
+        ),
+        x=alt.X("Profit / Perte:Q", stack=False),
+        text=alt.Text("Profit / Perte:Q", format=",.0f"),
+        color=alt.value("#172033"),
+    )
+
     return (
-        bars
+        stems
         + zero_line
+        + points
+        + loss_labels
+        + gain_labels
     ).properties(
-        height=max(320, len(chart_data) * 36),
+        height=max(340, len(chart_data) * 42),
         title=alt.TitleParams(
-            text="Scénarios les plus significatifs",
-            subtitle="Lecture ciblée sur les plus grands impacts. Le détail complet reste disponible dans le tableau.",
+            text="P&L par scénario de stress",
+            subtitle="Pires pertes et meilleurs gains, triés du plus défavorable au plus favorable.",
             fontSize=20,
             subtitleFontSize=13,
             anchor="start",
@@ -1068,43 +1185,56 @@ def create_stress_matrix_chart(surface_data: pd.DataFrame) -> alt.Chart:
     matrix_data["Choc volatilite"] = matrix_data["Variation volatilité"].map(
         lambda value: f"{value:+.0%}"
     )
+    matrix_data["P&L"] = matrix_data["Profit / Perte"].map(
+        lambda value: f"{value:,.0f}"
+    )
+    max_abs_pnl = max(
+        float(matrix_data["Profit / Perte"].abs().max()),
+        1.0,
+    )
 
-    return alt.Chart(matrix_data).mark_rect(
-        cornerRadius=4,
-    ).encode(
+    base = alt.Chart(matrix_data).encode(
         x=alt.X(
             "Choc spot:N",
             title="Choc spot",
             sort=[
-                "-20%",
                 "-15%",
-                "-10%",
-                "-5%",
+                "-8%",
                 "+0%",
-                "+5%",
-                "+10%",
+                "+8%",
                 "+15%",
-                "+20%",
             ],
+            axis=alt.Axis(labelAngle=0),
         ),
         y=alt.Y(
             "Choc volatilite:N",
             title="Choc volatilité",
             sort=[
                 "+20%",
-                "+15%",
                 "+10%",
-                "+5%",
                 "+0%",
-                "-5%",
                 "-10%",
             ],
         ),
+    )
+
+    heatmap = base.mark_rect(
+        cornerRadius=4,
+    ).encode(
         color=alt.Color(
             "Profit / Perte:Q",
-            title="P&L",
+            title="P&L estimé",
             scale=alt.Scale(
-                scheme="redyellowgreen",
+                domain=[
+                    -max_abs_pnl,
+                    0,
+                    max_abs_pnl,
+                ],
+                range=[
+                    "#B91C1C",
+                    "#FFF7CC",
+                    "#047857",
+                ],
             ),
         ),
         tooltip=[
@@ -1112,11 +1242,25 @@ def create_stress_matrix_chart(surface_data: pd.DataFrame) -> alt.Chart:
             alt.Tooltip("Choc volatilite:N", title="Choc volatilité"),
             alt.Tooltip("Profit / Perte:Q", title="Profit / Perte", format=",.2f"),
         ],
-    ).properties(
-        height=360,
+    )
+
+    labels = base.mark_text(
+        fontSize=12,
+        fontWeight="bold",
+    ).encode(
+        text="P&L:N",
+        color=alt.condition(
+            f"abs(datum['Profit / Perte']) > {max_abs_pnl * 0.62}",
+            alt.value("#FFFFFF"),
+            alt.value("#172033"),
+        ),
+    )
+
+    return (heatmap + labels).properties(
+        height=310,
         title=alt.TitleParams(
-            text="Matrice de stress Spot / Volatilité",
-            subtitle="Vert : gain potentiel. Rouge : perte potentielle.",
+            text="Matrice P&L Spot / Volatilité",
+            subtitle="Chaque cellule affiche le P&L estimé pour un choc spot-volatilité.",
             fontSize=20,
             subtitleFontSize=13,
             anchor="start",
@@ -1591,10 +1735,17 @@ with manual_tab:
     )
 
 with demo_tab:
+    if st.session_state.get("curated_demo_portfolio") not in {
+        None,
+        *CURATED_DEMO_PORTFOLIOS,
+    }:
+        del st.session_state["curated_demo_portfolio"]
+
     selected_demo_portfolio = st.selectbox(
         "Portefeuille de démonstration",
         options=CURATED_DEMO_PORTFOLIOS,
         format_func=lambda name: DEMO_PORTFOLIO_LABELS.get(name, name),
+        key="curated_demo_portfolio",
     )
 
     if selected_demo_portfolio in get_model_portfolio_names():
@@ -1618,6 +1769,9 @@ with demo_tab:
                 get_model_portfolio(selected_demo_portfolio)
             )
         else:
+            if selected_demo_portfolio not in CURATED_DEMO_PORTFOLIOS:
+                selected_demo_portfolio = "Low Risk Options Portfolio"
+
             demo_portfolio = create_demo_portfolio(
                 name=selected_demo_portfolio,
                 spot=current_spot,
@@ -1928,7 +2082,10 @@ if analyse_button or auto_launch_analysis:
             "Synthese du niveau de risque agrege par ARIA.",
         )
 
-        render_risk_badge(risk_score_result.label)
+        render_risk_badge(
+            risk_score_result.label,
+            label=risk_score_result.label,
+        )
 
         score_col_1, score_col_2 = st.columns([1, 3])
 
@@ -1950,10 +2107,9 @@ if analyse_button or auto_launch_analysis:
             else:
                 st.success(risk_score_result.explanation)
 
-        st.write("**Principaux facteurs de risque :**")
-
-        for driver in risk_score_result.main_drivers:
-            st.write(f"- {driver}")
+        with st.expander("Voir les principaux facteurs de risque", expanded=False):
+            for driver in risk_score_result.main_drivers:
+                st.caption(f"- {driver}")
 
         render_section_title(
             "Resume du portefeuille",
@@ -2079,23 +2235,16 @@ if analyse_button or auto_launch_analysis:
             surface_points = calculate_risk_surface(
                 portfolio=portfolio,
                 spot_changes=[
-                    -0.20,
                     -0.15,
-                    -0.10,
-                    -0.05,
+                    -0.075,
                     0.00,
-                    0.05,
-                    0.10,
+                    0.075,
                     0.15,
-                    0.20,
                 ],
                 volatility_changes=[
                     -0.10,
-                    -0.05,
                     0.00,
-                    0.05,
                     0.10,
-                    0.15,
                     0.20,
                 ],
             )
@@ -2471,15 +2620,23 @@ if analyse_button or auto_launch_analysis:
                 )
 
         else:
+            worst_scenario_for_commentary = min(
+                scenario_results,
+                key=lambda result: result.profit_and_loss,
+            )
             llm_analysis = (
-                "### Synthese ARIA\n\n"
-                "Le commentaire LLM est desactive pour cette analyse. "
-                "Les metriques quantitatives, alertes, stress tests, VaR "
-                "et recommandations de couverture restent disponibles. "
-                "Active le commentaire LLM dans la sidebar pour generer "
-                "une analyse narrative a partir des chiffres produits par ARIA, "
-                "avec des pistes pour reduire le risque et ameliorer le rendement "
-                "ajuste du risque."
+                "### Note exécutive ARIA\n\n"
+                f"Le portefeuille obtient un score de risque **{risk_score_result.score}/100 "
+                f"({risk_score_result.label})**. Le scénario le plus défavorable est "
+                f"**{worst_scenario_for_commentary.name}** avec un P&L estimé de "
+                f"**{worst_scenario_for_commentary.profit_and_loss:,.2f}**. "
+                f"La VaR ressort à **{var_result.var_amount:,.2f}** et l'Expected "
+                f"Shortfall à **{var_result.expected_shortfall:,.2f}**.\n\n"
+                "**Actions à étudier :** réduire les expositions qui dominent le stress, "
+                "contrôler Delta/Gamma/Vega contre les limites, et comparer le coût de "
+                "couverture au rendement encore conservé. Ces pistes sont une aide à la "
+                "décision de gestion du risque, pas une certitude de performance ni un "
+                "conseil financier personnalisé."
             )
 
             llm_analysis_en = (
@@ -2491,7 +2648,8 @@ if analyse_button or auto_launch_analysis:
                 "ideas to reduce risk and improve risk-adjusted return."
             )
 
-        st.markdown(llm_analysis)
+        with st.expander("Voir la note exécutive", expanded=True):
+            st.markdown(llm_analysis)
 
         st.divider()
 
@@ -2514,6 +2672,9 @@ if analyse_button or auto_launch_analysis:
             market_snapshot=market_snapshot,
             llm_analysis=llm_analysis,
         )
+
+        with st.expander("Aperçu du rapport exécutif", expanded=True):
+            st.markdown(report_text)
 
         report_pdf_fr = generate_professional_pdf_report(
             portfolio=portfolio,
