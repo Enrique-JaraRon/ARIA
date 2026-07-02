@@ -23,7 +23,7 @@ def test_validate_generated_portfolio_merges_duplicates_and_normalizes_weights()
             {
                 "ticker": "vti",
                 "name": "Duplicate VTI",
-                "weight": 10,
+                "weight": 30,
                 "asset_class": "Equity ETF",
                 "sector": "US equities",
             },
@@ -93,3 +93,41 @@ def test_fallback_portfolio_generates_real_option_rows_when_requested():
     assert option_rows["Prime"].notna().all()
     assert option_rows["Position"].isin(["Long", "Short"]).all()
     assert aria_table["Weight"].sum() == pytest.approx(100.0)
+
+
+def test_validate_generated_portfolio_accepts_numeric_option_fields():
+    raw = pd.DataFrame(
+        [
+            {
+                "ticker": "SPY",
+                "name": "SPY protective put",
+                "weight": 10,
+                "asset_class": "Option",
+                "sector": "Index options",
+                "instrument_type": "option",
+                "underlying": "SPY",
+                "option_type": "put",
+                "position": "long",
+                "spot": 500.0,
+                "strike": 475.0,
+                "maturity": 0.25,
+                "premium": 9.0,
+                "implied_volatility": 0.24,
+                "contract_size": 100,
+            },
+            {
+                "ticker": "BND",
+                "name": "Bond ETF",
+                "weight": 70,
+                "asset_class": "ETF / action",
+                "sector": "Core bonds",
+            },
+        ]
+    )
+
+    clean, warnings = validate_generated_portfolio(raw)
+
+    option_row = clean.loc[clean["instrument_type"] == "option"].iloc[0]
+    assert warnings == []
+    assert option_row["maturity"] == pytest.approx(0.25)
+    assert option_row["strike"] == pytest.approx(475.0)

@@ -360,15 +360,15 @@ def calculate_risk_score(
         scenario_results=scenario_results,
         portfolio_value=portfolio.total_market_value(),
     )
-    composition_score, composition_drivers = _composition_penalty_v2(portfolio)
+    composition_score, composition_drivers = _composition_penalty(portfolio)
 
     score = int(
         round(
             _clamp(
-                greeks_score
+                (greeks_score * 0.80)
                 + alert_score
-                + var_score
-                + stress_score
+                + (var_score * 0.70)
+                + (stress_score * 0.75)
                 + composition_score,
                 0,
                 100,

@@ -595,7 +595,7 @@ def create_crisis_sensitive_portfolio(
     return portfolio
 
 
-def get_demo_portfolio_names() -> list[str]:
+def get_all_demo_portfolio_names() -> list[str]:
     """Renvoie la liste des portefeuilles de démonstration disponibles."""
 
     option_books = [
@@ -615,6 +615,17 @@ def get_demo_portfolio_names() -> list[str]:
         name
         for name in get_model_portfolio_names()
         if name not in option_books
+    ]
+
+
+def get_demo_portfolio_names() -> list[str]:
+    """Renvoie les démonstrations conservées dans l'interface simplifiée."""
+
+    return [
+        "Conservative Balanced Portfolio",
+        "Global Diversified Portfolio",
+        "Tech Growth Portfolio",
+        "Covered Call",
     ]
 
 

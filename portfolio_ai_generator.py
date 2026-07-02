@@ -39,6 +39,18 @@ OPTION_GENERATED_COLUMNS = [
     "option_objective",
 ]
 
+NUMERIC_GENERATED_COLUMNS = [
+    "spot",
+    "strike",
+    "maturity",
+    "premium",
+    "implied_volatility",
+    "contract_size",
+    "quantity",
+    "notional_exposure",
+    "delta",
+]
+
 GENERATED_COLUMNS = REQUIRED_GENERATED_COLUMNS + OPTION_GENERATED_COLUMNS + ["rationale"]
 
 DISCLAIMER = (
@@ -131,7 +143,6 @@ def _wants_options(preferences: dict[str, Any]) -> bool:
     text = " ".join(
         [
             str(preferences.get("instruments", "")),
-            str(preferences.get("free_prompt", "")),
             str(preferences.get("style", "")),
             str(preferences.get("objective", "")),
         ]
@@ -162,17 +173,23 @@ def _normalize_generated_column_names(portfolio_df: pd.DataFrame) -> pd.DataFram
     return data
 
 
+def _safe_text(value: Any, default: str = "") -> str:
+    if pd.isna(value):
+        return default
+    return str(value)
+
+
 def _complete_option_fields(data: pd.DataFrame) -> pd.DataFrame:
     option_mask = data["instrument_type"].eq("option")
 
     for index, row in data.loc[option_mask].iterrows():
-        underlying = _clean_ticker(row.get("underlying") or row.get("ticker"))
+        underlying = _clean_ticker(_safe_text(row.get("underlying"), row.get("ticker")))
         spot = pd.to_numeric(row.get("spot"), errors="coerce")
         if pd.isna(spot) or float(spot) <= 0:
             spot = PRICE_FALLBACKS.get(underlying, 100.0)
             data.loc[index, "spot"] = spot
 
-        option_type = str(row.get("option_type") or "").lower()
+        option_type = _safe_text(row.get("option_type")).lower()
         if option_type not in {"call", "put"}:
             option_type = "put"
             data.loc[index, "option_type"] = option_type
@@ -200,7 +217,7 @@ def _complete_option_fields(data: pd.DataFrame) -> pd.DataFrame:
         if pd.isna(premium) or float(premium) <= 0:
             data.loc[index, "premium"] = round(float(spot) * 0.018, 2)
 
-        if str(row.get("option_objective") or "").strip() == "":
+        if _safe_text(row.get("option_objective")).strip() == "":
             data.loc[index, "option_objective"] = (
                 "Simulation d'option pour couverture ou rendement"
             )
@@ -225,7 +242,10 @@ def validate_generated_portfolio(
 
     for column in OPTION_GENERATED_COLUMNS + ["rationale"]:
         if column not in data.columns:
-            data[column] = ""
+            data[column] = pd.NA
+
+    for column in NUMERIC_GENERATED_COLUMNS:
+        data[column] = pd.to_numeric(data[column], errors="coerce")
 
     data["ticker"] = data["ticker"].map(_clean_ticker)
     data = data[data["ticker"] != ""].copy()
@@ -630,10 +650,10 @@ def generate_ai_portfolio(preferences: dict[str, Any]) -> dict[str, Any]:
             "used_llm": True,
         }
 
-    except Exception as error:
+    except Exception:
         result = fallback_portfolio(preferences)
         result["warnings"].append(
-            f"Generation LLM indisponible, portefeuille de secours utilise : {error}"
+            "Generation LLM indisponible, portefeuille local coherent utilise."
         )
         return result
 
