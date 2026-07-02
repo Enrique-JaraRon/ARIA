@@ -1471,7 +1471,7 @@ render_header(
         ),
     ),
     badge=tr("Plateforme de risk management", "Risk Management Platform"),
-    language=ui_language,
+    
 )
 
 
