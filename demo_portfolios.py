@@ -383,6 +383,69 @@ def create_covered_call(
     return portfolio
 
 
+def create_low_risk_options_portfolio(
+    spot: float = 500.0,
+    maturity: float = 0.50,
+    rate: float = 0.05,
+    volatility: float = 0.18,
+) -> Portfolio:
+    """Create a small, hedged options portfolio for low-risk demos."""
+
+    portfolio = Portfolio(
+        name="Low Risk Options Portfolio"
+    )
+
+    protective_put = create_put_option(
+        spot=spot,
+        strike=spot * 0.95,
+        maturity=maturity,
+        rate=rate,
+        volatility=volatility,
+    )
+    covered_call = create_call_option(
+        spot=spot,
+        strike=spot * 1.08,
+        maturity=maturity,
+        rate=rate,
+        volatility=volatility,
+    )
+
+    portfolio.add_stock(
+        spot=spot,
+        quantity=4,
+        name="SPY coeur couvert",
+        underlying="SPY",
+    )
+    portfolio.add_stock(
+        spot=100.0,
+        quantity=1,
+        name="AGG poche obligataire",
+        underlying="AGG",
+    )
+    portfolio.add_stock(
+        spot=190.0,
+        quantity=2,
+        name="GLD diversifiant or",
+        underlying="GLD",
+    )
+    portfolio.add_option(
+        contract=protective_put,
+        quantity=6,
+        multiplier=1,
+        name="Puts de protection longs",
+        underlying="SPY",
+    )
+    portfolio.add_option(
+        contract=covered_call,
+        quantity=-4,
+        multiplier=1,
+        name="Calls couverts vendus",
+        underlying="SPY",
+    )
+
+    return portfolio
+
+
 def create_tech_options_book(
     rate: float = 0.045,
     volatility: float = 0.28,
@@ -625,7 +688,7 @@ def get_demo_portfolio_names() -> list[str]:
         "Conservative Balanced Portfolio",
         "Global Diversified Portfolio",
         "Tech Growth Portfolio",
-        "Covered Call",
+        "Low Risk Options Portfolio",
     ]
 
 
@@ -708,6 +771,14 @@ def create_demo_portfolio(
             maturity=maturity,
             rate=rate,
             volatility=volatility,
+        )
+
+    if name == "Low Risk Options Portfolio":
+        return create_low_risk_options_portfolio(
+            spot=spot,
+            maturity=0.50,
+            rate=rate,
+            volatility=min(volatility, 0.18),
         )
 
     if name == "Tech Options Book":

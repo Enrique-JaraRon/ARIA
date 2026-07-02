@@ -11,16 +11,17 @@ Projet developpe par **Enrique Jara Ron**.
 ## Ce que fait ARIA
 
 - Composer ou modifier un portefeuille actions / ETF / options.
-- Charger un portefeuille de demonstration propre.
+- Charger un portefeuille de demonstration propre, dont un portefeuille
+  d'options defensif avec score de risque faible.
 - Valider les champs essentiels avant analyse.
 - Lancer une analyse de risque lisible.
 - Consulter les resultats par onglets :
   - Vue generale et score de risque ;
-  - Stress tests ;
+  - Stress tests avec synthese, matrice rouge/vert spot-volatilite et tableau complet ;
   - VaR / Expected Shortfall ;
   - Sensibilites : P&L par rapport au spot et evolution des Greeks ;
   - Risque probabiliste ;
-  - Alertes, commentaire LLM optionnel et rapport PDF.
+  - Alertes repliees dans un onglet Anomalies, commentaire LLM optionnel et rapport PDF.
 
 ## Portefeuilles de demonstration
 
@@ -29,7 +30,7 @@ L'interface garde seulement quatre exemples utiles :
 - `Conservative Balanced Portfolio` ;
 - `Global Diversified Portfolio` ;
 - `Tech Growth Portfolio` ;
-- `Covered Call`.
+- `Low Risk Options Portfolio`.
 
 ## Captures
 
@@ -45,7 +46,7 @@ L'interface garde seulement quatre exemples utiles :
 
 ![Stress tests](screenshots/stress_testing.png)
 
-### Rapport
+### Rapport et anomalies
 
 ![Rapport](screenshots/risk_report.png)
 

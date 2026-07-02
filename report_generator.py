@@ -720,65 +720,156 @@ def generate_risk_report(
     report_date = datetime.now().strftime(
         "%Y-%m-%d %H:%M:%S"
     )
+    portfolio_value = portfolio.total_market_value()
+    greeks = portfolio.total_greeks()
+    best_scenario, worst_scenario = _scenario_extremes(
+        scenario_results
+    )
+    drivers = risk_score_result.main_drivers[:4]
+    top_alerts = alerts[:3]
+
+    if risk_score_result.score >= 75:
+        executive_view = (
+            "Le portefeuille présente un risque élevé. La priorité est de réduire "
+            "les pertes extrêmes, la concentration et les sensibilités dominantes "
+            "avant d'augmenter l'exposition."
+        )
+    elif risk_score_result.score >= 50:
+        executive_view = (
+            "Le portefeuille est exploitable mais demande une surveillance active "
+            "des stress tests et des Greeks principaux."
+        )
+    elif risk_score_result.score >= 30:
+        executive_view = (
+            "Le portefeuille présente un risque intermédiaire. Les couvertures et "
+            "la diversification doivent être validées avant renforcement."
+        )
+    else:
+        executive_view = (
+            "Le portefeuille ressort comme défensif dans les hypothèses ARIA. "
+            "La priorité devient le contrôle du coût de couverture et du potentiel "
+            "de rendement conservé."
+        )
+
+    action_lines = []
+    if hedge_result.hedge_quantity != 0:
+        action_lines.append(
+            f"- Étudier une couverture delta indicative de {hedge_result.hedge_quantity:,.2f} unités de sous-jacent."
+        )
+    if worst_scenario is not None:
+        action_lines.append(
+            f"- Réduire ou couvrir les positions qui contribuent au scénario le plus défavorable : {worst_scenario.name}."
+        )
+    if drivers:
+        action_lines.append(
+            "- Traiter en priorité : " + "; ".join(drivers) + "."
+        )
+    if not action_lines:
+        action_lines.append(
+            "- Maintenir la discipline de suivi : VaR, stress tests, Greeks et concentration après chaque ajustement."
+        )
+
+    table_rows = [
+        ("Valeur du portefeuille", format_number(portfolio_value)),
+        ("Spot utilisé", format_number(spot)),
+        ("Volatilité utilisée", format_percent(volatility)),
+        ("Score ARIA", f"{risk_score_result.score}/100 - {risk_score_result.label}"),
+        ("Nombre d'alertes", str(len(alerts))),
+        ("Delta", format_number(greeks["delta"], 4)),
+        ("Gamma", format_number(greeks["gamma"], 6)),
+        ("Vega", format_number(greeks["vega"], 4)),
+        ("VaR", format_number(var_result.var_amount)),
+        ("Expected Shortfall", format_number(var_result.expected_shortfall)),
+        ("Pire perte simulée", format_number(var_result.worst_loss)),
+        ("VaR paramétrique", format_number(parametric_var)),
+    ]
+    if worst_scenario is not None:
+        table_rows.append(
+            (
+                f"Pire stress - {worst_scenario.name}",
+                format_number(worst_scenario.profit_and_loss),
+            )
+        )
+    if best_scenario is not None:
+        table_rows.append(
+            (
+                f"Meilleur stress - {best_scenario.name}",
+                format_number(best_scenario.profit_and_loss),
+            )
+        )
+    if probabilistic_result is not None:
+        table_rows.extend(
+            [
+                (
+                    "Probabilité de perte",
+                    format_percent(probabilistic_result.probability_of_loss),
+                ),
+                (
+                    "Probabilité perte > 10%",
+                    format_percent(probabilistic_result.probability_loss_gt_10),
+                ),
+                (
+                    "ES 95% probabiliste",
+                    format_percent(probabilistic_result.expected_shortfall_95),
+                ),
+            ]
+        )
 
     lines = [
-        "# ARIA Executive Risk Report",
+        "# ARIA - Rapport exécutif de risque",
         "",
-        f"Developed by: **{AUTHOR_NAME}**",
+        f"Préparé par : **{AUTHOR_NAME}**",
         "",
-        f"Generated at: **{report_date}**",
+        f"Généré le : **{report_date}**",
         "",
-        generate_executive_summary_section(
-            portfolio=portfolio,
-            spot=spot,
-            volatility=volatility,
-            alerts=alerts,
-            scenario_results=scenario_results,
-            var_result=var_result,
-            risk_score_result=risk_score_result
+        "## 1. Vue exécutive",
+        "",
+        executive_view,
+        "",
+        "## 2. Diagnostic de risque",
+        "",
+        f"- Score ARIA : **{risk_score_result.score}/100 - {risk_score_result.label}**.",
+        f"- VaR : **{format_number(var_result.var_amount)}** ; Expected Shortfall : **{format_number(var_result.expected_shortfall)}**.",
+        (
+            f"- Pire stress : **{worst_scenario.name}** pour **{format_number(worst_scenario.profit_and_loss)}**."
+            if worst_scenario is not None
+            else "- Pire stress : non disponible."
         ),
-        generate_market_section(
-            market_snapshot
+        "",
+        "## 3. Points clés",
+        "",
+        *[f"- {driver}" for driver in drivers],
+        *(
+            [f"- Alerte prioritaire : {alert.name} - {alert.message}" for alert in top_alerts]
+            if top_alerts
+            else ["- Aucune alerte quantitative prioritaire."]
         ),
-        generate_portfolio_overview_section(
-            portfolio
-        ),
-        generate_risk_score_section(
-            risk_score_result
-        ),
-        generate_greeks_section(
-            portfolio
-        ),
-        generate_stress_section(
-            scenario_results
-        ),
-        generate_var_section(
-            var_result,
-            parametric_var
-        ),
-        generate_probabilistic_section(
-            probabilistic_result
-        ),
-        generate_hedge_section(
-            hedge_result
-        ),
-        generate_key_risk_drivers_section(
-            risk_score_result=risk_score_result,
-            scenario_results=scenario_results,
-            var_result=var_result
-        ),
-        generate_alerts_section(
-            alerts
-        ),
-        generate_llm_section(
+        "",
+        "## 4. Recommandations à étudier",
+        "",
+        *action_lines,
+        "",
+        (
             llm_analysis
+            if llm_analysis
+            else "Commentaire LLM non activé. Les recommandations ci-dessus proviennent des métriques ARIA."
         ),
-        generate_limitations_section(),
-        generate_recommended_actions_section(
-            alerts=alerts,
-            risk_score_result=risk_score_result,
-            hedge_result=hedge_result
+        "",
+        "## 5. Avertissement",
+        "",
+        (
+            "Ces éléments sont une aide à la décision de gestion du risque. "
+            "Ils ne constituent pas une certitude de performance ni un conseil "
+            "financier personnalisé. Toute action doit être vérifiée avec les "
+            "hypothèses de marché, la liquidité et les contraintes réelles."
         ),
+        "",
+        "## Annexe - chiffres significatifs",
+        "",
+        "| Indicateur | Valeur |",
+        "|---|---:|",
+        *[f"| {name} | {value} |" for name, value in table_rows],
+        "",
     ]
 
     return "\n".join(

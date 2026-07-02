@@ -136,21 +136,15 @@ def test_generate_risk_report_contains_executive_sections():
     )
 
     expected_sections = [
-        "# ARIA Executive Risk Report",
-        "Developed by: **Enrique Jara Ron**",
-        "## Executive Summary",
-        "## Market Context",
-        "## Portfolio Overview",
-        "## Risk Score Interpretation",
-        "## Greeks Exposure",
-        "## Stress Test Analysis",
-        "## VaR / Expected Shortfall Analysis",
-        "## Delta Hedging Recommendation",
-        "## Key Risk Drivers",
-        "## Quantitative Alerts",
-        "## LLM Risk Commentary",
-        "## Limitations and Model Assumptions",
-        "## Recommended Next Actions",
+        "# ARIA - Rapport exécutif de risque",
+        "Préparé par : **Enrique Jara Ron**",
+        "## 1. Vue exécutive",
+        "## 2. Diagnostic de risque",
+        "## 3. Points clés",
+        "## 4. Recommandations à étudier",
+        "## 5. Avertissement",
+        "## Annexe - chiffres significatifs",
+        "| Indicateur | Valeur |",
     ]
 
     for section in expected_sections:
@@ -170,7 +164,7 @@ def test_generate_risk_report_can_include_llm_analysis():
         **inputs
     )
 
-    assert "## LLM Risk Commentary" in report
+    assert "## 4. Recommandations à étudier" in report
     assert llm_analysis in report
 
 

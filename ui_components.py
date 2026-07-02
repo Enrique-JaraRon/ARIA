@@ -6,6 +6,7 @@ quantitative modules. They render small, reusable HTML blocks through
 Streamlit and return the generated HTML to make them easy to test.
 """
 
+import unicodedata
 from html import escape
 
 import streamlit as st
@@ -35,6 +36,12 @@ RISK_STYLES = {
         "border": "#FF4D6D",
         "color": "#FFE4E6",
     },
+    "very_high": {
+        "label": "Risque très élevé",
+        "background": "rgba(220, 38, 38, 0.18)",
+        "border": "#DC2626",
+        "color": "#FEE2E2",
+    },
     "neutral": {
         "label": "Neutre",
         "background": "rgba(0, 213, 255, 0.12)",
@@ -60,7 +67,18 @@ def get_risk_style(level: str | None) -> dict[str, str]:
     if not level:
         return RISK_STYLES["neutral"]
 
-    normalized = level.strip().lower()
+    normalized = str(level).strip().lower()
+    normalized = (
+        normalized
+        .replace("ã©", "é")
+        .replace("ã¨", "è")
+        .replace("ã‰", "é")
+        .replace("ãª", "ê")
+    )
+    normalized = unicodedata.normalize("NFKD", normalized)
+    normalized = "".join(
+        char for char in normalized if not unicodedata.combining(char)
+    )
 
     if normalized in {
         "faible",
@@ -71,21 +89,24 @@ def get_risk_style(level: str | None) -> dict[str, str]:
 
     if normalized in {
         "modere",
-        "modéré",
         "moderate",
         "risque modere",
-        "risque modéré",
     }:
         return RISK_STYLES["moderate"]
 
     if normalized in {
         "eleve",
-        "élevé",
         "high",
         "risque eleve",
-        "risque élevé",
     }:
         return RISK_STYLES["high"]
+
+    if normalized in {
+        "tres eleve",
+        "very high",
+        "risque tres eleve",
+    }:
+        return RISK_STYLES["very_high"]
 
     if normalized in {
         "critique",

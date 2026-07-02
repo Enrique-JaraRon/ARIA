@@ -49,6 +49,7 @@ from probabilistic_risk import (
 from report_generator import generate_professional_pdf_report, generate_risk_report
 from risk_history import RiskHistory
 from risk_score import calculate_risk_score
+from risk_surface import calculate_risk_surface, surface_to_dataframe
 from scenario_analysis import (
     run_historical_scenarios,
     run_scenario,
@@ -116,13 +117,14 @@ DEMO_PORTFOLIO_LABELS = {
     "Global ETF Core Portfolio": "Portefeuille ETF mondial",
     "Inflation Protection Portfolio": "Portefeuille protection inflation",
     "Long-Term Compounders Portfolio": "Portefeuille long terme compounders",
+    "Low Risk Options Portfolio": "Portefeuille options faible risque",
 }
 
 CURATED_DEMO_PORTFOLIOS = [
     "Conservative Balanced Portfolio",
     "Global Diversified Portfolio",
     "Tech Growth Portfolio",
-    "Covered Call",
+    "Low Risk Options Portfolio",
 ]
 
 ensure_runtime_directories()
@@ -769,14 +771,37 @@ def create_stress_chart(scenario_results) -> alt.Chart:
             for result in scenario_results
         ]
     )
+    chart_data["Impact absolu"] = chart_data["Profit / Perte"].abs()
+    chart_data = (
+        chart_data.sort_values(
+            ["Impact absolu", "Profit / Perte"],
+            ascending=[False, True],
+        )
+        .head(9)
+        .sort_values("Profit / Perte")
+    )
+    chart_data["Scenario court"] = chart_data["Scenario"].str.replace(
+        "Global Financial Crisis",
+        "Crise financière 2008",
+        regex=False,
+    )
+    chart_data["Scenario court"] = chart_data["Scenario court"].str.replace(
+        "Japan / Yen Carry Unwind",
+        "Yen carry unwind",
+        regex=False,
+    )
+    chart_data["Scenario court"] = chart_data["Scenario court"].str.slice(0, 32)
 
     bars = alt.Chart(chart_data).mark_bar(
         cornerRadiusEnd=6,
-        size=32,
+        size=24,
     ).encode(
         y=alt.Y(
-            "Scenario:N",
-            sort=None,
+            "Scenario court:N",
+            sort=alt.SortField(
+                field="Profit / Perte",
+                order="ascending",
+            ),
             title=None,
         ),
         x=alt.X(
@@ -804,23 +829,6 @@ def create_stress_chart(scenario_results) -> alt.Chart:
         ],
     )
 
-    labels = alt.Chart(chart_data).mark_text(
-        align="left",
-        baseline="middle",
-        dx=6,
-        fontSize=13,
-        fontWeight="bold",
-    ).encode(
-        y=alt.Y("Scenario:N", sort=None),
-        x=alt.X("Profit / Perte:Q"),
-        text=alt.Text("Profit / Perte:Q", format=",.2f"),
-        color=alt.condition(
-            alt.datum["Profit / Perte"] >= 0,
-            alt.value("#117A55"),
-            alt.value("#B83A3A"),
-        ),
-    )
-
     zero_line = alt.Chart(
         pd.DataFrame({"x": [0]})
     ).mark_rule(
@@ -832,13 +840,12 @@ def create_stress_chart(scenario_results) -> alt.Chart:
 
     return (
         bars
-        + labels
         + zero_line
     ).properties(
-        height=360,
+        height=max(320, len(chart_data) * 36),
         title=alt.TitleParams(
-            text="Impact des scenarios sur le portefeuille",
-            subtitle="A droite : gain potentiel - A gauche : perte potentielle",
+            text="Scénarios les plus significatifs",
+            subtitle="Lecture ciblée sur les plus grands impacts. Le détail complet reste disponible dans le tableau.",
             fontSize=20,
             subtitleFontSize=13,
             anchor="start",
@@ -1043,6 +1050,84 @@ def create_var_distribution_chart(
         titleColor="#334155",
         gridColor="rgba(100, 116, 139, 0.18)",
         domainColor="rgba(0, 213, 255, 0.28)",
+    ).configure_title(
+        color="#172033",
+        subtitleColor="#64748B",
+    ).configure(
+        background="transparent",
+    )
+
+
+def create_stress_matrix_chart(surface_data: pd.DataFrame) -> alt.Chart:
+    """Cree une matrice rouge-vert des P&L spot / volatilite."""
+
+    matrix_data = surface_data.copy()
+    matrix_data["Choc spot"] = matrix_data["Variation spot"].map(
+        lambda value: f"{value:+.0%}"
+    )
+    matrix_data["Choc volatilite"] = matrix_data["Variation volatilité"].map(
+        lambda value: f"{value:+.0%}"
+    )
+
+    return alt.Chart(matrix_data).mark_rect(
+        cornerRadius=4,
+    ).encode(
+        x=alt.X(
+            "Choc spot:N",
+            title="Choc spot",
+            sort=[
+                "-20%",
+                "-15%",
+                "-10%",
+                "-5%",
+                "+0%",
+                "+5%",
+                "+10%",
+                "+15%",
+                "+20%",
+            ],
+        ),
+        y=alt.Y(
+            "Choc volatilite:N",
+            title="Choc volatilité",
+            sort=[
+                "+20%",
+                "+15%",
+                "+10%",
+                "+5%",
+                "+0%",
+                "-5%",
+                "-10%",
+            ],
+        ),
+        color=alt.Color(
+            "Profit / Perte:Q",
+            title="P&L",
+            scale=alt.Scale(
+                scheme="redyellowgreen",
+            ),
+        ),
+        tooltip=[
+            alt.Tooltip("Choc spot:N", title="Choc spot"),
+            alt.Tooltip("Choc volatilite:N", title="Choc volatilité"),
+            alt.Tooltip("Profit / Perte:Q", title="Profit / Perte", format=",.2f"),
+        ],
+    ).properties(
+        height=360,
+        title=alt.TitleParams(
+            text="Matrice de stress Spot / Volatilité",
+            subtitle="Vert : gain potentiel. Rouge : perte potentielle.",
+            fontSize=20,
+            subtitleFontSize=13,
+            anchor="start",
+            offset=20,
+        ),
+    ).configure_view(
+        strokeWidth=0,
+    ).configure_axis(
+        labelColor="#475569",
+        titleColor="#334155",
+        grid=False,
     ).configure_title(
         color="#172033",
         subtitleColor="#64748B",
@@ -1421,7 +1506,7 @@ st.session_state.portfolio_data = normalize_portfolio_table(
 
 render_section_title(
     "Portefeuille client",
-    "Modifiez le portefeuille, chargez une démonstration ou générez une allocation IA.",
+    "Modifiez le portefeuille ou chargez une démonstration prête pour l'analyse.",
 )
 
 investment_horizon = "Long terme"
@@ -1850,8 +1935,8 @@ if analyse_button or auto_launch_analysis:
         score_col_1.metric(
             "Score de risque",
             f"{risk_score_result.score}/100",
-            risk_score_result.label,
         )
+        score_col_1.caption(risk_score_result.label)
 
         with score_col_2:
             st.progress(risk_score_result.score / 100)
@@ -1943,13 +2028,6 @@ if analyse_button or auto_launch_analysis:
             f"{worst_scenario.profit_and_loss:+,.2f}",
         )
 
-        stress_chart = create_stress_chart(scenario_results)
-
-        st.altair_chart(
-            stress_chart,
-            width="stretch",
-        )
-
         scenario_table = pd.DataFrame(
             [
                 {
@@ -1969,21 +2047,89 @@ if analyse_button or auto_launch_analysis:
             ]
         )
 
-        with st.expander("Voir le detail complet des stress tests"):
-            st.dataframe(
-                scenario_table,
-                hide_index=True,
+        stress_summary_tab, stress_matrix_tab, stress_detail_tab = st.tabs(
+            [
+                "Synthèse scénarios",
+                "Matrice rouge/vert",
+                "Tableau complet",
+            ]
+        )
+
+        with stress_summary_tab:
+            stress_chart = create_stress_chart(scenario_results)
+
+            st.altair_chart(
+                stress_chart,
                 width="stretch",
             )
 
-        if worst_scenario.top_contributors:
-            render_section_title(
-                "Top contributeurs au pire stress",
-                "Positions qui expliquent le plus la perte du scenario le plus defavorable.",
+            if worst_scenario.top_contributors:
+                render_section_title(
+                    "Top contributeurs au pire stress",
+                    "Positions qui expliquent le plus la perte du scenario le plus defavorable.",
+                )
+
+                st.dataframe(
+                    pd.DataFrame(worst_scenario.top_contributors).head(8),
+                    hide_index=True,
+                    width="stretch",
+                )
+
+        with stress_matrix_tab:
+            surface_points = calculate_risk_surface(
+                portfolio=portfolio,
+                spot_changes=[
+                    -0.20,
+                    -0.15,
+                    -0.10,
+                    -0.05,
+                    0.00,
+                    0.05,
+                    0.10,
+                    0.15,
+                    0.20,
+                ],
+                volatility_changes=[
+                    -0.10,
+                    -0.05,
+                    0.00,
+                    0.05,
+                    0.10,
+                    0.15,
+                    0.20,
+                ],
+            )
+            surface_data = surface_to_dataframe(surface_points)
+
+            st.altair_chart(
+                create_stress_matrix_chart(surface_data),
+                width="stretch",
             )
 
+            with st.expander("Voir les valeurs de la matrice"):
+                matrix_table = surface_data.pivot_table(
+                    index="Variation volatilité",
+                    columns="Variation spot",
+                    values="Profit / Perte",
+                    aggfunc="sum",
+                ).sort_index(ascending=False)
+                matrix_table.index = [
+                    f"{index:+.0%}" for index in matrix_table.index
+                ]
+                matrix_table.columns = [
+                    f"{column:+.0%}" for column in matrix_table.columns
+                ]
+                st.dataframe(
+                    matrix_table.style.background_gradient(
+                        cmap="RdYlGn",
+                        axis=None,
+                    ).format("{:,.2f}"),
+                    width="stretch",
+                )
+
+        with stress_detail_tab:
             st.dataframe(
-                pd.DataFrame(worst_scenario.top_contributors).head(8),
+                scenario_table,
                 hide_index=True,
                 width="stretch",
             )
@@ -2256,34 +2402,35 @@ if analyse_button or auto_launch_analysis:
         else:
             st.warning(f"{len(alerts)} anomalie(s) detectee(s).")
 
-            for alert in alerts:
-                alert_text = (
-                    f"**{alert.name}** - "
-                    f"{alert.message}\n\n"
-                    f"Valeur actuelle : "
-                    f"`{alert.current_value:.6f}`"
-                )
-
-                if alert.reference_value is not None:
-                    alert_text += (
-                        "\n\nValeur de reference : "
-                        f"`{alert.reference_value:.6f}`"
+            with st.expander("Anomalies détectées", expanded=False):
+                for alert in alerts:
+                    alert_text = (
+                        f"**{alert.name}** - "
+                        f"{alert.message}\n\n"
+                        f"Valeur actuelle : "
+                        f"`{alert.current_value:.6f}`"
                     )
 
-                if alert.z_score is not None:
-                    alert_text += (
-                        f"\n\nZ-score : "
-                        f"`{alert.z_score:.2f}`"
-                    )
+                    if alert.reference_value is not None:
+                        alert_text += (
+                            "\n\nValeur de reference : "
+                            f"`{alert.reference_value:.6f}`"
+                        )
 
-                if alert.severity == "CRITIQUE":
-                    st.error(alert_text)
+                    if alert.z_score is not None:
+                        alert_text += (
+                            f"\n\nZ-score : "
+                            f"`{alert.z_score:.2f}`"
+                        )
 
-                elif alert.severity in {"ELEVEE", "ÉLEVÉE", "Ã‰LEVÃ‰E"}:
-                    st.warning(alert_text)
+                    if alert.severity == "CRITIQUE":
+                        st.error(alert_text)
 
-                else:
-                    st.info(alert_text)
+                    elif alert.severity in {"ELEVEE", "ÉLEVÉE", "Ã‰LEVÃ‰E"}:
+                        st.warning(alert_text)
+
+                    else:
+                        st.info(alert_text)
 
         st.divider()
 

@@ -288,18 +288,17 @@ Alertes détectées :
 Contexte de risque complémentaire :
 {extended_context}
 
-Réponds en français avec cette structure :
+Réponds comme une note courte de risk management institutionnelle,
+claire et présentable en entretien, inspirée d'une note Goldman Sachs /
+J.P. Morgan : sobre, structurée, concrète, sans texte inutile.
 
-1. Résumé exécutif
-2. Niveau de risque global
-3. Principaux facteurs de risque
-4. Lecture des Greeks
-5. Lecture des stress tests si les données sont disponibles
-6. Lecture VaR / Expected Shortfall si les données sont disponibles
-7. Plan d'action pour réduire le risque et optimiser le rendement ajusté du risque
-8. Couverture et arbitrages possibles à étudier
-9. Points à surveiller
-10. Limites du modèle
+Structure obligatoire :
+
+1. Vue exécutive
+2. Diagnostic de risque
+3. Actions recommandées à étudier
+4. Impact attendu et compromis
+5. Tableau final des chiffres significatifs
 
 Si une information numérique n'est pas fournie, indique qu'elle n'est pas disponible.
 Dans le plan d'action, sois concret :
@@ -313,6 +312,9 @@ Dans le plan d'action, sois concret :
 Précise que les couvertures proposées doivent être vérifiées avant toute décision.
 Ne recommande pas un achat ou une vente directionnelle speculative non justifiee par les chiffres fournis.
 Termine par un avertissement clair : ces pistes sont une aide a la decision de gestion du risque, pas une certitude de performance ni un conseil financier personnalise, et elles doivent etre verifiees avant toute decision.
+Le tableau final doit reprendre les chiffres disponibles les plus importants :
+valeur du portefeuille, score ARIA, pire stress, meilleur stress, VaR,
+Expected Shortfall, Delta, Gamma, Vega, probabilites de perte si disponibles.
 
 {language_instruction}
 """.strip()
