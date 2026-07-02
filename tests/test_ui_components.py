@@ -26,7 +26,7 @@ def test_get_risk_style_falls_back_to_neutral():
         "unknown"
     )
 
-    assert style["label"] == "Neutre"
+    assert style["label"] == "Non classé"
 
 
 def test_render_section_title_returns_html(monkeypatch):

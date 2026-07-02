@@ -1628,6 +1628,164 @@ def _market_rows(
     return rows
 
 
+def _build_executive_decision_rows(
+    scenario_results: list[Any],
+    var_result: Any,
+    risk_score_result: Any,
+    probabilistic_result: Any | None,
+    language: str
+) -> list[list[str]]:
+    """Build the opening decision table for the downloadable PDF."""
+
+    _, worst_scenario = _scenario_extremes(
+        scenario_results
+    )
+
+    if risk_score_result.score >= 75:
+        verdict = (
+            "Risque eleve: reduire ou couvrir avant d'ajouter du risque."
+            if language == "fr"
+            else "High risk: reduce or hedge before adding risk."
+        )
+    elif risk_score_result.score >= 50:
+        verdict = (
+            "Risque significatif: surveiller les stress et les sensibilites."
+            if language == "fr"
+            else "Material risk: monitor stress losses and sensitivities."
+        )
+    elif risk_score_result.score >= 30:
+        verdict = (
+            "Risque intermediaire: portefeuille exploitable avec discipline de suivi."
+            if language == "fr"
+            else "Intermediate risk: usable portfolio with disciplined monitoring."
+        )
+    else:
+        verdict = (
+            "Risque contenu: verifier surtout le cout de couverture et le rendement conserve."
+            if language == "fr"
+            else "Contained risk: mainly review hedging cost and retained return."
+        )
+
+    rows = [
+        [
+            "Point" if language == "fr" else "Item",
+            "Lecture" if language == "fr" else "Read",
+            "Action proposee" if language == "fr" else "Suggested action",
+        ],
+        [
+            "Score ARIA",
+            f"{risk_score_result.score}/100 - {risk_score_result.label}",
+            verdict,
+        ],
+        [
+            "VaR / ES",
+            (
+                f"VaR {format_number(var_result.var_amount)} ; "
+                f"ES {format_number(var_result.expected_shortfall)}"
+            ),
+            (
+                "Comparer au budget de perte et recalculer apres chaque ajustement."
+                if language == "fr"
+                else "Compare with the loss budget and recompute after each adjustment."
+            ),
+        ],
+    ]
+
+    if worst_scenario is not None:
+        rows.append(
+            [
+                "Pire stress" if language == "fr" else "Worst stress",
+                f"{worst_scenario.name}: {format_number(worst_scenario.profit_and_loss)}",
+                (
+                    "Identifier les lignes contributrices puis tester reduction, spread ou couverture."
+                    if language == "fr"
+                    else "Identify contributing lines, then test trimming, spreading or hedging."
+                ),
+            ]
+        )
+
+    if probabilistic_result is not None:
+        rows.append(
+            [
+                "Monte Carlo",
+                (
+                    f"Perte {format_percent(probabilistic_result.probability_of_loss)} ; "
+                    f"perte >10% {format_percent(probabilistic_result.probability_loss_gt_10)}"
+                ),
+                (
+                    "Prioriser le controle des pertes de queue et du moteur probabiliste principal."
+                    if language == "fr"
+                    else "Prioritize tail-loss control and the main probabilistic driver."
+                ),
+            ]
+        )
+
+    return rows
+
+
+def _portfolio_position_rows(
+    portfolio: Portfolio,
+    language: str
+) -> list[list[str]]:
+    """Build a compact PDF snapshot of the largest positions."""
+
+    gross_value = sum(
+        abs(
+            position.market_value()
+        )
+        for position in portfolio.positions
+    )
+    gross_value = max(
+        gross_value,
+        1.0
+    )
+
+    rows = [
+        [
+            "Position",
+            "Sous-jacent" if language == "fr" else "Underlying",
+            "Type",
+            "Quantite" if language == "fr" else "Quantity",
+            "Valeur" if language == "fr" else "Value",
+            "Poids brut" if language == "fr" else "Gross weight",
+        ]
+    ]
+
+    sorted_positions = sorted(
+        portfolio.positions,
+        key=lambda position: abs(
+            position.market_value()
+        ),
+        reverse=True,
+    )
+
+    for position in sorted_positions[:8]:
+        rows.append(
+            [
+                position.name,
+                position.underlying,
+                position.__class__.__name__.replace(
+                    "Position",
+                    ""
+                ),
+                format_number(
+                    position.quantity,
+                    2
+                ),
+                format_number(
+                    position.market_value()
+                ),
+                format_percent(
+                    abs(
+                        position.market_value()
+                    ) / gross_value
+                ),
+            ]
+        )
+
+    return rows
+
+
 def _draw_pdf_page(
     canvas,
     doc,
@@ -1711,7 +1869,7 @@ def generate_professional_pdf_report(
     styles = _pdf_styles()
     buffer = BytesIO()
     doc_title = (
-        "Rapport professionnel de risque ARIA"
+        "ARIA - Note professionnelle de risque"
         if language == "fr"
         else "ARIA Professional Risk Report"
     )
@@ -1785,11 +1943,13 @@ def generate_professional_pdf_report(
     story.append(
         _p(
             (
-                "Ce document presente une analyse de risque, des pistes d'ajustement chiffrees et les limites du modele. "
-                "Les actions indiquees sont des pistes de risk management a valider, pas une garantie de rendement."
+                "Document de synthese pour entretien et revue de risque: diagnostic, stress tests, VaR, Monte Carlo, "
+                "Greeks, actions concretes et annexe des chiffres a retenir. Les actions indiquees sont des pistes "
+                "de risk management a valider, pas une garantie de rendement."
                 if language == "fr"
-                else "This document presents risk analysis, quantified adjustment ideas and model limits. "
-                "The listed actions are risk-management ideas to validate, not a guarantee of performance."
+                else "Interview and risk-review memo: diagnosis, stress tests, VaR, Monte Carlo, Greeks, concrete "
+                "actions and appendix of key figures. The listed actions are risk-management ideas to validate, "
+                "not a guarantee of performance."
             ),
             styles["callout"]
         )
@@ -1797,7 +1957,47 @@ def generate_professional_pdf_report(
 
     _section(
         story,
-        "Analyse LLM et lecture executive" if language == "fr" else "LLM Analysis and Executive Read",
+        "Synthese decisionnelle" if language == "fr" else "Decision Summary",
+        styles
+    )
+    story.append(
+        _table(
+            _build_executive_decision_rows(
+                scenario_results=scenario_results,
+                var_result=var_result,
+                risk_score_result=risk_score_result,
+                probabilistic_result=probabilistic_result,
+                language=language
+            ),
+            widths=[
+                3.0 * cm,
+                5.6 * cm,
+                7.4 * cm
+            ],
+        )
+    )
+    story.append(
+        Spacer(
+            1,
+            8
+        )
+    )
+    story.append(
+        _p(
+            (
+                "Lecture ARIA: l'objectif n'est pas de supprimer tout risque, mais de reduire les pertes extremes, "
+                "controler les expositions dominantes et conserver un rendement ajuste du risque defendable."
+                if language == "fr"
+                else "ARIA read: the goal is not to remove all risk, but to reduce extreme losses, control dominant "
+                "exposures and retain a defensible risk-adjusted return."
+            ),
+            styles["body"]
+        )
+    )
+
+    _section(
+        story,
+        "Commentaire LLM optionnel" if language == "fr" else "Optional LLM Commentary",
         styles
     )
 
@@ -1812,9 +2012,9 @@ def generate_professional_pdf_report(
         story.append(
             _p(
                 (
-                    "Aucune analyse LLM n'a ete generee. Les recommandations ci-dessous sont construites uniquement a partir des metriques ARIA."
+                    "Commentaire LLM non active. Les recommandations du rapport sont construites uniquement a partir des metriques quantitatives ARIA."
                     if language == "fr"
-                    else "No LLM analysis was generated. The recommendations below are built only from ARIA metrics."
+                    else "LLM commentary is disabled. The report recommendations are built only from ARIA quantitative metrics."
                 ),
                 styles["body"]
             )
@@ -1850,7 +2050,7 @@ def generate_professional_pdf_report(
 
     _section(
         story,
-        "Contexte de marche et score de risque" if language == "fr" else "Market Context and Risk Score",
+        "Contexte de marche, score et portefeuille" if language == "fr" else "Market Context, Score and Portfolio",
         styles
     )
     story.append(
@@ -1877,6 +2077,28 @@ def generate_professional_pdf_report(
                 f"Risk Score ARIA: {risk_score_result.score}/100 - {risk_score_result.label}. {risk_score_result.explanation}"
             ),
             styles["body"]
+        )
+    )
+    story.append(
+        Spacer(
+            1,
+            8
+        )
+    )
+    story.append(
+        _table(
+            _portfolio_position_rows(
+                portfolio,
+                language
+            ),
+            widths=[
+                4.0 * cm,
+                3.0 * cm,
+                2.3 * cm,
+                2.2 * cm,
+                2.4 * cm,
+                2.1 * cm
+            ],
         )
     )
 

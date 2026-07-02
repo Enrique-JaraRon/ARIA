@@ -990,26 +990,37 @@ def create_probabilistic_distribution_chart(
     simulations_data: pd.DataFrame,
     selected_var: float,
     selected_es: float,
+    language: str = "fr",
 ) -> alt.Chart:
     """Create the Monte Carlo return distribution chart."""
 
+    is_french = language == "fr"
     chart_data = simulations_data.copy()
-    chart_data["Portfolio return percent"] = chart_data["Portfolio return"] * 100
+    chart_data["ReturnPct"] = chart_data["Portfolio return"] * 100
     selected_var_percent = selected_var * 100
     selected_es_percent = selected_es * 100
+    mean_return_percent = float(chart_data["ReturnPct"].mean())
 
     histogram = alt.Chart(chart_data).mark_bar(
-        color="#155E75",
         opacity=0.82,
     ).encode(
         x=alt.X(
-            "Portfolio return percent:Q",
+            "ReturnPct:Q",
             bin=alt.Bin(maxbins=55),
-            title="Rendement simulé du portefeuille (%)",
+            title=(
+                "Rendement simulé du portefeuille (%)"
+                if is_french
+                else "Simulated portfolio return (%)"
+            ),
         ),
         y=alt.Y(
             "count():Q",
-            title="Nombre de simulations",
+            title="Nombre de simulations" if is_french else "Number of simulations",
+        ),
+        color=alt.condition(
+            alt.datum.ReturnPct <= selected_var_percent,
+            alt.value("#B91C1C"),
+            alt.value("#155E75"),
         ),
         tooltip=[
             alt.Tooltip("count():Q", title="Simulations"),
@@ -1026,6 +1037,10 @@ def create_probabilistic_distribution_chart(
                 "Threshold": "Expected Shortfall",
                 "Return": selected_es_percent,
             },
+            {
+                "Threshold": "Moyenne" if is_french else "Mean",
+                "Return": mean_return_percent,
+            },
         ]
     )
 
@@ -1039,10 +1054,12 @@ def create_probabilistic_distribution_chart(
                 domain=[
                     "VaR",
                     "Expected Shortfall",
+                    "Moyenne" if is_french else "Mean",
                 ],
                 range=[
                     "#B91C1C",
                     "#7C2D12",
+                    "#0F766E",
                 ],
             ),
             legend=alt.Legend(
@@ -1053,11 +1070,11 @@ def create_probabilistic_distribution_chart(
         tooltip=[
             alt.Tooltip(
                 "Threshold:N",
-                title="Seuil",
+                title="Seuil" if is_french else "Threshold",
             ),
             alt.Tooltip(
                 "Return:Q",
-                title="Rendement",
+                title="Rendement" if is_french else "Return",
                 format=".2f",
             ),
         ],
@@ -1068,8 +1085,16 @@ def create_probabilistic_distribution_chart(
     ).properties(
         height=340,
         title=alt.TitleParams(
-            text="Distribution Monte Carlo des rendements",
-            subtitle="Chaque barre regroupe des scénarios simulés sur l'horizon sélectionné",
+            text=(
+                "Distribution Monte Carlo des rendements"
+                if is_french
+                else "Monte Carlo Return Distribution"
+            ),
+            subtitle=(
+                "La zone rouge correspond à la queue de perte au-delà de la VaR sélectionnée."
+                if is_french
+                else "The red area is the loss tail beyond the selected VaR."
+            ),
             fontSize=20,
             subtitleFontSize=13,
             anchor="start",
@@ -1402,21 +1427,65 @@ def create_greeks_profile_chart(
 
 inject_custom_css()
 
+query_language = str(
+    st.query_params.get(
+        "lang",
+        "fr",
+    )
+).lower()
+default_language_index = 1 if query_language.startswith("en") else 0
+
+language_choice = st.sidebar.radio(
+    "Langue / Language",
+    options=[
+        "Français",
+        "English",
+    ],
+    index=default_language_index,
+    horizontal=True,
+)
+ui_language = "en" if language_choice == "English" else "fr"
+
+
+def tr(
+    french: str,
+    english: str
+) -> str:
+    """Return the UI label in the selected language."""
+
+    return english if ui_language == "en" else french
+
+
 render_header(
     title="ARIA - Adaptive Risk Intelligence Agent",
-    subtitle=(
-        "Dashboard Python / Streamlit pour le suivi du risque de "
-        "portefeuilles actions-options : pricing, Greeks, stress tests, "
-        "VaR, alertes quantitatives et reporting LLM."
+    subtitle=tr(
+        (
+            "Application Python / Streamlit de gestion du risque pour "
+            "portefeuilles actions, ETF et options : pricing, Greeks, "
+            "stress tests, VaR, alertes et reporting professionnel."
+        ),
+        (
+            "Python / Streamlit risk management application for equity, "
+            "ETF and option portfolios: pricing, Greeks, stress tests, "
+            "VaR, alerts and professional reporting."
+        ),
     ),
+    badge=tr("Plateforme de risk management", "Risk Management Platform"),
+    language=ui_language,
 )
 
 
-st.sidebar.header("Configuration ARIA")
+st.sidebar.header(tr("Configuration ARIA", "ARIA Configuration"))
 
-with st.sidebar.expander("Données de marché", expanded=False):
+with st.sidebar.expander(tr("Données de marché", "Market Data"), expanded=False):
+    market_source_display = {
+        "Manuel": tr("Manuel", "Manual"),
+        "Yahoo Finance": "Yahoo Finance",
+        "CSV local": tr("CSV local", "Local CSV"),
+        "Bloomberg optionnel": tr("Bloomberg optionnel", "Optional Bloomberg"),
+    }
     market_source = st.selectbox(
-        "Source de données",
+        tr("Source de données", "Data source"),
         options=[
             "Manuel",
             "Yahoo Finance",
@@ -1424,10 +1493,11 @@ with st.sidebar.expander("Données de marché", expanded=False):
             "Bloomberg optionnel",
         ],
         index=0,
+        format_func=lambda source: market_source_display.get(source, source),
     )
 
     market_ticker = st.text_input(
-        "Ticker de référence",
+        tr("Ticker de référence", "Reference ticker"),
         value="SPY",
     )
 
@@ -1435,12 +1505,12 @@ with st.sidebar.expander("Données de marché", expanded=False):
 
     if market_source == "CSV local":
         csv_market_data_path = st.text_input(
-            "Chemin du CSV local",
+            tr("Chemin du CSV local", "Local CSV path"),
             value=relative_to_project(DEFAULT_MARKET_DATA_PATH),
         )
 
 market_snapshot = None
-market_data_status = "Manual Mode"
+market_data_status = tr("Mode manuel", "Manual Mode")
 default_spot = 500.0
 default_volatility_percent = 20.0
 
@@ -1467,36 +1537,36 @@ if market_source in {"Yahoo Finance", "CSV local", "Bloomberg optionnel"}:
 
     except Exception as error:
         market_data_status = (
-            "Bloomberg Unavailable"
+            tr("Bloomberg indisponible", "Bloomberg unavailable")
             if market_source == "Bloomberg optionnel"
-            else "Source unavailable"
+            else tr("Source indisponible", "Source unavailable")
         )
         st.sidebar.info(str(error))
 
 
-with st.sidebar.expander("Hypothèses de marché", expanded=False):
+with st.sidebar.expander(tr("Hypothèses de marché", "Market Assumptions"), expanded=False):
     current_spot = st.number_input(
-        "Prix du sous-jacent",
+        tr("Prix du sous-jacent", "Underlying price"),
         min_value=0.01,
         value=float(default_spot),
         step=1.0,
     )
 
     current_volatility_percent = st.number_input(
-        "Volatilité utilisée en %",
+        tr("Volatilité utilisée en %", "Volatility used (%)"),
         min_value=0.01,
         value=float(default_volatility_percent),
         step=1.0,
     )
 
     risk_free_rate_percent = st.number_input(
-        "Taux sans risque en %",
+        tr("Taux sans risque en %", "Risk-free rate (%)"),
         value=5.0,
         step=0.25,
     )
 
     dividend_yield_percent = st.number_input(
-        "Rendement du dividende en %",
+        tr("Rendement du dividende en %", "Dividend yield (%)"),
         min_value=0.0,
         value=0.0,
         step=0.25,
@@ -1515,107 +1585,103 @@ if market_source == "Manuel":
     market_data_status = market_snapshot.status
 
 
-with st.sidebar.expander("Limites et scénario avancés", expanded=False):
+with st.sidebar.expander(tr("Limites et scénario avancés", "Limits and Advanced Scenario"), expanded=False):
     delta_limit = st.number_input(
-        "Limite de delta",
+        tr("Limite de delta", "Delta limit"),
         min_value=0.0,
         value=10.0,
         step=1.0,
     )
 
     gamma_limit = st.number_input(
-        "Limite de gamma",
+        tr("Limite de gamma", "Gamma limit"),
         min_value=0.0,
         value=1.0,
         step=0.1,
     )
 
     vega_limit = st.number_input(
-        "Limite de vega",
+        tr("Limite de vega", "Vega limit"),
         min_value=0.0,
         value=20.0,
         step=1.0,
     )
 
     spot_move_limit_percent = st.number_input(
-        "Variation maximale du spot en %",
+        tr("Variation maximale du spot en %", "Maximum spot move (%)"),
         min_value=0.1,
         value=3.0,
         step=0.5,
     )
 
     volatility_move_limit_percent = st.number_input(
-        "Variation maximale de volatilité en points",
+        tr("Variation maximale de volatilité en points", "Maximum volatility move (points)"),
         min_value=0.1,
         value=5.0,
         step=0.5,
     )
 
     z_score_limit = st.number_input(
-        "Limite du z-score",
+        tr("Limite du z-score", "Z-score limit"),
         min_value=0.5,
         value=2.5,
         step=0.1,
     )
 
     custom_spot_change_percent = st.number_input(
-        "Choc du spot en %",
+        tr("Choc du spot en %", "Spot shock (%)"),
         value=-10.0,
         step=1.0,
     )
 
     custom_volatility_change_points = st.number_input(
-        "Choc de volatilité en points",
+        tr("Choc de volatilité en points", "Volatility shock (points)"),
         value=15.0,
         step=1.0,
     )
 
-with st.sidebar.expander("VaR et analyse probabiliste", expanded=False):
+with st.sidebar.expander(tr("VaR et analyse probabiliste", "VaR and Probabilistic Analysis"), expanded=False):
     var_confidence_percent = st.selectbox(
-        "Niveau de confiance",
+        tr("Niveau de confiance", "Confidence level"),
         options=[95, 99],
         index=0,
     )
 
     var_horizon_days = st.number_input(
-        "Horizon en jours",
+        tr("Horizon en jours", "Horizon in days"),
         min_value=1,
         value=1,
         step=1,
     )
 
     var_simulations = st.number_input(
-        "Nombre de simulations VaR",
+        tr("Nombre de simulations VaR", "Number of VaR simulations"),
         min_value=100,
         max_value=10000,
         value=1000,
         step=100,
     )
 
+    probabilistic_horizon_options = {
+        tr("1 jour", "1 day"): 1,
+        tr("1 semaine", "1 week"): 5,
+        tr("1 mois", "1 month"): 21,
+        tr("3 mois", "3 months"): 63,
+        tr("6 mois", "6 months"): 126,
+        tr("1 an", "1 year"): 252,
+    }
     probabilistic_horizon_label = st.selectbox(
-        "Horizon probabiliste",
-        options=[
-            "1 jour",
-            "1 semaine",
-            "1 mois",
-            "3 mois",
-            "6 mois",
-            "1 an",
-        ],
+        tr("Horizon probabiliste", "Probabilistic horizon"),
+        options=list(probabilistic_horizon_options),
         index=2,
     )
 
-    probabilistic_horizon_days = {
-        "1 jour": 1,
-        "1 semaine": 5,
-        "1 mois": 21,
-        "3 mois": 63,
-        "6 mois": 126,
-        "1 an": 252,
-    }[probabilistic_horizon_label]
+    probabilistic_horizon_days = probabilistic_horizon_options[
+        probabilistic_horizon_label
+    ]
 
     probabilistic_simulations_count = st.selectbox(
-        "Simulations probabilistes",
+        tr("Simulations probabilistes", "Probabilistic simulations"),
         options=[
             1000,
             5000,
@@ -1625,7 +1691,7 @@ with st.sidebar.expander("VaR et analyse probabiliste", expanded=False):
     )
 
     probabilistic_confidence_percent = st.selectbox(
-        "Confiance probabiliste",
+        tr("Confiance probabiliste", "Probabilistic confidence"),
         options=[
             95,
             99,
@@ -1634,7 +1700,10 @@ with st.sidebar.expander("VaR et analyse probabiliste", expanded=False):
     )
 
 enable_llm_commentary = st.sidebar.checkbox(
-    "Activer le commentaire LLM",
+    tr(
+        "Inclure un commentaire LLM dans les rapports",
+        "Include LLM commentary in reports",
+    ),
     value=False,
 )
 
@@ -1649,30 +1718,34 @@ st.session_state.portfolio_data = normalize_portfolio_table(
 )
 
 render_section_title(
-    "Portefeuille client",
-    "Modifiez le portefeuille ou chargez une démonstration prête pour l'analyse.",
+    tr("Portefeuille client", "Client Portfolio"),
+    tr(
+        "Modifiez le portefeuille ou chargez une démonstration prête pour l'analyse.",
+        "Edit the portfolio or load a ready-to-analyze demo portfolio.",
+    ),
 )
 
 investment_horizon = "Long terme"
 risk_profile = "Équilibré"
+horizon_display = tr("Long terme", "Long term")
 
 manual_tab, demo_tab = st.tabs(
     [
-        "Modifier le portefeuille",
-        "Charger une démonstration",
+        tr("Modifier le portefeuille", "Edit Portfolio"),
+        tr("Charger une démonstration", "Load Demo"),
     ]
 )
 
 with manual_tab:
     portfolio_file_path = st.text_input(
-        "Fichier portefeuille CSV",
+        tr("Fichier portefeuille CSV", "Portfolio CSV file"),
         value=relative_to_project(DEFAULT_PORTFOLIO_PATH),
     )
 
     portfolio_action_col_1, portfolio_action_col_2, portfolio_action_col_3 = st.columns(3)
 
     if portfolio_action_col_1.button(
-        "Sauvegarder le portefeuille",
+        tr("Sauvegarder le portefeuille", "Save Portfolio"),
         width="stretch",
     ):
         portfolio_path = resolve_project_path(portfolio_file_path)
@@ -1688,16 +1761,22 @@ with manual_tab:
             index=False,
         )
 
-        st.success(f"Portefeuille sauvegarde : {portfolio_file_path}")
+        st.success(
+            tr("Portefeuille sauvegardé", "Portfolio saved")
+            + f" : {portfolio_file_path}"
+        )
 
     if portfolio_action_col_2.button(
-        "Charger le portefeuille",
+        tr("Charger le portefeuille", "Load Portfolio"),
         width="stretch",
     ):
         portfolio_path = resolve_project_path(portfolio_file_path)
 
         if not portfolio_path.exists():
-            st.error(f"Fichier introuvable : {portfolio_file_path}")
+            st.error(
+                tr("Fichier introuvable", "File not found")
+                + f" : {portfolio_file_path}"
+            )
             st.stop()
 
         loaded_portfolio = pd.read_csv(portfolio_path)
@@ -1714,7 +1793,7 @@ with manual_tab:
         st.rerun()
 
     if portfolio_action_col_3.button(
-        "Reinitialiser",
+        tr("Réinitialiser", "Reset"),
         width="stretch",
     ):
         st.session_state.portfolio_data = default_portfolio()
@@ -1725,12 +1804,19 @@ with manual_tab:
         st.rerun()
 
     render_info_card(
-        "Lecture des positions",
-        (
-            "Une quantité positive correspond à une position achetée. "
-            "Une quantité négative correspond à une position vendue. "
-            "Les colonnes techniques nécessaires au moteur ARIA sont "
-            "reconstruites automatiquement."
+        tr("Lecture des positions", "How to Read Positions"),
+        tr(
+            (
+                "Une quantité positive correspond à une position achetée. "
+                "Une quantité négative correspond à une position vendue. "
+                "Les colonnes techniques nécessaires au moteur ARIA sont "
+                "reconstruites automatiquement."
+            ),
+            (
+                "A positive quantity is a long position. A negative quantity is "
+                "a short position. Technical columns required by ARIA are "
+                "rebuilt automatically."
+            ),
         ),
     )
 
@@ -1742,26 +1828,35 @@ with demo_tab:
         del st.session_state["curated_demo_portfolio"]
 
     selected_demo_portfolio = st.selectbox(
-        "Portefeuille de démonstration",
+        tr("Portefeuille de démonstration", "Demo Portfolio"),
         options=CURATED_DEMO_PORTFOLIOS,
-        format_func=lambda name: DEMO_PORTFOLIO_LABELS.get(name, name),
+        format_func=lambda name: (
+            DEMO_PORTFOLIO_LABELS.get(name, name)
+            if ui_language == "fr"
+            else name
+        ),
         key="curated_demo_portfolio",
     )
 
     if selected_demo_portfolio in get_model_portfolio_names():
         selected_model = get_model_portfolio(selected_demo_portfolio)
         demo_kpi_1, demo_kpi_2, demo_kpi_3, demo_kpi_4 = st.columns(4)
-        demo_kpi_1.metric("Risque", selected_model.risk_level)
-        demo_kpi_2.metric("Horizon", "Long terme")
-        demo_kpi_3.metric("Vol. estimée", f"{selected_model.volatility:.1%}")
+        demo_kpi_1.metric(tr("Risque", "Risk"), selected_model.risk_level)
+        demo_kpi_2.metric(tr("Horizon", "Horizon"), horizon_display)
+        demo_kpi_3.metric(tr("Vol. estimée", "Estimated Vol."), f"{selected_model.volatility:.1%}")
         demo_kpi_4.metric("Drawdown", f"{selected_model.drawdown:.1%}")
-        st.info(
-            f"{selected_model.explanation} Profil adapté : "
-            f"{selected_model.investor_profile}"
-        )
+        if ui_language == "fr":
+            st.info(
+                f"{selected_model.explanation} Profil adapté : "
+                f"{selected_model.investor_profile}"
+            )
+        else:
+            st.info(
+                "Professional demo portfolio with a coherent long-term risk profile."
+            )
 
     if st.button(
-        "Charger ce portefeuille",
+        tr("Charger ce portefeuille", "Load This Portfolio"),
         width="stretch",
     ):
         if selected_demo_portfolio in get_model_portfolio_names():
@@ -1827,44 +1922,44 @@ edited_portfolio = st.data_editor(
     column_order=editor_columns,
     column_config={
         "Ticker": st.column_config.TextColumn("Ticker"),
-        "Nom": st.column_config.TextColumn("Nom"),
-        "Asset class": st.column_config.TextColumn("Classe d'actif"),
-        "Sector": st.column_config.TextColumn("Secteur"),
+        "Nom": st.column_config.TextColumn(tr("Nom", "Name")),
+        "Asset class": st.column_config.TextColumn(tr("Classe d'actif", "Asset Class")),
+        "Sector": st.column_config.TextColumn(tr("Secteur", "Sector")),
         "Weight": st.column_config.NumberColumn(
-            "Poids (%)",
+            tr("Poids (%)", "Weight (%)"),
             min_value=0.0,
             max_value=100.0,
             step=0.5,
             format="%.2f",
         ),
         "Value": st.column_config.NumberColumn(
-            "Valeur",
+            tr("Valeur", "Value"),
             step=100.0,
             format="%.2f",
         ),
         "Currency": st.column_config.SelectboxColumn(
-            "Devise",
+            tr("Devise", "Currency"),
             options=["USD", "EUR", "GBP", "CHF", "JPY"],
         ),
         "Quantity": st.column_config.NumberColumn(
-            "Quantité",
+            tr("Quantité", "Quantity"),
             step=1.0,
             format="%.4f",
         ),
         "Price": st.column_config.NumberColumn(
-            "Prix",
+            tr("Prix", "Price"),
             min_value=0.01,
             step=1.0,
         ),
-        "Data source": st.column_config.TextColumn("Source"),
-        "Commentaire": st.column_config.TextColumn("Commentaire"),
+        "Data source": st.column_config.TextColumn(tr("Source", "Source")),
+        "Commentaire": st.column_config.TextColumn(tr("Commentaire", "Comment")),
         "Asset type": st.column_config.SelectboxColumn(
-            "Type d'actif",
+            tr("Type d'actif", "Asset Type"),
             options=["stock", "option"],
             required=True,
         ),
         "Option type": st.column_config.SelectboxColumn(
-            "Type d'option",
+            tr("Type d'option", "Option Type"),
             options=["", "call", "put"],
         ),
         "Position": st.column_config.SelectboxColumn(
@@ -1873,29 +1968,29 @@ edited_portfolio = st.data_editor(
         ),
         "Strike": st.column_config.NumberColumn("Strike", min_value=0.01, step=1.0),
         "Maturity": st.column_config.NumberColumn(
-            "Maturité en années",
+            tr("Maturité en années", "Maturity in Years"),
             min_value=0.01,
             step=0.05,
             format="%.4f",
         ),
-        "Prime": st.column_config.NumberColumn("Prime", min_value=0.0, step=0.5),
+        "Prime": st.column_config.NumberColumn(tr("Prime", "Premium"), min_value=0.0, step=0.5),
         "Volatility": st.column_config.NumberColumn(
-            "Volatilité implicite",
+            tr("Volatilité implicite", "Implied Volatility"),
             min_value=0.01,
             step=0.01,
             format="%.4f",
         ),
         "Contract size": st.column_config.NumberColumn(
-            "Taille contrat",
+            tr("Taille contrat", "Contract Size"),
             min_value=1,
             step=1,
         ),
         "Exposition notionnelle": st.column_config.NumberColumn(
-            "Exposition notionnelle",
+            tr("Exposition notionnelle", "Notional Exposure"),
             step=1000.0,
         ),
         "Delta": st.column_config.NumberColumn("Delta", step=0.05, format="%.4f"),
-        "Objectif option": st.column_config.TextColumn("Objectif option"),
+        "Objectif option": st.column_config.TextColumn(tr("Objectif option", "Option Objective")),
     },
 )
 
@@ -1920,20 +2015,23 @@ coherence_errors, coherence_warnings = validate_portfolio_coherence(
 blocking_validation_errors = portfolio_validation_errors + coherence_errors
 
 if blocking_validation_errors:
-    with st.expander("Corrections obligatoires avant analyse", expanded=True):
+    with st.expander(
+        tr("Corrections obligatoires avant analyse", "Required Corrections Before Analysis"),
+        expanded=True,
+    ):
         for validation_error in blocking_validation_errors:
             st.error(validation_error)
 elif coherence_warnings:
     pass
 else:
-    st.success("Portefeuille prêt pour l'analyse.")
+    st.success(tr("Portefeuille prêt pour l'analyse.", "Portfolio ready for analysis."))
 
 current_diagnosis = portfolio_diagnosis(
     st.session_state.portfolio_data
 )
 
 analyse_button = st.button(
-    "Lancer l'analyse ARIA",
+    tr("Lancer l'analyse ARIA", "Run ARIA Analysis"),
     type="primary",
     width="stretch",
 )
@@ -1948,7 +2046,10 @@ auto_launch_analysis = bool(
 if analyse_button or auto_launch_analysis:
     if blocking_validation_errors:
         st.error(
-            "Corrige les erreurs de portefeuille avant de lancer l'analyse ARIA."
+            tr(
+                "Corrige les erreurs de portefeuille avant de lancer l'analyse ARIA.",
+                "Fix portfolio errors before running ARIA analysis.",
+            )
         )
         st.stop()
 
@@ -2067,19 +2168,22 @@ if analyse_button or auto_launch_analysis:
         alerts_tab,
     ) = st.tabs(
         [
-            "Vue generale",
-            "Stress tests",
+            tr("Vue générale", "Overview"),
+            tr("Stress tests", "Stress Tests"),
             "VaR",
-            "Sensibilités",
-            "Probabilistic risk",
-            "Alertes & LLM",
+            tr("Sensibilités", "Sensitivities"),
+            tr("Risque probabiliste", "Probabilistic Risk"),
+            tr("Alertes & LLM", "Alerts & LLM"),
         ]
     )
 
     with overview_tab:
         render_section_title(
             "Risk Score ARIA",
-            "Synthese du niveau de risque agrege par ARIA.",
+            tr(
+                "Synthèse du niveau de risque agrégé par ARIA.",
+                "ARIA aggregate risk score summary.",
+            ),
         )
 
         render_risk_badge(
@@ -2107,19 +2211,25 @@ if analyse_button or auto_launch_analysis:
             else:
                 st.success(risk_score_result.explanation)
 
-        with st.expander("Voir les principaux facteurs de risque", expanded=False):
+        with st.expander(
+            tr("Voir les principaux facteurs de risque", "Show Main Risk Drivers"),
+            expanded=False,
+        ):
             for driver in risk_score_result.main_drivers:
                 st.caption(f"- {driver}")
 
         render_section_title(
-            "Resume du portefeuille",
-            "Valeur, parametres de marche et taille de l'univers analyse.",
+            tr("Résumé du portefeuille", "Portfolio Summary"),
+            tr(
+                "Valeur, paramètres de marché et taille de l'univers analysé.",
+                "Value, market assumptions and analyzed universe size.",
+            ),
         )
 
         render_metric_row(
             [
                 {
-                    "label": "Valeur du portefeuille",
+                    "label": tr("Valeur du portefeuille", "Portfolio Value"),
                     "value": f"{portfolio.total_market_value():,.2f}",
                 },
                 {
@@ -2127,11 +2237,11 @@ if analyse_button or auto_launch_analysis:
                     "value": f"{current_spot:,.2f}",
                 },
                 {
-                    "label": "Volatilite utilisee",
+                    "label": tr("Volatilité utilisée", "Volatility Used"),
                     "value": f"{current_volatility:.2%}",
                 },
                 {
-                    "label": "Nombre de positions",
+                    "label": tr("Nombre de positions", "Number of Positions"),
                     "value": len(portfolio.positions),
                 },
             ]
@@ -2139,7 +2249,10 @@ if analyse_button or auto_launch_analysis:
 
         render_section_title(
             "Greeks du portefeuille",
-            "Expositions agregees aux principaux facteurs de risque.",
+            tr(
+                "Expositions agrégées aux principaux facteurs de risque.",
+                "Aggregate exposures to the main risk factors.",
+            ),
         )
 
         greek_1, greek_2, greek_3 = st.columns(3)
@@ -2157,7 +2270,10 @@ if analyse_button or auto_launch_analysis:
     with stress_tab:
         render_section_title(
             "Stress tests",
-            "Lecture des pertes et gains sous scenarios de marche.",
+            tr(
+                "Lecture des pertes et gains sous scénarios de marché.",
+                "Read gains and losses under market scenarios.",
+            ),
         )
 
         best_scenario = max(
@@ -2173,13 +2289,13 @@ if analyse_button or auto_launch_analysis:
         best_column, worst_column = st.columns(2)
 
         best_column.metric(
-            "Meilleur scenario",
+            tr("Meilleur scénario", "Best Scenario"),
             best_scenario.name,
             f"{best_scenario.profit_and_loss:+,.2f}",
         )
 
         worst_column.metric(
-            "Scenario le plus defavorable",
+            tr("Scénario le plus défavorable", "Worst Scenario"),
             worst_scenario.name,
             f"{worst_scenario.profit_and_loss:+,.2f}",
         )
@@ -2205,9 +2321,9 @@ if analyse_button or auto_launch_analysis:
 
         stress_summary_tab, stress_matrix_tab, stress_detail_tab = st.tabs(
             [
-                "Synthèse scénarios",
-                "Matrice rouge/vert",
-                "Tableau complet",
+                tr("Synthèse scénarios", "Scenario Summary"),
+                tr("Matrice rouge/vert", "Red/Green Matrix"),
+                tr("Tableau complet", "Full Table"),
             ]
         )
 
@@ -2221,8 +2337,11 @@ if analyse_button or auto_launch_analysis:
 
             if worst_scenario.top_contributors:
                 render_section_title(
-                    "Top contributeurs au pire stress",
-                    "Positions qui expliquent le plus la perte du scenario le plus defavorable.",
+                    tr("Top contributeurs au pire stress", "Top Contributors to Worst Stress"),
+                    tr(
+                        "Positions qui expliquent le plus la perte du scénario le plus défavorable.",
+                        "Positions explaining most of the loss in the worst scenario.",
+                    ),
                 )
 
                 st.dataframe(
@@ -2255,7 +2374,7 @@ if analyse_button or auto_launch_analysis:
                 width="stretch",
             )
 
-            with st.expander("Voir les valeurs de la matrice"):
+            with st.expander(tr("Voir les valeurs de la matrice", "Show Matrix Values")):
                 matrix_table = surface_data.pivot_table(
                     index="Variation volatilité",
                     columns="Variation spot",
@@ -2286,7 +2405,10 @@ if analyse_button or auto_launch_analysis:
     with var_tab:
         render_section_title(
             "VaR / Expected Shortfall",
-            "Estimation de la perte de queue par simulation.",
+            tr(
+                "Estimation de la perte de queue par simulation.",
+                "Tail-loss estimate from simulation.",
+            ),
         )
 
         var_col_1, var_col_2, var_col_3, var_col_4 = st.columns(4)
@@ -2299,11 +2421,11 @@ if analyse_button or auto_launch_analysis:
             f"{var_result.expected_shortfall:,.2f}",
         )
         var_col_3.metric(
-            "Pire perte simulee",
+            tr("Pire perte simulée", "Worst Simulated Loss"),
             f"{var_result.worst_loss:,.2f}",
         )
         var_col_4.metric(
-            "VaR parametrique",
+            tr("VaR paramétrique", "Parametric VaR"),
             f"{parametric_var:,.2f}",
         )
 
@@ -2314,7 +2436,7 @@ if analyse_button or auto_launch_analysis:
         )
         st.altair_chart(var_chart, width="stretch")
 
-        with st.expander("Simulations VaR"):
+        with st.expander(tr("Simulations VaR", "VaR Simulations")):
             st.dataframe(
                 var_simulations_data,
                 hide_index=True,
@@ -2331,8 +2453,11 @@ if analyse_button or auto_launch_analysis:
 
         with pnl_tab:
             render_section_title(
-                "Evolution du P&L par rapport au spot",
-                "Lecture visuelle de la convexité et des zones de perte.",
+                tr("Évolution du P&L par rapport au spot", "P&L Evolution vs Spot"),
+                tr(
+                    "Lecture visuelle de la convexité et des zones de perte.",
+                    "Visual read of convexity and loss zones.",
+                ),
             )
             pnl_points = calculate_pnl_profile(
                 portfolio=portfolio,
@@ -2355,17 +2480,20 @@ if analyse_button or auto_launch_analysis:
             )
             if breakeven_spots:
                 st.caption(
-                    "Points morts estimés : "
+                    tr("Points morts estimés : ", "Estimated break-even points: ")
                     + ", ".join(f"{spot:,.2f}" for spot in breakeven_spots)
                 )
 
         with greeks_tab:
             render_section_title(
-                "Evolution des Greeks par rapport au spot",
-                "Sensibilités principales lorsque le sous-jacent varie.",
+                tr("Évolution des Greeks par rapport au spot", "Greeks Evolution vs Spot"),
+                tr(
+                    "Sensibilités principales lorsque le sous-jacent varie.",
+                    "Main sensitivities as the underlying changes.",
+                ),
             )
             selected_greeks = st.multiselect(
-                "Greeks affichés",
+                tr("Greeks affichés", "Displayed Greeks"),
                 options=[
                     "Delta",
                     "Gamma",
@@ -2403,8 +2531,11 @@ if analyse_button or auto_launch_analysis:
 
     with probabilistic_tab:
         render_section_title(
-            "Probabilistic Risk Analysis",
-            "Probabilité de perte, VaR, Expected Shortfall et moteurs de risque par simulation Monte Carlo.",
+            tr("Risque probabiliste", "Probabilistic Risk"),
+            tr(
+                "Lecture Monte Carlo de la distribution de pertes, des queues de risque et des principaux contributeurs.",
+                "Monte Carlo read of loss distribution, tail risk and main downside contributors.",
+            ),
         )
 
         selected_var = (
@@ -2418,14 +2549,33 @@ if analyse_button or auto_launch_analysis:
             else probabilistic_result.expected_shortfall_99
         )
 
+        setup_col_1, setup_col_2, setup_col_3, setup_col_4 = st.columns(4)
+        setup_col_1.metric(
+            tr("Horizon simulé", "Simulation Horizon"),
+            f"{probabilistic_result.horizon_days} "
+            + tr("jours", "days"),
+        )
+        setup_col_2.metric(
+            tr("Nombre de scénarios", "Number of Scenarios"),
+            f"{probabilistic_result.number_of_simulations:,.0f}",
+        )
+        setup_col_3.metric(
+            tr("Confiance", "Confidence"),
+            f"{probabilistic_confidence_percent}%",
+        )
+        setup_col_4.metric(
+            tr("Base d'exposition", "Exposure Base"),
+            f"{probabilistic_result.exposure_base:,.2f}",
+        )
+
         prob_col_1, prob_col_2, prob_col_3, prob_col_4 = st.columns(4)
 
         prob_col_1.metric(
-            "Probabilité de perte",
+            tr("Probabilité de perte", "Probability of Loss"),
             f"{probabilistic_result.probability_of_loss:.1%}",
         )
         prob_col_2.metric(
-            "Perte > 10%",
+            tr("Perte > 10%", "Loss > 10%"),
             f"{probabilistic_result.probability_loss_gt_10:.1%}",
         )
         prob_col_3.metric(
@@ -2440,19 +2590,19 @@ if analyse_button or auto_launch_analysis:
         prob_col_5, prob_col_6, prob_col_7, prob_col_8 = st.columns(4)
 
         prob_col_5.metric(
-            "Rendement moyen simulé",
+            tr("Rendement moyen simulé", "Mean Simulated Return"),
             f"{probabilistic_result.mean_return:.1%}",
         )
         prob_col_6.metric(
-            "Volatilité simulée",
+            tr("Volatilité simulée", "Simulated Volatility"),
             f"{probabilistic_result.simulated_volatility:.1%}",
         )
         prob_col_7.metric(
-            "Pire rendement",
+            tr("Pire rendement", "Worst Return"),
             f"{probabilistic_result.worst_return:.1%}",
         )
         prob_col_8.metric(
-            "Moteur principal",
+            tr("Moteur principal", "Main Driver"),
             probabilistic_result.main_risk_driver,
         )
 
@@ -2460,13 +2610,53 @@ if analyse_button or auto_launch_analysis:
             simulations_data=probabilistic_simulations,
             selected_var=selected_var,
             selected_es=selected_es,
+            language=ui_language,
         )
         st.altair_chart(
             distribution_chart,
             width="stretch",
         )
 
-        st.info(probabilistic_result.interpretation)
+        interpretation_col, controls_col = st.columns([1.5, 1])
+        with interpretation_col:
+            render_section_title(
+                tr("Lecture institutionnelle", "Institutional Read"),
+                tr(
+                    "Ce que la simulation dit sur le profil perte/rendement du portefeuille.",
+                    "What the simulation says about the portfolio loss/return profile.",
+                ),
+            )
+            st.info(probabilistic_result.interpretation)
+
+        with controls_col:
+            render_section_title(
+                tr("Seuils de décision", "Decision Thresholds"),
+                tr(
+                    "Repères simples pour interpréter les probabilités.",
+                    "Simple thresholds to interpret probabilities.",
+                ),
+            )
+            if probabilistic_result.probability_loss_gt_10 >= 0.10:
+                st.error(
+                    tr(
+                        "La probabilité de perte supérieure à 10% est élevée : réduire l'exposition ou couvrir avant d'ajouter du risque.",
+                        "The probability of a loss greater than 10% is high: reduce exposure or hedge before adding risk.",
+                    )
+                )
+            elif probabilistic_result.probability_of_loss >= 0.55:
+                st.warning(
+                    tr(
+                        "La probabilité de perte est supérieure à 55% : vérifier le couple rendement/risque.",
+                        "The probability of loss is above 55%: review the risk-return balance.",
+                    )
+                )
+            else:
+                st.success(
+                    tr(
+                        "La perte de queue reste contenue dans les hypothèses Monte Carlo choisies.",
+                        "Tail loss remains contained under the selected Monte Carlo assumptions.",
+                    )
+                )
 
         metrics_table = probabilistic_metrics_table(probabilistic_result)
         metrics_display = metrics_table.copy()
@@ -2478,12 +2668,34 @@ if analyse_button or auto_launch_analysis:
             ),
             axis=1,
         )
+        metric_labels = {
+            "Probability of loss": tr("Probabilité de perte", "Probability of loss"),
+            "Probability of loss > 5%": tr("Probabilité perte > 5%", "Probability of loss > 5%"),
+            "Probability of loss > 10%": tr("Probabilité perte > 10%", "Probability of loss > 10%"),
+            "Probability of loss > 20%": tr("Probabilité perte > 20%", "Probability of loss > 20%"),
+            "Mean simulated return": tr("Rendement moyen simulé", "Mean simulated return"),
+            "Simulated volatility": tr("Volatilité simulée", "Simulated volatility"),
+            "VaR 95%": "VaR 95%",
+            "Expected Shortfall 95%": "Expected Shortfall 95%",
+            "VaR 99%": "VaR 99%",
+            "Expected Shortfall 99%": "Expected Shortfall 99%",
+            "Worst simulated return": tr("Pire rendement simulé", "Worst simulated return"),
+            "Best simulated return": tr("Meilleur rendement simulé", "Best simulated return"),
+        }
+        metrics_display["Metric"] = metrics_display["Metric"].map(
+            metric_labels
+        ).fillna(metrics_display["Metric"])
 
         st.dataframe(
-            metrics_display[
+            metrics_display.rename(
+                columns={
+                    "Metric": tr("Indicateur", "Metric"),
+                    "Value": tr("Valeur", "Value"),
+                }
+            )[
                 [
-                    "Metric",
-                    "Value",
+                    tr("Indicateur", "Metric"),
+                    tr("Valeur", "Value"),
                 ]
             ],
             hide_index=True,
@@ -2491,48 +2703,86 @@ if analyse_button or auto_launch_analysis:
         )
 
         render_section_title(
-            "Positions les plus risquées",
-            "Contribution moyenne aux pertes dans les pires 5% des simulations.",
+            tr("Contributeurs aux pertes extrêmes", "Extreme-Loss Contributors"),
+            tr(
+                "Contribution moyenne aux pertes dans les pires 5% des simulations.",
+                "Average contribution to losses in the worst 5% of simulations.",
+            ),
         )
 
         contributors = contribution_table(probabilistic_result).head(8)
         if contributors.empty:
-            st.info("Aucun contributeur de risque significatif détecté.")
+            st.info(
+                tr(
+                    "Aucun contributeur de risque significatif détecté.",
+                    "No significant risk contributor detected.",
+                )
+            )
         else:
+            contributors_display = contributors.rename(
+                columns={
+                    "Underlying": tr("Sous-jacent", "Underlying"),
+                    "Average tail P&L": tr("P&L moyen en queue", "Average Tail P&L"),
+                    "Downside contribution": tr("Contribution à la perte", "Downside Contribution"),
+                    "Contribution %": tr("Contribution %", "Contribution %"),
+                }
+            )
             st.dataframe(
-                contributors,
+                contributors_display,
                 hide_index=True,
                 width="stretch",
             )
 
         render_section_title(
-            "Recommandations de risk management",
-            "Pistes prudentes à étudier, basées uniquement sur les résultats simulés.",
+            tr("Actions de risk management", "Risk Management Actions"),
+            tr(
+                "Pistes prudentes à étudier, basées uniquement sur les résultats simulés.",
+                "Prudent actions to review, based only on simulated results.",
+            ),
         )
 
-        recommendation_lines = [
-            (
-                f"Surveiller en priorité {probabilistic_result.main_risk_driver}, "
-                "car cette ligne ressort comme le principal moteur de perte dans la queue de distribution."
-            ),
-            (
-                "Comparer la probabilité de perte et l'Expected Shortfall avec l'objectif du portefeuille "
-                "avant d'augmenter l'exposition."
-            ),
-            (
-                "Si la perte simulée semble trop élevée, étudier une réduction de concentration, "
-                "une couverture par options ou une baisse de l'exposition Delta/Vega."
-            ),
-            (
-                "Ces probabilités dépendent du modèle Monte Carlo, des volatilités et des corrélations; "
-                "elles ne sont pas des prédictions certaines."
-            ),
+        recommendation_rows = [
+            {
+                tr("Priorité", "Priority"): "1",
+                tr("Action", "Action"): tr(
+                    f"Surveiller et réduire si nécessaire l'exposition à {probabilistic_result.main_risk_driver}.",
+                    f"Monitor and reduce exposure to {probabilistic_result.main_risk_driver} if needed.",
+                ),
+                tr("Objectif", "Objective"): tr(
+                    "Diminuer la contribution aux pertes extrêmes.",
+                    "Reduce contribution to extreme losses.",
+                ),
+            },
+            {
+                tr("Priorité", "Priority"): "2",
+                tr("Action", "Action"): tr(
+                    "Comparer l'Expected Shortfall avec la perte maximale acceptable avant toute hausse de risque.",
+                    "Compare Expected Shortfall with the maximum acceptable loss before increasing risk.",
+                ),
+                tr("Objectif", "Objective"): tr(
+                    "Eviter d'augmenter un portefeuille déjà fragile en queue.",
+                    "Avoid adding risk to a portfolio already fragile in the tail.",
+                ),
+            },
+            {
+                tr("Priorité", "Priority"): "3",
+                tr("Action", "Action"): tr(
+                    "Tester une couverture ou un allègement si la probabilité de perte dépasse le seuil interne.",
+                    "Test hedging or trimming if the probability of loss exceeds the internal threshold.",
+                ),
+                tr("Objectif", "Objective"): tr(
+                    "Optimiser le rendement ajusté du risque plutôt que le rendement brut.",
+                    "Optimize risk-adjusted return rather than raw return.",
+                ),
+            },
         ]
+        st.dataframe(
+            pd.DataFrame(recommendation_rows),
+            hide_index=True,
+            width="stretch",
+        )
 
-        for recommendation in recommendation_lines:
-            st.write(f"- {recommendation}")
-
-        with st.expander("Voir les simulations probabilistes"):
+        with st.expander(tr("Voir les simulations probabilistes", "Show Probabilistic Simulations")):
             st.dataframe(
                 probabilistic_simulations,
                 hide_index=True,
@@ -2584,15 +2834,49 @@ if analyse_button or auto_launch_analysis:
         st.divider()
 
         render_section_title(
-            "Analyse du LLM",
-            "Commentaire prudent base uniquement sur les resultats ARIA.",
+            tr("Note exécutive et LLM optionnel", "Executive Note and Optional LLM"),
+            tr(
+                "La note ARIA est toujours disponible. Le commentaire LLM n'est généré que si la case est cochée.",
+                "The ARIA note is always available. LLM commentary is generated only when the checkbox is enabled.",
+            ),
         )
 
         llm_analysis = None
         llm_analysis_en = None
+        worst_scenario_for_commentary = min(
+            scenario_results,
+            key=lambda result: result.profit_and_loss,
+        )
+        aria_note = (
+            "### Note exécutive ARIA\n\n"
+            f"Le portefeuille obtient un score de risque **{risk_score_result.score}/100 "
+            f"({risk_score_result.label})**. Le scénario le plus défavorable est "
+            f"**{worst_scenario_for_commentary.name}** avec un P&L estimé de "
+            f"**{worst_scenario_for_commentary.profit_and_loss:,.2f}**. "
+            f"La VaR ressort à **{var_result.var_amount:,.2f}** et l'Expected "
+            f"Shortfall à **{var_result.expected_shortfall:,.2f}**.\n\n"
+            "**Actions à étudier :** réduire les expositions qui dominent le stress, "
+            "contrôler Delta/Gamma/Vega contre les limites, et comparer le coût de "
+            "couverture au rendement encore conservé. Ces pistes sont une aide à la "
+            "décision de gestion du risque, pas une certitude de performance ni un "
+            "conseil financier personnalisé."
+        )
+        aria_note_en = (
+            "### ARIA Executive Note\n\n"
+            f"The portfolio receives a risk score of **{risk_score_result.score}/100 "
+            f"({risk_score_result.label})**. The worst scenario is "
+            f"**{worst_scenario_for_commentary.name}** with estimated P&L of "
+            f"**{worst_scenario_for_commentary.profit_and_loss:,.2f}**. "
+            f"VaR is **{var_result.var_amount:,.2f}** and Expected Shortfall is "
+            f"**{var_result.expected_shortfall:,.2f}**.\n\n"
+            "**Actions to review:** reduce exposures dominating stress losses, "
+            "check Delta/Gamma/Vega against limits, and compare hedging cost with "
+            "remaining return potential. These are risk-management decision aids, "
+            "not performance certainty or personalized financial advice."
+        )
 
         if enable_llm_commentary:
-            with st.spinner("ARIA genere l'explication..."):
+            with st.spinner(tr("ARIA génère le commentaire LLM...", "ARIA is generating the LLM commentary...")):
                 llm_analysis = generate_llm_analysis(
                     snapshot=current_snapshot,
                     alerts=alerts,
@@ -2620,42 +2904,28 @@ if analyse_button or auto_launch_analysis:
                 )
 
         else:
-            worst_scenario_for_commentary = min(
-                scenario_results,
-                key=lambda result: result.profit_and_loss,
-            )
-            llm_analysis = (
-                "### Note exécutive ARIA\n\n"
-                f"Le portefeuille obtient un score de risque **{risk_score_result.score}/100 "
-                f"({risk_score_result.label})**. Le scénario le plus défavorable est "
-                f"**{worst_scenario_for_commentary.name}** avec un P&L estimé de "
-                f"**{worst_scenario_for_commentary.profit_and_loss:,.2f}**. "
-                f"La VaR ressort à **{var_result.var_amount:,.2f}** et l'Expected "
-                f"Shortfall à **{var_result.expected_shortfall:,.2f}**.\n\n"
-                "**Actions à étudier :** réduire les expositions qui dominent le stress, "
-                "contrôler Delta/Gamma/Vega contre les limites, et comparer le coût de "
-                "couverture au rendement encore conservé. Ces pistes sont une aide à la "
-                "décision de gestion du risque, pas une certitude de performance ni un "
-                "conseil financier personnalisé."
+            st.info(
+                tr(
+                    "Commentaire LLM désactivé : aucun appel API n'est lancé. Le rapport reste généré par ARIA avec les métriques quantitatives.",
+                    "LLM commentary disabled: no API call is made. The report is still generated by ARIA with quantitative metrics.",
+                )
             )
 
-            llm_analysis_en = (
-                "### ARIA Summary\n\n"
-                "LLM commentary is disabled for this analysis. "
-                "The quantitative metrics, alerts, stress tests, VaR and hedge "
-                "recommendations remain available. Enable LLM commentary in the "
-                "sidebar to generate a narrative analysis from ARIA outputs, with "
-                "ideas to reduce risk and improve risk-adjusted return."
-            )
+        with st.expander(tr("Voir la note exécutive ARIA", "Show ARIA Executive Note"), expanded=True):
+            st.markdown(aria_note if ui_language == "fr" else aria_note_en)
 
-        with st.expander("Voir la note exécutive", expanded=True):
-            st.markdown(llm_analysis)
+        if llm_analysis:
+            with st.expander(tr("Voir le commentaire LLM", "Show LLM Commentary"), expanded=True):
+                st.markdown(llm_analysis if ui_language == "fr" else llm_analysis_en)
 
         st.divider()
 
         render_section_title(
-            "Rapport de risque",
-            "Exports Markdown et PDF structures comme une note de risk management.",
+            tr("Rapport de risque", "Risk Report"),
+            tr(
+                "Exports Markdown et PDF structurés comme une note de risk management.",
+                "Markdown and PDF exports structured as a risk-management memo.",
+            ),
         )
 
         report_text = generate_risk_report(
@@ -2673,7 +2943,7 @@ if analyse_button or auto_launch_analysis:
             llm_analysis=llm_analysis,
         )
 
-        with st.expander("Aperçu du rapport exécutif", expanded=True):
+        with st.expander(tr("Aperçu du rapport téléchargeable", "Downloadable Report Preview"), expanded=True):
             st.markdown(report_text)
 
         report_pdf_fr = generate_professional_pdf_report(
@@ -2711,7 +2981,7 @@ if analyse_button or auto_launch_analysis:
         report_download_col_1, report_download_col_2, report_download_col_3 = st.columns(3)
 
         report_download_col_1.download_button(
-            label="Telecharger le rapport Markdown",
+            label=tr("Télécharger le rapport Markdown", "Download Markdown Report"),
             data=report_text,
             file_name="rapport_risque_aria.md",
             mime="text/markdown",
@@ -2720,7 +2990,7 @@ if analyse_button or auto_launch_analysis:
         )
 
         report_download_col_2.download_button(
-            label="Telecharger le rapport PDF",
+            label=tr("Télécharger le rapport PDF français", "Download French PDF Report"),
             data=report_pdf_fr,
             file_name="rapport_risque_aria_fr.pdf",
             mime="application/pdf",
@@ -2729,7 +2999,7 @@ if analyse_button or auto_launch_analysis:
         )
 
         report_download_col_3.download_button(
-            label="Download EN PDF",
+            label=tr("Télécharger le rapport PDF anglais", "Download English PDF Report"),
             data=report_pdf_en,
             file_name="aria_risk_report_en.pdf",
             mime="application/pdf",
@@ -2738,8 +3008,17 @@ if analyse_button or auto_launch_analysis:
         )
 
         st.caption(
-            "Le rapport est disponible en Markdown, PDF francais et PDF anglais. "
-            "Il mentionne clairement que le projet a ete developpe par Enrique Jara Ron."
+            tr(
+                "Le rapport est disponible en Markdown, PDF français et PDF anglais. "
+                "Il mentionne clairement que le projet a été développé par Enrique Jara Ron.",
+                "The report is available as Markdown, French PDF and English PDF. "
+                "It clearly states that the project was developed by Enrique Jara Ron.",
+            )
         )
 
-    st.success("Le snapshot actuel a ete ajoute a l'historique.")
+    st.success(
+        tr(
+            "Le snapshot actuel a été ajouté à l'historique.",
+            "The current snapshot was added to history.",
+        )
+    )

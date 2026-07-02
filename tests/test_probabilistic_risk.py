@@ -207,4 +207,4 @@ def test_metrics_table_and_report_text_use_computed_numbers():
     assert f"{result.probability_of_loss:.1%}" in report_text
     assert f"{result.var_95:.1%}" in report_text
     assert result.main_risk_driver in report_text
-    assert "predictions certaines" in report_text
+    assert "prédictions certaines" in report_text

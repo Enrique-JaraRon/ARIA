@@ -19,13 +19,13 @@ RISK_STYLES = {
         "color": "#047857",
     },
     "moderate": {
-        "label": "Risque modere",
+        "label": "Risque modéré",
         "background": "#FEF3C7",
         "border": "#D97706",
         "color": "#92400E",
     },
     "high": {
-        "label": "Risque eleve",
+        "label": "Risque élevé",
         "background": "#FEE2E2",
         "border": "#DC2626",
         "color": "#991B1B",
@@ -43,7 +43,7 @@ RISK_STYLES = {
         "color": "#7F1D1D",
     },
     "neutral": {
-        "label": "Neutre",
+        "label": "Non classé",
         "background": "#E0F2FE",
         "border": "#0284C7",
         "color": "#155E75",
@@ -781,8 +781,27 @@ def render_header(
     ),
     badge: str = "Risk Management Dashboard",
     author: str = "Enrique Jara Ron",
+    language: str = "fr",
 ) -> str:
     """Render the main application header."""
+
+    is_french = language.lower() == "fr"
+    author_label = "Développé par" if is_french else "Developed by"
+    status_label = "Prototype professionnel" if is_french else "Production-style prototype"
+    core_label = "Moteur quantitatif" if is_french else "Core engine"
+    core_value = "Black-Scholes + Greeks"
+    risk_label = "Gestion du risque" if is_french else "Risk stack"
+    risk_value = (
+        "Stress tests, VaR, ES, alertes"
+        if is_french
+        else "Stress, VaR, ES, Alerts"
+    )
+    report_label = "Reporting" if is_french else "Reporting layer"
+    report_value = (
+        "Rapport exécutif + LLM optionnel"
+        if is_french
+        else "Executive report + optional LLM"
+    )
 
     html = f"""
 <div class="aria-header">
@@ -791,24 +810,24 @@ def render_header(
             <div class="aria-eyebrow">{escape(badge)}</div>
             <h1 class="aria-title">{escape(title)}</h1>
             <div class="aria-subtitle">{escape(subtitle)}</div>
-            <div class="aria-author">Developed by {escape(author)}</div>
+            <div class="aria-author">{escape(author_label)} {escape(author)}</div>
         </div>
         <div class="aria-header-status">
-            {render_status_pill("Production-style prototype", render=False)}
+            {render_status_pill(status_label, render=False)}
         </div>
     </div>
     <div class="aria-system-strip">
         <div class="aria-system-cell">
-            <div class="aria-system-label">Core engine</div>
-            <div class="aria-system-value">Black-Scholes + Greeks</div>
+            <div class="aria-system-label">{escape(core_label)}</div>
+            <div class="aria-system-value">{escape(core_value)}</div>
         </div>
         <div class="aria-system-cell">
-            <div class="aria-system-label">Risk stack</div>
-            <div class="aria-system-value">Stress, VaR, ES, Alerts</div>
+            <div class="aria-system-label">{escape(risk_label)}</div>
+            <div class="aria-system-value">{escape(risk_value)}</div>
         </div>
         <div class="aria-system-cell">
-            <div class="aria-system-label">Reporting layer</div>
-            <div class="aria-system-value">Executive report + LLM</div>
+            <div class="aria-system-label">{escape(report_label)}</div>
+            <div class="aria-system-value">{escape(report_value)}</div>
         </div>
     </div>
 </div>

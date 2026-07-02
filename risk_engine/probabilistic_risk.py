@@ -635,17 +635,18 @@ def build_probabilistic_risk_report_text(
     """Build a simple client-ready explanation from computed numbers."""
 
     return (
-        "Selon les hypotheses du modele, le portefeuille presente une "
-        f"probabilite estimee de perte de {probability_of_loss:.1%}. "
-        f"La VaR 95% est de {var_95:.1%}, ce qui signifie que 95% des "
-        "simulations font mieux que ce seuil sur l'horizon choisi. "
+        "Lecture Monte Carlo : selon les hypothèses retenues, le portefeuille "
+        f"présente une probabilité estimée de perte de {probability_of_loss:.1%}. "
+        f"La VaR 95% ressort à {var_95:.1%}: 95% des scénarios simulés font "
+        "mieux que ce seuil sur l'horizon choisi. "
         f"L'Expected Shortfall 95% est de {expected_shortfall_95:.1%}: dans "
-        "les 5% de simulations les plus defavorables, la perte moyenne est "
+        "les 5% de scénarios les plus défavorables, la perte moyenne est "
         "proche de ce niveau. "
-        f"Le principal moteur de risque identifie est {main_driver}. "
-        "Ces probabilites ne sont pas des predictions certaines; elles "
-        "dependent des donnees, de la volatilite, des correlations et des "
-        "hypotheses de simulation."
+        f"Le principal moteur de risque identifié est {main_driver}. "
+        "Cette lecture sert à piloter la taille, la couverture et la "
+        "concentration du portefeuille; ces probabilités ne sont pas des "
+        "prédictions certaines et dépendent des volatilités, corrélations et "
+        "hypothèses de simulation."
     )
 
 

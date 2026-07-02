@@ -1,69 +1,85 @@
 # ARIA - Adaptive Risk Intelligence Agent
 
-ARIA est une application Streamlit simple pour presenter une analyse de risque
-de portefeuille en entretien finance.
+ARIA est une application Streamlit de risk management pour portefeuille actions,
+ETF et options. Elle est pensée pour une démonstration claire en entretien :
+composition du portefeuille, validation, stress tests, VaR, Greeks, risque
+probabiliste, alertes et rapport téléchargeable.
 
-Projet developpe par **Enrique Jara Ron**.
+Projet développé par **Enrique Jara Ron**.
 
-> Prototype educatif. Les resultats ne constituent pas un conseil en
-> investissement et ne garantissent aucune performance future.
+> Prototype éducatif. Les résultats ne sont pas un conseil financier et ne
+> garantissent pas une performance future.
 
-## Ce que fait ARIA
+## Fonctionnalités
 
-- Composer ou modifier un portefeuille actions / ETF / options.
-- Charger un portefeuille de demonstration propre, dont un portefeuille
-  d'options defensif avec score de risque faible.
-- Valider les champs essentiels avant analyse.
-- Lancer une analyse de risque lisible.
-- Consulter les resultats par onglets :
-  - Vue generale et score de risque ;
-  - Stress tests avec synthese, matrice rouge/vert spot-volatilite et tableau complet ;
-  - VaR / Expected Shortfall ;
-  - Sensibilites : P&L par rapport au spot et evolution des Greeks ;
-  - Risque probabiliste ;
-  - Alertes repliees dans un onglet Anomalies, commentaire LLM optionnel et rapport PDF.
+- Portefeuille client modifiable avec contrôles de cohérence.
+- Portefeuilles de démonstration simples et utiles.
+- Pricing Black-Scholes, Greeks et sensibilités au spot.
+- Stress tests, matrice spot / volatilité, VaR et Expected Shortfall.
+- Analyse probabiliste Monte Carlo avec contributeurs de pertes extrêmes.
+- Alertes quantitatives et commentaire LLM optionnel.
+- Rapport Markdown, PDF français et PDF anglais.
+- Interface en français avec bouton de bascule en anglais.
 
-## Portefeuilles de demonstration
+## Captures de l'application
 
-L'interface garde seulement quatre exemples utiles :
+### Portefeuille client
 
-- `Conservative Balanced Portfolio` ;
-- `Global Diversified Portfolio` ;
-- `Tech Growth Portfolio` ;
-- `Low Risk Options Portfolio`.
+![Portefeuille client](screenshots/portfolio_editor.png)
 
-## Captures
+### Score de risque
 
-### Portefeuille
-
-![Portefeuille](screenshots/dashboard.png)
-
-### Analyse ARIA
-
-![Analyse ARIA](screenshots/portfolio_analysis.png)
+![Score ARIA](screenshots/dashboard.png)
 
 ### Stress tests
 
 ![Stress tests](screenshots/stress_testing.png)
 
-### Matrice de stress
+### Matrice rouge / vert
 
 ![Matrice de stress](screenshots/risk_matrix.png)
 
-### Rapport et anomalies
+### VaR et Expected Shortfall
+
+![VaR](screenshots/var_analysis.png)
+
+### Sensibilités P&L
+
+![Sensibilités P&L](screenshots/sensitivities_pnl.png)
+
+### Evolution des Greeks
+
+![Greeks](screenshots/greeks_profile.png)
+
+### Risque probabiliste
+
+![Risque probabiliste](screenshots/probabilistic_risk.png)
+
+### Alertes et rapport
 
 ![Rapport](screenshots/risk_report.png)
 
-## Structure du projet
+### Mode anglais
+
+![Mode anglais](screenshots/english_mode.png)
+
+## Portefeuilles de démonstration
+
+- `Conservative Balanced Portfolio`
+- `Global Diversified Portfolio`
+- `Tech Growth Portfolio`
+- `Low Risk Options Portfolio`
+
+## Structure
 
 ```text
 app/                Interface, configuration, LLM et reporting
 portfolio_engine/   Portefeuilles, instruments, pricing Black-Scholes
-risk_engine/        Stress tests, VaR, Greeks, probabilités, score de risque
+risk_engine/        Stress tests, VaR, Greeks, probabilités et score
 tests/              Tests unitaires et contrôles quantitatifs
 tools/              Diagnostic et contrôle qualité
 scripts/            Scripts de lancement local
-screenshots/        Captures utilisées dans le README
+screenshots/        Captures utilisées dans ce README
 ```
 
 ## Installation
@@ -75,21 +91,30 @@ python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-## Lancement
+## Lancement local
 
 ```powershell
 streamlit run streamlit_app.py
 ```
 
-Ou :
+Ou sur le port utilisé en démonstration :
 
 ```powershell
 streamlit run streamlit_app.py --server.port 8502
 ```
 
+Mode anglais direct :
+
+```text
+http://localhost:8502/?lang=en
+```
+
 ## API / LLM
 
-Le commentaire LLM est optionnel. En local, copier `.env.example` vers `.env` :
+Le LLM est optionnel. Sans clé API, ARIA reste utilisable pour toute l'analyse
+quantitative.
+
+Créer un fichier `.env` local à partir de `.env.example` :
 
 ```powershell
 Copy-Item .env.example .env
@@ -101,8 +126,6 @@ Exemple :
 OPENAI_API_KEY=sk-...
 ARIA_LLM_MODEL=gpt-5-mini
 ```
-
-Sans API, ARIA reste utilisable pour l'analyse quantitative.
 
 ## Streamlit Cloud
 
@@ -117,7 +140,7 @@ OPENAI_API_KEY = "sk-..."
 ARIA_LLM_MODEL = "gpt-5-mini"
 ```
 
-## Qualite
+## Qualité
 
 ```powershell
 .\.venv\Scripts\python.exe tools\quality_check.py
