@@ -1,25 +1,27 @@
 # ARIA - Adaptive Risk Intelligence Agent
 
-ARIA est une application Streamlit de risk management pour portefeuille actions,
-ETF et options. Elle est pensée pour une démonstration claire en entretien :
-composition du portefeuille, validation, stress tests, VaR, Greeks, risque
-probabiliste, alertes et rapport téléchargeable.
+ARIA est une application Streamlit de risk management pour portefeuilles
+actions, ETF et options. Elle est pensee pour une demonstration claire en
+entretien : composition du portefeuille, controles de coherence, stress tests,
+VaR, Greeks, analyse probabiliste et rapport PDF professionnel.
 
-Projet développé par **Enrique Jara Ron**.
+Projet developpe par **Enrique Jara Ron**.
 
-> Prototype éducatif. Les résultats ne sont pas un conseil financier et ne
+> Prototype educatif. Les resultats ne sont pas un conseil financier et ne
 > garantissent pas une performance future.
 
-## Fonctionnalités
+## Ce que fait ARIA
 
-- Portefeuille client modifiable avec contrôles de cohérence.
-- Portefeuilles de démonstration simples et utiles.
-- Pricing Black-Scholes, Greeks et sensibilités au spot.
-- Stress tests, matrice spot / volatilité, VaR et Expected Shortfall.
-- Analyse probabiliste Monte Carlo avec contributeurs de pertes extrêmes.
+- Creation ou chargement d'un portefeuille client.
+- Portefeuilles de demonstration utiles : prudent, diversifie, croissance tech,
+  options faible risque.
+- Pricing Black-Scholes, Greeks et sensibilites au spot.
+- Stress tests historiques et matrice spot / volatilite.
+- VaR, Expected Shortfall et analyse Monte Carlo.
+- Donnees de marche par sous-jacent avec historique, volatilite et correlation.
 - Alertes quantitatives et commentaire LLM optionnel.
-- Rapport Markdown, PDF français et PDF anglais.
-- Interface en français avec bouton de bascule en anglais.
+- Rapport PDF premium avec page de garde, graphiques integres et annexe.
+- Interface en francais avec bouton pour passer toute l'application en anglais.
 
 ## Captures de l'application
 
@@ -43,9 +45,9 @@ Projet développé par **Enrique Jara Ron**.
 
 ![VaR](screenshots/var_analysis.png)
 
-### Sensibilités P&L
+### Sensibilites P&L
 
-![Sensibilités P&L](screenshots/sensitivities_pnl.png)
+![Sensibilites P&L](screenshots/sensitivities_pnl.png)
 
 ### Evolution des Greeks
 
@@ -55,7 +57,7 @@ Projet développé par **Enrique Jara Ron**.
 
 ![Risque probabiliste](screenshots/probabilistic_risk.png)
 
-### Alertes et rapport
+### Rapport executif
 
 ![Rapport](screenshots/risk_report.png)
 
@@ -63,24 +65,43 @@ Projet développé par **Enrique Jara Ron**.
 
 ![Mode anglais](screenshots/english_mode.png)
 
-## Portefeuilles de démonstration
+## Donnees de marche
 
-- `Conservative Balanced Portfolio`
-- `Global Diversified Portfolio`
-- `Tech Growth Portfolio`
-- `Low Risk Options Portfolio`
+ARIA fonctionne en mode manuel pour rester stable hors ligne. Pour une analyse
+plus realiste, l'application peut aussi charger des donnees Yahoo Finance ou un
+CSV local.
 
-## Structure
+Le moteur construit alors :
 
-```text
-app/                Interface, configuration, LLM et reporting
-portfolio_engine/   Portefeuilles, instruments, pricing Black-Scholes
-risk_engine/        Stress tests, VaR, Greeks, probabilités et score
-tests/              Tests unitaires et contrôles quantitatifs
-tools/              Diagnostic et contrôle qualité
-scripts/            Scripts de lancement local
-screenshots/        Captures utilisées dans ce README
+- un historique par sous-jacent ;
+- les rendements journaliers ;
+- la volatilite annualisee ;
+- la matrice de correlation ;
+- une calibration plus robuste du risque probabiliste.
+
+Format CSV accepte :
+
+```csv
+Date,Ticker,Close
+2026-01-02,SPY,500.0
+2026-01-02,QQQ,430.0
+2026-01-03,SPY,504.0
+2026-01-03,QQQ,435.0
 ```
+
+## Rapport PDF
+
+Le rapport telechargeable est construit comme une note de risk management :
+
+- page de garde ARIA ;
+- explication simple pour un client non expert ;
+- synthese decisionnelle ;
+- plan d'action de reduction du risque ;
+- historique marche et correlation ;
+- stress tests, VaR, Expected Shortfall et Greeks ;
+- annexe avec les chiffres importants.
+
+Le PDF est disponible en francais et en anglais depuis l'application.
 
 ## Installation
 
@@ -97,7 +118,7 @@ pip install -r requirements.txt
 streamlit run streamlit_app.py
 ```
 
-Ou sur le port utilisé en démonstration :
+Ou sur le port utilise en demonstration :
 
 ```powershell
 streamlit run streamlit_app.py --server.port 8502
@@ -111,10 +132,10 @@ http://localhost:8502/?lang=en
 
 ## API / LLM
 
-Le LLM est optionnel. Sans clé API, ARIA reste utilisable pour toute l'analyse
+Le LLM est optionnel. Sans cle API, ARIA reste utilisable pour toute l'analyse
 quantitative.
 
-Créer un fichier `.env` local à partir de `.env.example` :
+Creer un fichier `.env` local a partir de `.env.example` :
 
 ```powershell
 Copy-Item .env.example .env
@@ -140,8 +161,21 @@ OPENAI_API_KEY = "sk-..."
 ARIA_LLM_MODEL = "gpt-5-mini"
 ```
 
-## Qualité
+## Structure
+
+```text
+app/                Interface, configuration, LLM et reporting
+portfolio_engine/   Portefeuilles, instruments, pricing et donnees marche
+risk_engine/        Stress tests, VaR, Greeks, probabilites et score
+tests/              Tests unitaires et controles quantitatifs
+tools/              Diagnostic et controle qualite
+scripts/            Scripts de lancement local
+screenshots/        Captures utilisees dans ce README
+```
+
+## Qualite
 
 ```powershell
-.\.venv\Scripts\python.exe tools\quality_check.py
+.\.venv\Scripts\python.exe -m pytest -q
+.\.venv\Scripts\python.exe -m ruff check .
 ```

@@ -8,6 +8,8 @@ from io import BytesIO
 from typing import Any
 from xml.sax.saxutils import escape
 
+import pandas as pd
+from reportlab.graphics.shapes import Drawing, Line, Rect, String
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
 from reportlab.lib.pagesizes import A4
@@ -2051,6 +2053,61 @@ def _market_rows(
     return rows
 
 
+def _market_history_rows(
+    market_history: Any | None,
+    language: str
+) -> list[list[str]]:
+    """Build compact per-underlying market rows for the PDF."""
+
+    rows = [
+        [
+            "Sous-jacent" if language == "fr" else "Underlying",
+            "Dernier prix" if language == "fr" else "Last price",
+            "Rendement jour" if language == "fr" else "Daily return",
+            "Vol. annualisee" if language == "fr" else "Ann. volatility",
+            "Obs.",
+        ]
+    ]
+
+    if market_history is None or not getattr(
+        market_history,
+        "tickers",
+        []
+    ):
+        rows.append(
+            [
+                "N/A",
+                "N/A",
+                "N/A",
+                "N/A",
+                "0",
+            ]
+        )
+        return rows
+
+    for ticker in market_history.tickers[:8]:
+        snapshot = market_history.snapshots[ticker]
+        rows.append(
+            [
+                ticker,
+                format_number(
+                    snapshot.last_price
+                ),
+                format_percent(
+                    snapshot.daily_return
+                ),
+                format_percent(
+                    snapshot.annualized_volatility
+                ),
+                str(
+                    snapshot.number_of_observations
+                ),
+            ]
+        )
+
+    return rows
+
+
 def _build_executive_decision_rows(
     scenario_results: list[Any],
     var_result: Any,
@@ -2220,6 +2277,600 @@ def _portfolio_position_rows(
     return rows
 
 
+def _brand_cover_drawing(
+    width: float,
+    language: str
+) -> Drawing:
+    """Create an institutional ARIA cover mark."""
+
+    drawing = Drawing(
+        width,
+        3.0 * cm
+    )
+    drawing.add(
+        Rect(
+            0,
+            0,
+            width,
+            3.0 * cm,
+            fillColor=colors.HexColor("#0B1220"),
+            strokeColor=None,
+        )
+    )
+    drawing.add(
+        Rect(
+            0.45 * cm,
+            0.55 * cm,
+            1.5 * cm,
+            1.9 * cm,
+            fillColor=PDF_ACCENT,
+            strokeColor=None,
+        )
+    )
+    drawing.add(
+        String(
+            2.25 * cm,
+            1.75 * cm,
+            "ARIA",
+            fontName="Helvetica-Bold",
+            fontSize=28,
+            fillColor=colors.white,
+        )
+    )
+    drawing.add(
+        String(
+            2.27 * cm,
+            1.05 * cm,
+            (
+                "Adaptive Risk Intelligence Agent"
+                if language == "en"
+                else "Plateforme de risk analytics"
+            ),
+            fontName="Helvetica",
+            fontSize=10,
+            fillColor=colors.HexColor("#C8D3E0"),
+        )
+    )
+    drawing.add(
+        String(
+            width - 4.5 * cm,
+            1.58 * cm,
+            "Risk memo",
+            fontName="Helvetica-Bold",
+            fontSize=12,
+            fillColor=colors.HexColor("#C8D3E0"),
+        )
+    )
+    drawing.add(
+        Line(
+            width - 4.5 * cm,
+            1.35 * cm,
+            width - 0.6 * cm,
+            1.35 * cm,
+            strokeColor=PDF_ACCENT,
+            strokeWidth=1.2,
+        )
+    )
+
+    return drawing
+
+
+def _risk_gauge_drawing(
+    score: int,
+    label: str,
+    width: float,
+    language: str
+) -> Drawing:
+    """Create a compact risk-score gauge."""
+
+    drawing = Drawing(
+        width,
+        1.35 * cm
+    )
+    left = 0.4 * cm
+    bar_width = width - 0.8 * cm
+    y = 0.45 * cm
+    segments = [
+        (0.0, 0.30, colors.HexColor("#10B981")),
+        (0.30, 0.60, colors.HexColor("#F59E0B")),
+        (0.60, 0.80, colors.HexColor("#F97316")),
+        (0.80, 1.0, colors.HexColor("#DC2626")),
+    ]
+    for start, end, color in segments:
+        drawing.add(
+            Rect(
+                left + bar_width * start,
+                y,
+                bar_width * (end - start),
+                0.22 * cm,
+                fillColor=color,
+                strokeColor=None,
+            )
+        )
+    marker_x = left + bar_width * max(
+        0,
+        min(
+            score,
+            100
+        )
+    ) / 100
+    drawing.add(
+        Line(
+            marker_x,
+            y - 0.14 * cm,
+            marker_x,
+            y + 0.45 * cm,
+            strokeColor=PDF_DARK,
+            strokeWidth=1.8,
+        )
+    )
+    drawing.add(
+        String(
+            left,
+            0.92 * cm,
+            (
+                f"Score ARIA: {score}/100 - {label}"
+                if language == "fr"
+                else f"ARIA Score: {score}/100 - {label}"
+            ),
+            fontName="Helvetica-Bold",
+            fontSize=9.5,
+            fillColor=PDF_DARK,
+        )
+    )
+
+    return drawing
+
+
+def _stress_chart_drawing(
+    scenario_results: list[Any],
+    width: float,
+    language: str
+) -> Drawing | None:
+    """Create a horizontal stress P&L chart for the PDF."""
+
+    if not scenario_results:
+        return None
+
+    ordered = sorted(
+        scenario_results,
+        key=lambda result: result.profit_and_loss
+    )
+    selected = ordered[:5] + ordered[-2:]
+    selected = sorted(
+        {
+            result.name: result
+            for result in selected
+        }.values(),
+        key=lambda result: result.profit_and_loss
+    )
+    height = max(
+        4.0 * cm,
+        0.55 * cm * len(
+            selected
+        ) + 1.1 * cm
+    )
+    drawing = Drawing(
+        width,
+        height
+    )
+    drawing.add(
+        String(
+            0,
+            height - 0.25 * cm,
+            (
+                "P&L par scenarios de stress"
+                if language == "fr"
+                else "Stress Scenario P&L"
+            ),
+            fontName="Helvetica-Bold",
+            fontSize=11,
+            fillColor=PDF_DARK,
+        )
+    )
+    max_abs = max(
+        abs(
+            result.profit_and_loss
+        )
+        for result in selected
+    ) or 1.0
+    label_width = 4.4 * cm
+    chart_left = label_width + 0.35 * cm
+    chart_width = width - chart_left - 0.2 * cm
+    zero_x = chart_left + chart_width / 2
+    drawing.add(
+        Line(
+            zero_x,
+            0.35 * cm,
+            zero_x,
+            height - 0.75 * cm,
+            strokeColor=PDF_BORDER,
+            strokeWidth=1,
+        )
+    )
+
+    for index, result in enumerate(
+        selected
+    ):
+        y = height - 1.05 * cm - index * 0.55 * cm
+        name = _localized_scenario_name(
+            result.name,
+            language
+        )[:30]
+        pnl = result.profit_and_loss
+        bar_length = abs(
+            pnl
+        ) / max_abs * (chart_width / 2)
+        color = colors.HexColor(
+            "#10B981"
+        ) if pnl >= 0 else colors.HexColor(
+            "#DC2626"
+        )
+        x = zero_x if pnl >= 0 else zero_x - bar_length
+        drawing.add(
+            String(
+                0,
+                y - 0.06 * cm,
+                name,
+                fontName="Helvetica",
+                fontSize=7.2,
+                fillColor=PDF_MUTED,
+            )
+        )
+        drawing.add(
+            Rect(
+                x,
+                y - 0.08 * cm,
+                max(
+                    bar_length,
+                    1.5
+                ),
+                0.16 * cm,
+                fillColor=color,
+                strokeColor=None,
+            )
+        )
+        text_x = (
+            x + bar_length + 0.08 * cm
+            if pnl >= 0
+            else x - 1.65 * cm
+        )
+        drawing.add(
+            String(
+                text_x,
+                y - 0.07 * cm,
+                format_number(
+                    pnl,
+                    0
+                ),
+                fontName="Helvetica-Bold",
+                fontSize=6.8,
+                fillColor=PDF_DARK,
+            )
+        )
+
+    return drawing
+
+
+def _market_performance_drawing(
+    market_history: Any | None,
+    width: float,
+    language: str
+) -> Drawing | None:
+    """Create a normalized price-performance line chart."""
+
+    if (
+        market_history is None
+        or getattr(
+            market_history,
+            "prices",
+            None
+        ) is None
+        or market_history.prices.empty
+        or len(
+            market_history.prices
+        ) < 3
+    ):
+        return None
+
+    prices = market_history.prices.dropna(
+        how="all"
+    )
+    tickers = list(
+        prices.columns[:4]
+    )
+    normalized = prices[
+        tickers
+    ].divide(
+        prices[tickers].iloc[0]
+    ) - 1
+    values = normalized.to_numpy(
+        dtype=float
+    )
+    finite_values = values[
+        pd.notna(
+            values
+        )
+    ]
+    if len(
+        finite_values
+    ) == 0:
+        return None
+
+    height = 5.0 * cm
+    drawing = Drawing(
+        width,
+        height
+    )
+    drawing.add(
+        String(
+            0,
+            height - 0.25 * cm,
+            (
+                "Performance historique normalisee"
+                if language == "fr"
+                else "Normalized Historical Performance"
+            ),
+            fontName="Helvetica-Bold",
+            fontSize=11,
+            fillColor=PDF_DARK,
+        )
+    )
+    left = 0.8 * cm
+    bottom = 0.65 * cm
+    chart_width = width - 1.1 * cm
+    chart_height = height - 1.45 * cm
+    min_value = min(
+        float(
+            finite_values.min()
+        ),
+        0.0
+    )
+    max_value = max(
+        float(
+            finite_values.max()
+        ),
+        0.0
+    )
+    span = max(
+        max_value - min_value,
+        0.01
+    )
+    zero_y = bottom + (0 - min_value) / span * chart_height
+    drawing.add(
+        Line(
+            left,
+            zero_y,
+            left + chart_width,
+            zero_y,
+            strokeColor=PDF_BORDER,
+            strokeWidth=1,
+        )
+    )
+    palette = [
+        colors.HexColor("#0B4F71"),
+        colors.HexColor("#10B981"),
+        colors.HexColor("#F59E0B"),
+        colors.HexColor("#7C3AED"),
+    ]
+
+    for ticker_index, ticker in enumerate(
+        tickers
+    ):
+        series = normalized[ticker].dropna()
+        if len(
+            series
+        ) < 2:
+            continue
+        points = []
+        for point_index, value in enumerate(
+            series.to_numpy(
+                dtype=float
+            )
+        ):
+            x = left + point_index / max(
+                len(
+                    series
+                ) - 1,
+                1
+            ) * chart_width
+            y = bottom + (value - min_value) / span * chart_height
+            points.append(
+                (
+                    x,
+                    y,
+                )
+            )
+        for start, end in zip(
+            points[:-1],
+            points[1:],
+            strict=False
+        ):
+            drawing.add(
+                Line(
+                    start[0],
+                    start[1],
+                    end[0],
+                    end[1],
+                    strokeColor=palette[
+                        ticker_index % len(
+                            palette
+                        )
+                    ],
+                    strokeWidth=1.5,
+                )
+            )
+        drawing.add(
+            String(
+                left + ticker_index * 2.2 * cm,
+                0.2 * cm,
+                str(
+                    ticker
+                ),
+                fontName="Helvetica-Bold",
+                fontSize=7.2,
+                fillColor=palette[
+                    ticker_index % len(
+                        palette
+                    )
+                ],
+            )
+        )
+
+    drawing.add(
+        String(
+            left,
+            height - 0.65 * cm,
+            (
+                f"Fenetre: {len(prices)} observations"
+                if language == "fr"
+                else f"Window: {len(prices)} observations"
+            ),
+            fontName="Helvetica",
+            fontSize=7.2,
+            fillColor=PDF_MUTED,
+        )
+    )
+
+    return drawing
+
+
+def _correlation_heatmap_drawing(
+    market_history: Any | None,
+    width: float,
+    language: str
+) -> Drawing | None:
+    """Create a compact correlation heatmap."""
+
+    if market_history is None:
+        return None
+    correlation = market_history.correlation_matrix()
+    if correlation.empty or len(
+        correlation.columns
+    ) < 2:
+        return None
+
+    tickers = list(
+        correlation.columns[:6]
+    )
+    matrix = correlation.loc[
+        tickers,
+        tickers,
+    ]
+    cell = min(
+        0.78 * cm,
+        (width - 2.2 * cm) / len(
+            tickers
+        )
+    )
+    height = 1.35 * cm + cell * len(
+        tickers
+    )
+    drawing = Drawing(
+        width,
+        height
+    )
+    drawing.add(
+        String(
+            0,
+            height - 0.25 * cm,
+            (
+                "Matrice de correlation historique"
+                if language == "fr"
+                else "Historical Correlation Matrix"
+            ),
+            fontName="Helvetica-Bold",
+            fontSize=11,
+            fillColor=PDF_DARK,
+        )
+    )
+    left = 1.45 * cm
+    top = height - 0.75 * cm
+
+    for column_index, ticker in enumerate(
+        tickers
+    ):
+        drawing.add(
+            String(
+                left + column_index * cell + 0.04 * cm,
+                top + 0.12 * cm,
+                ticker[:5],
+                fontName="Helvetica",
+                fontSize=6.2,
+                fillColor=PDF_MUTED,
+            )
+        )
+    for row_index, row_ticker in enumerate(
+        tickers
+    ):
+        y = top - (row_index + 1) * cell
+        drawing.add(
+            String(
+                0,
+                y + 0.25 * cell,
+                row_ticker[:8],
+                fontName="Helvetica",
+                fontSize=6.5,
+                fillColor=PDF_MUTED,
+            )
+        )
+        for column_index, column_ticker in enumerate(
+            tickers
+        ):
+            value = float(
+                matrix.loc[
+                    row_ticker,
+                    column_ticker,
+                ]
+            )
+            if value >= 0:
+                intensity = min(
+                    value,
+                    1.0
+                )
+                fill = colors.Color(
+                    0.94 - 0.75 * intensity,
+                    0.98 - 0.35 * intensity,
+                    0.94 - 0.55 * intensity,
+                )
+            else:
+                intensity = min(
+                    abs(
+                        value
+                    ),
+                    1.0
+                )
+                fill = colors.Color(
+                    1.0 - 0.25 * intensity,
+                    0.94 - 0.55 * intensity,
+                    0.92 - 0.55 * intensity,
+                )
+            x = left + column_index * cell
+            drawing.add(
+                Rect(
+                    x,
+                    y,
+                    cell,
+                    cell,
+                    fillColor=fill,
+                    strokeColor=colors.white,
+                    strokeWidth=0.5,
+                )
+            )
+            drawing.add(
+                String(
+                    x + 0.11 * cm,
+                    y + 0.25 * cell,
+                    f"{value:.2f}",
+                    fontName="Helvetica-Bold",
+                    fontSize=6.2,
+                    fillColor=PDF_DARK,
+                )
+            )
+
+    return drawing
+
+
 def _draw_pdf_page(
     canvas,
     doc,
@@ -2285,6 +2936,7 @@ def generate_professional_pdf_report(
     risk_score_result: Any,
     probabilistic_result: Any | None = None,
     market_snapshot: Any | None = None,
+    market_history: Any | None = None,
     llm_analysis: str | None = None,
     language: str = "fr",
     author_name: str = AUTHOR_NAME
@@ -2326,9 +2978,15 @@ def generate_professional_pdf_report(
     story: list[Any] = []
 
     story.append(
+        _brand_cover_drawing(
+            width=16.0 * cm,
+            language=language
+        )
+    )
+    story.append(
         Spacer(
             1,
-            1.0 * cm
+            0.55 * cm
         )
     )
     story.append(
@@ -2430,6 +3088,23 @@ def generate_professional_pdf_report(
                 5.6 * cm,
                 7.4 * cm
             ],
+        )
+    )
+    story.append(
+        Spacer(
+            1,
+            6
+        )
+    )
+    story.append(
+        _risk_gauge_drawing(
+            score=risk_score_result.score,
+            label=_localized_risk_label(
+                risk_score_result.label,
+                language
+            ),
+            width=16.0 * cm,
+            language=language
         )
     )
     story.append(
@@ -2537,6 +3212,64 @@ def generate_professional_pdf_report(
             styles["body"]
         )
     )
+    market_chart = _market_performance_drawing(
+        market_history=market_history,
+        width=16.0 * cm,
+        language=language
+    )
+    if market_chart is not None:
+        story.append(
+            Spacer(
+                1,
+                8
+            )
+        )
+        story.append(
+            market_chart
+        )
+
+    if market_history is not None and getattr(
+        market_history,
+        "tickers",
+        []
+    ):
+        story.append(
+            Spacer(
+                1,
+                8
+            )
+        )
+        story.append(
+            _table(
+                _market_history_rows(
+                    market_history,
+                    language
+                ),
+                widths=[
+                    3.0 * cm,
+                    3.2 * cm,
+                    3.1 * cm,
+                    3.5 * cm,
+                    3.2 * cm
+                ],
+            )
+        )
+
+    correlation_chart = _correlation_heatmap_drawing(
+        market_history=market_history,
+        width=16.0 * cm,
+        language=language
+    )
+    if correlation_chart is not None:
+        story.append(
+            Spacer(
+                1,
+                8
+            )
+        )
+        story.append(
+            correlation_chart
+        )
     story.append(
         Spacer(
             1,
@@ -2565,6 +3298,21 @@ def generate_professional_pdf_report(
         "Stress tests, VaR et Expected Shortfall" if language == "fr" else "Stress Tests, VaR and Expected Shortfall",
         styles
     )
+    stress_chart = _stress_chart_drawing(
+        scenario_results=scenario_results,
+        width=16.0 * cm,
+        language=language
+    )
+    if stress_chart is not None:
+        story.append(
+            stress_chart
+        )
+        story.append(
+            Spacer(
+                1,
+                8
+            )
+        )
     stress_rows = [
         [
             "Scenario" if language == "fr" else "Scenario",

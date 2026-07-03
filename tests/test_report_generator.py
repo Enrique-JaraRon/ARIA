@@ -2,11 +2,15 @@
 Tests du module report_generator.py
 """
 
+import pandas as pd
+
 from app.report_generator import (
     generate_executive_risk_report,
     generate_pdf_report,
+    generate_professional_pdf_report,
     generate_risk_report,
 )
+from portfolio_engine.market_data import HistoricalMarketData, MarketSnapshot
 from portfolio_engine.portfolio import Portfolio
 from portfolio_engine.pricing_BS import OptionContract
 from risk_engine.hedging_analysis import calculate_delta_hedge
@@ -202,6 +206,76 @@ def test_generate_risk_report_accepts_non_string_llm_payload():
     assert "Analyse structuree" in report
 
 
+def build_test_market_history() -> HistoricalMarketData:
+    """Prepare un historique marche multi-sous-jacents pour le PDF premium."""
+
+    dates = pd.date_range(
+        "2025-01-01",
+        periods=6,
+        freq="B"
+    )
+    prices = pd.DataFrame(
+        {
+            "SPY": [
+                500,
+                505,
+                502,
+                510,
+                514,
+                518,
+            ],
+            "QQQ": [
+                420,
+                424,
+                421,
+                428,
+                432,
+                436,
+            ],
+        },
+        index=dates,
+    )
+    returns = prices.pct_change(
+        fill_method=None
+    ).dropna()
+    snapshots = {
+        "SPY": MarketSnapshot(
+            ticker="SPY",
+            last_price=518,
+            previous_price=514,
+            daily_return=518 / 514 - 1,
+            annualized_volatility=0.18,
+            number_of_observations=6,
+            source="Test",
+            status="OK",
+        ),
+        "QQQ": MarketSnapshot(
+            ticker="QQQ",
+            last_price=436,
+            previous_price=432,
+            daily_return=436 / 432 - 1,
+            annualized_volatility=0.22,
+            number_of_observations=6,
+            source="Test",
+            status="OK",
+        ),
+    }
+
+    return HistoricalMarketData(
+        tickers=[
+            "SPY",
+            "QQQ",
+        ],
+        prices=prices,
+        returns=returns,
+        snapshots=snapshots,
+        failed_tickers={},
+        source="Test",
+        status="OK",
+        timestamp="2026-07-03T00:00:00+00:00",
+    )
+
+
 def test_generate_risk_report_supports_english_language():
     """Verifie que le rapport Markdown peut etre genere en anglais."""
 
@@ -252,3 +326,25 @@ def test_generate_pdf_report_returns_pdf_bytes():
     assert len(
         pdf_report
     ) > 1000
+
+
+def test_generate_professional_pdf_report_accepts_market_history():
+    """Verifie que le PDF premium integre un historique multi-sous-jacents."""
+
+    inputs = build_report_inputs()
+    pdf_report = generate_professional_pdf_report(
+        **inputs,
+        market_history=build_test_market_history(),
+        language="fr",
+    )
+
+    assert isinstance(
+        pdf_report,
+        bytes
+    )
+    assert pdf_report.startswith(
+        b"%PDF"
+    )
+    assert len(
+        pdf_report
+    ) > 4000

@@ -32,7 +32,11 @@ from portfolio_engine.demo_portfolios import (
     create_demo_portfolio,
     portfolio_to_dataframe,
 )
-from portfolio_engine.market_data import ManualMarketDataProvider, get_provider
+from portfolio_engine.market_data import (
+    HistoricalMarketData,
+    ManualMarketDataProvider,
+    get_provider,
+)
 from portfolio_engine.portfolio import Portfolio
 from portfolio_engine.portfolio_analytics import (
     PROFESSIONAL_COLUMNS,
@@ -1833,6 +1837,234 @@ def display_probabilistic_interpretation(
     )
 
 
+def market_history_summary_table(
+    market_history: HistoricalMarketData,
+    language: str | None = None,
+) -> pd.DataFrame:
+    """Return a readable summary table for historical market data."""
+
+    selected_language = language or ui_language
+    is_french = selected_language == "fr"
+    underlying_col = "Sous-jacent" if is_french else "Underlying"
+    last_price_col = "Dernier prix" if is_french else "Last Price"
+    daily_return_col = "Rendement jour" if is_french else "Daily Return"
+    volatility_col = "Vol. annualisee" if is_french else "Annualized Vol."
+    observations_col = "Observations"
+    source_col = "Source"
+    rows = []
+
+    for ticker in market_history.tickers:
+        snapshot = market_history.snapshots[ticker]
+        rows.append(
+            {
+                underlying_col: ticker,
+                last_price_col: snapshot.last_price,
+                daily_return_col: snapshot.daily_return,
+                volatility_col: snapshot.annualized_volatility,
+                observations_col: snapshot.number_of_observations,
+                source_col: snapshot.source,
+            }
+        )
+
+    return pd.DataFrame(rows)
+
+
+def create_market_performance_chart(
+    market_history: HistoricalMarketData,
+    language: str = "fr",
+) -> alt.Chart:
+    """Create a normalized historical performance chart."""
+
+    is_french = language == "fr"
+    if market_history.prices.empty:
+        return alt.Chart(
+            pd.DataFrame(
+                {
+                    "Date": [],
+                    "Sous-jacent": [],
+                    "Performance": [],
+                }
+            )
+        ).mark_line()
+
+    prices = market_history.prices.copy()
+    prices.index = pd.to_datetime(
+        prices.index,
+        errors="coerce",
+    )
+    prices = prices.dropna(
+        how="all",
+    )
+    normalized = prices.divide(
+        prices.iloc[0]
+    ) - 1
+    chart_data = (
+        normalized.reset_index()
+        .rename(
+            columns={
+                normalized.index.name or "index": "Date",
+            }
+        )
+        .melt(
+            id_vars="Date",
+            var_name="Sous-jacent",
+            value_name="Performance",
+        )
+    )
+
+    return alt.Chart(chart_data).mark_line(
+        strokeWidth=2.4,
+    ).encode(
+        x=alt.X(
+            "Date:T",
+            title=None,
+        ),
+        y=alt.Y(
+            "Performance:Q",
+            title=(
+                "Performance normalisée"
+                if is_french
+                else "Normalized Performance"
+            ),
+            axis=alt.Axis(
+                format="+.0%",
+            ),
+        ),
+        color=alt.Color(
+            "Sous-jacent:N",
+            title=None,
+        ),
+        tooltip=[
+            alt.Tooltip(
+                "Date:T",
+                title="Date",
+            ),
+            alt.Tooltip(
+                "Sous-jacent:N",
+                title="Sous-jacent" if is_french else "Underlying",
+            ),
+            alt.Tooltip(
+                "Performance:Q",
+                title="Performance",
+                format="+.2%",
+            ),
+        ],
+    ).properties(
+        height=300,
+        title=alt.TitleParams(
+            text=(
+                "Historique des sous-jacents"
+                if is_french
+                else "Underlying History"
+            ),
+            subtitle=(
+                "Performance normalisée depuis le début de la fenêtre de données."
+                if is_french
+                else "Normalized performance since the beginning of the data window."
+            ),
+            fontSize=20,
+            subtitleFontSize=13,
+            anchor="start",
+            offset=20,
+        ),
+    ).configure_view(
+        strokeWidth=0,
+    ).configure_axis(
+        labelColor="#475569",
+        titleColor="#334155",
+        gridColor="rgba(100, 116, 139, 0.18)",
+    ).configure_title(
+        color="#172033",
+        subtitleColor="#64748B",
+    ).configure(
+        background="transparent",
+    )
+
+
+def create_market_correlation_chart(
+    market_history: HistoricalMarketData,
+    language: str = "fr",
+) -> alt.Chart:
+    """Create a market-correlation heatmap."""
+
+    is_french = language == "fr"
+    correlation = market_history.correlation_matrix()
+    if correlation.empty:
+        correlation = pd.DataFrame(
+            [[1.0]],
+            index=["N/A"],
+            columns=["N/A"],
+        )
+    chart_data = correlation.reset_index().melt(
+        id_vars="index",
+        var_name="Sous-jacent B",
+        value_name="Corrélation",
+    ).rename(
+        columns={
+            "index": "Sous-jacent A",
+        }
+    )
+    chart_data["Label"] = chart_data["Corrélation"].map(
+        lambda value: f"{value:.2f}"
+    )
+
+    return alt.Chart(chart_data).mark_rect(
+        cornerRadius=4,
+    ).encode(
+        x=alt.X(
+            "Sous-jacent B:N",
+            title=None,
+        ),
+        y=alt.Y(
+            "Sous-jacent A:N",
+            title=None,
+        ),
+        color=alt.Color(
+            "Corrélation:Q",
+            title="Corrélation" if is_french else "Correlation",
+            scale=alt.Scale(
+                domain=[
+                    -1,
+                    0,
+                    1,
+                ],
+                range=[
+                    "#B91C1C",
+                    "#FFF7CC",
+                    "#047857",
+                ],
+            ),
+        ),
+        tooltip=[
+            alt.Tooltip(
+                "Sous-jacent A:N",
+                title="A",
+            ),
+            alt.Tooltip(
+                "Sous-jacent B:N",
+                title="B",
+            ),
+            alt.Tooltip(
+                "Corrélation:Q",
+                title="Corrélation" if is_french else "Correlation",
+                format=".2f",
+            ),
+        ],
+    ) + alt.Chart(chart_data).mark_text(
+        fontSize=12,
+        fontWeight="bold",
+    ).encode(
+        x="Sous-jacent B:N",
+        y="Sous-jacent A:N",
+        text="Label:N",
+        color=alt.condition(
+            "abs(datum['Corrélation']) > 0.62",
+            alt.value("#FFFFFF"),
+            alt.value("#172033"),
+        ),
+    )
+
+
 render_header(
     title="ARIA - Adaptive Risk Intelligence Agent",
     subtitle=tr(
@@ -1886,13 +2118,14 @@ with st.sidebar.expander(tr("Données de marché", "Market Data"), expanded=Fals
         )
 
 market_snapshot = None
+market_provider = None
 market_data_status = tr("Mode manuel", "Manual Mode")
 default_spot = 500.0
 default_volatility_percent = 20.0
 
 if market_source in {"Yahoo Finance", "CSV local", "Bloomberg optionnel"}:
     try:
-        provider = get_provider(
+        market_provider = get_provider(
             source=market_source,
             csv_path=(
                 resolve_project_path(csv_market_data_path)
@@ -1901,7 +2134,7 @@ if market_source in {"Yahoo Finance", "CSV local", "Bloomberg optionnel"}:
             ),
         )
 
-        market_snapshot = provider.get_market_snapshot(
+        market_snapshot = market_provider.get_market_snapshot(
             ticker=market_ticker,
         )
 
@@ -1953,11 +2186,11 @@ risk_free_rate = risk_free_rate_percent / 100
 dividend_yield = dividend_yield_percent / 100
 
 if market_source == "Manuel":
-    manual_provider = ManualMarketDataProvider(
+    market_provider = ManualMarketDataProvider(
         spot=current_spot,
         volatility=current_volatility,
     )
-    market_snapshot = manual_provider.get_market_snapshot(ticker=market_ticker)
+    market_snapshot = market_provider.get_market_snapshot(ticker=market_ticker)
     market_data_status = market_snapshot.status
 
 
@@ -2864,6 +3097,27 @@ if analyse_button or auto_launch_analysis:
         implied_volatility=current_volatility,
     )
 
+    market_history = None
+    historical_returns = None
+    market_history_warning = None
+
+    if market_provider is not None:
+        try:
+            market_history = market_provider.get_historical_data(
+                portfolio.underlyings()
+            )
+            if (
+                market_history is not None
+                and not market_history.returns.empty
+                and market_history.number_of_observations >= 2
+            ):
+                historical_returns = market_history.returns
+
+        except Exception as error:
+            market_history_warning = str(
+                error
+            )
+
     history_manager = RiskHistory(
         file_path=RISK_HISTORY_PATH,
     )
@@ -2913,6 +3167,7 @@ if analyse_button or auto_launch_analysis:
         horizon_days=probabilistic_horizon_days,
         number_of_simulations=probabilistic_simulations_count,
         confidence_level=probabilistic_confidence_percent / 100,
+        historical_returns=historical_returns,
     )
 
     scenario_results = run_standard_scenarios(portfolio)
@@ -3044,6 +3299,101 @@ if analyse_button or auto_launch_analysis:
         )
 
         render_section_title(
+            tr("Données de marché par sous-jacent", "Market Data by Underlying"),
+            tr(
+                (
+                    "Historique utilisé pour calibrer les rendements, "
+                    "volatilités et corrélations du module Monte Carlo."
+                ),
+                (
+                    "History used to calibrate returns, volatilities and "
+                    "correlations in the Monte Carlo module."
+                ),
+            ),
+        )
+
+        if market_history_warning:
+            st.warning(
+                tr(
+                    "Historique de marché indisponible : ",
+                    "Market history unavailable: ",
+                )
+                + market_history_warning
+            )
+        elif market_history is not None and market_history.tickers:
+            market_table = market_history_summary_table(
+                market_history,
+                ui_language,
+            )
+            display_table = market_table.copy()
+            for percent_column in [
+                tr("Rendement jour", "Daily Return"),
+                tr("Vol. annualisée", "Annualized Vol."),
+            ]:
+                if percent_column in display_table.columns:
+                    display_table[percent_column] = display_table[
+                        percent_column
+                    ].map(
+                        lambda value: f"{value:.2%}"
+                    )
+            for price_column in [
+                tr("Dernier prix", "Last Price"),
+            ]:
+                if price_column in display_table.columns:
+                    display_table[price_column] = display_table[
+                        price_column
+                    ].map(
+                        lambda value: f"{value:,.2f}"
+                    )
+
+            st.dataframe(
+                display_table,
+                hide_index=True,
+                width="stretch",
+            )
+
+            if not market_history.prices.empty and len(market_history.prices) >= 3:
+                st.altair_chart(
+                    create_market_performance_chart(
+                        market_history,
+                        language=ui_language,
+                    ),
+                    width="stretch",
+                )
+
+            if len(market_history.tickers) >= 2 and not market_history.returns.empty:
+                with st.expander(
+                    tr(
+                        "Voir la matrice de corrélation historique",
+                        "Show Historical Correlation Matrix",
+                    ),
+                    expanded=False,
+                ):
+                    st.altair_chart(
+                        create_market_correlation_chart(
+                            market_history,
+                            language=ui_language,
+                        ),
+                        width="stretch",
+                    )
+
+            if market_history.failed_tickers:
+                st.info(
+                    tr(
+                        "Certains sous-jacents n'ont pas pu être chargés : ",
+                        "Some underlyings could not be loaded: ",
+                    )
+                    + ", ".join(market_history.failed_tickers)
+                )
+        else:
+            st.info(
+                tr(
+                    "Mode manuel : ARIA utilise les hypothèses de marché saisies dans la barre latérale.",
+                    "Manual mode: ARIA uses the market assumptions entered in the sidebar.",
+                )
+            )
+
+        render_section_title(
             tr("Greeks du portefeuille", "Portfolio Greeks"),
             tr(
                 "Expositions agrégées aux principaux facteurs de risque.",
@@ -3155,7 +3505,7 @@ if analyse_button or auto_launch_analysis:
         with stress_summary_tab:
             stress_chart = create_stress_chart(
                 scenario_results,
-                
+
             )
 
             st.altair_chart(
@@ -3200,7 +3550,7 @@ if analyse_button or auto_launch_analysis:
             st.altair_chart(
                 create_stress_matrix_chart(
                     surface_data,
-                    
+
                 ),
                 width="stretch",
             )
@@ -3399,6 +3749,36 @@ if analyse_button or auto_launch_analysis:
             f"{probabilistic_result.exposure_base:,.2f}",
         )
 
+        if historical_returns is not None and not historical_returns.empty:
+            st.success(
+                tr(
+                    (
+                        "Monte Carlo calibré avec les rendements historiques "
+                        f"de {len(market_history.tickers) if market_history else 0} "
+                        "sous-jacent(s)."
+                    ),
+                    (
+                        "Monte Carlo calibrated with historical returns for "
+                        f"{len(market_history.tickers) if market_history else 0} "
+                        "underlying(s)."
+                    ),
+                )
+            )
+        else:
+            st.info(
+                tr(
+                    (
+                        "Monte Carlo calibré avec les volatilités et "
+                        "corrélations internes ARIA faute d'historique complet."
+                    ),
+                    (
+                        "Monte Carlo calibrated with ARIA internal volatility "
+                        "and correlation assumptions because complete history "
+                        "is unavailable."
+                    ),
+                )
+            )
+
         prob_col_1, prob_col_2, prob_col_3, prob_col_4 = st.columns(4)
 
         prob_col_1.metric(
@@ -3441,7 +3821,7 @@ if analyse_button or auto_launch_analysis:
             simulations_data=probabilistic_simulations,
             selected_var=selected_var,
             selected_es=selected_es,
-            
+
         )
         st.altair_chart(
             distribution_chart,
@@ -3787,7 +4167,7 @@ if analyse_button or auto_launch_analysis:
             risk_score_result=risk_score_result,
             market_snapshot=market_snapshot,
             llm_analysis=llm_analysis_en if ui_language == "en" else llm_analysis,
-            
+
         )
 
         with st.expander(tr("Aperçu du rapport téléchargeable", "Downloadable Report Preview"), expanded=True):
@@ -3805,6 +4185,7 @@ if analyse_button or auto_launch_analysis:
             hedge_result=hedge_result,
             risk_score_result=risk_score_result,
             market_snapshot=market_snapshot,
+            market_history=market_history,
             llm_analysis=llm_analysis,
             language="fr",
         )
@@ -3821,6 +4202,7 @@ if analyse_button or auto_launch_analysis:
             hedge_result=hedge_result,
             risk_score_result=risk_score_result,
             market_snapshot=market_snapshot,
+            market_history=market_history,
             llm_analysis=llm_analysis_en,
             language="en",
         )

@@ -11,6 +11,7 @@ from portfolio_engine.market_data import (
     BloombergProvider,
     CsvMarketDataProvider,
     ManualMarketDataProvider,
+    YahooFinanceProvider,
     get_market_snapshot,
     get_provider,
 )
@@ -76,6 +77,76 @@ def test_get_market_snapshot_returns_valid_data(monkeypatch):
     assert snapshot.annualized_volatility > 0
     assert snapshot.number_of_observations == 5
     assert snapshot.source == "Yahoo Finance"
+
+
+def test_yahoo_provider_returns_multi_underlying_history(monkeypatch):
+    """Verifie le chargement historique multi-sous-jacents Yahoo."""
+
+    fake_module = types.ModuleType(
+        "yfinance"
+    )
+
+    def fake_download(
+        tickers,
+        period="6mo",
+        progress=False,
+        auto_adjust=True,
+        group_by="column",
+        threads=False,
+    ):
+        dates = pd.date_range(
+            start="2024-01-01",
+            periods=5,
+            freq="D"
+        )
+        columns = pd.MultiIndex.from_product(
+            [
+                ["Close"],
+                ["SPY", "QQQ"],
+            ]
+        )
+        return pd.DataFrame(
+            [
+                [100.0, 200.0],
+                [101.0, 202.0],
+                [102.0, 201.0],
+                [104.0, 205.0],
+                [105.0, 207.0],
+            ],
+            index=dates,
+            columns=columns,
+        )
+
+    fake_module.download = fake_download
+
+    monkeypatch.setitem(
+        sys.modules,
+        "yfinance",
+        fake_module
+    )
+
+    provider = YahooFinanceProvider()
+    history = provider.get_historical_data(
+        [
+            "spy",
+            "QQQ",
+        ]
+    )
+
+    assert history.tickers == [
+        "SPY",
+        "QQQ",
+    ]
+    assert history.prices.shape == (
+        5,
+        2,
+    )
+    assert history.returns.shape[1] == 2
+    assert history.snapshots["SPY"].last_price == 105.0
+    assert history.correlation_matrix().shape == (
+        2,
+        2,
+    )
 
 
 def test_get_market_snapshot_rejects_empty_ticker():
@@ -199,6 +270,66 @@ def test_csv_market_data_provider_returns_snapshot(tmp_path):
     assert snapshot.previous_price == 102.0
     assert snapshot.number_of_observations == 5
     assert snapshot.source == "CSV Provider"
+
+
+def test_csv_market_data_provider_returns_multi_underlying_history(tmp_path):
+    """Verifie que le CSV peut alimenter plusieurs sous-jacents."""
+
+    csv_path = tmp_path / "market_data.csv"
+
+    data = pd.DataFrame(
+        {
+            "Date": list(
+                pd.date_range(
+                    start="2024-01-01",
+                    periods=5,
+                    freq="D"
+                )
+            )
+            * 2,
+            "Ticker": [
+                "SPY",
+            ]
+            * 5
+            + [
+                "QQQ",
+            ]
+            * 5,
+            "Close": [
+                100.0,
+                101.0,
+                102.0,
+                103.0,
+                104.0,
+                200.0,
+                201.0,
+                203.0,
+                204.0,
+                206.0,
+            ],
+        }
+    )
+    data.to_csv(
+        csv_path,
+        index=False
+    )
+
+    provider = CsvMarketDataProvider(
+        csv_path=csv_path
+    )
+    history = provider.get_historical_data(
+        [
+            "SPY",
+            "QQQ",
+        ]
+    )
+
+    assert history.tickers == [
+        "SPY",
+        "QQQ",
+    ]
+    assert history.snapshots["QQQ"].last_price == 206.0
+    assert history.number_of_observations == 4
 
 
 def test_get_provider_returns_expected_provider(tmp_path):
