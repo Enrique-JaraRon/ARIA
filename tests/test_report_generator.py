@@ -138,11 +138,12 @@ def test_generate_risk_report_contains_executive_sections():
     expected_sections = [
         "# ARIA - Rapport exécutif de risque",
         "Préparé par : **Enrique Jara Ron**",
-        "## 1. Vue exécutive",
-        "## 2. Diagnostic de risque",
-        "## 3. Points clés",
-        "## 4. Recommandations à étudier",
-        "## 5. Avertissement",
+        "## 1. Explication simple pour le client",
+        "## 2. Vue exécutive",
+        "## 3. Diagnostic de risque",
+        "## 4. Points clés",
+        "## 5. Recommandations à étudier",
+        "## 6. Avertissement",
         "## Annexe - chiffres significatifs",
         "| Indicateur | Valeur |",
     ]
@@ -164,8 +165,22 @@ def test_generate_risk_report_can_include_llm_analysis():
         **inputs
     )
 
-    assert "## 4. Recommandations à étudier" in report
+    assert "## 5. Recommandations à étudier" in report
     assert llm_analysis in report
+
+
+def test_generate_risk_report_supports_english_language():
+    """Verifie que le rapport Markdown peut etre genere en anglais."""
+
+    report = generate_risk_report(
+        **build_report_inputs(),
+        language="en",
+    )
+
+    assert "# ARIA - Executive Risk Report" in report
+    assert "## 1. Plain-language client explanation" in report
+    assert "Prepared by: **Enrique Jara Ron**" in report
+    assert "Rapport exécutif" not in report
 
 
 def test_generate_executive_risk_report_alias_matches_main_report():

@@ -468,8 +468,8 @@ def inject_custom_css() -> str:
             linear-gradient(180deg, rgba(21, 31, 42, 0.96), rgba(11, 17, 24, 0.96));
         border: 1px solid rgba(0, 213, 255, 0.22);
         border-radius: 8px;
-        padding: 0.95rem 1rem 0.9rem;
-        min-height: 104px;
+        padding: 0.82rem 0.95rem 0.78rem;
+        min-height: 92px;
         box-shadow: 0 18px 44px rgba(0, 0, 0, 0.30);
     }
 
@@ -494,7 +494,7 @@ def inject_custom_css() -> str:
 
     .aria-card-value {
         color: var(--aria-ink);
-        font-size: 1.34rem;
+        font-size: 1.28rem;
         font-weight: 760;
         line-height: 1.2;
         overflow-wrap: anywhere;

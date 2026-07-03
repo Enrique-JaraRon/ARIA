@@ -2,7 +2,9 @@
 ARIA - Application Streamlit
 """
 
+import re
 import unicodedata
+from pathlib import Path
 
 import altair as alt
 import pandas as pd
@@ -11,6 +13,7 @@ import streamlit as st
 from app.app_config import (
     DEFAULT_MARKET_DATA_PATH,
     DEFAULT_PORTFOLIO_PATH,
+    PORTFOLIOS_DIR,
     RISK_HISTORY_PATH,
     ensure_runtime_directories,
     relative_to_project,
@@ -256,6 +259,152 @@ def merge_visible_portfolio_edits(
     return merged
 
 
+def sanitize_portfolio_name(
+    name: str,
+) -> str:
+    """Return a safe file stem for a user portfolio name."""
+
+    cleaned = re.sub(
+        r"[^A-Za-z0-9_\- ]+",
+        "",
+        str(name).strip(),
+    )
+    cleaned = re.sub(
+        r"\s+",
+        "_",
+        cleaned,
+    ).strip("_")
+
+    return cleaned or "portefeuille_aria"
+
+
+def saved_portfolio_files() -> list[Path]:
+    """List user-saved portfolio CSV files."""
+
+    PORTFOLIOS_DIR.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    return sorted(
+        PORTFOLIOS_DIR.glob("*.csv"),
+        key=lambda path: path.stat().st_mtime,
+        reverse=True,
+    )
+
+
+def portfolio_file_label(
+    path: Path,
+) -> str:
+    """Return a clean display label for a saved portfolio file."""
+
+    return path.stem.replace(
+        "_",
+        " ",
+    )
+
+
+def row_display_label(
+    index: int,
+    row: pd.Series,
+) -> str:
+    """Return a readable label for row actions."""
+
+    ticker = str(row.get("Ticker", "") or "").strip() or "Ticker manquant"
+    name = str(row.get("Nom", "") or "").strip() or "Sans nom"
+    weight = pd.to_numeric(
+        row.get("Weight"),
+        errors="coerce",
+    )
+    weight_label = (
+        f"{float(weight):.2f}%"
+        if not pd.isna(weight)
+        else "poids manquant"
+    )
+
+    return f"Ligne {index + 1} - {ticker} - {name} - {weight_label}"
+
+
+def append_portfolio_row(
+    row: dict[str, object],
+    current_spot: float,
+    current_volatility: float,
+) -> None:
+    """Append a guided row to the current portfolio table."""
+
+    st.session_state.portfolio_data = normalize_portfolio_table(
+        pd.concat(
+            [
+                st.session_state.portfolio_data,
+                pd.DataFrame([row]),
+            ],
+            ignore_index=True,
+        ),
+        default_spot_value=current_spot,
+        default_volatility_value=current_volatility,
+    )
+
+    if "portfolio_editor" in st.session_state:
+        del st.session_state["portfolio_editor"]
+
+
+def delete_portfolio_rows(
+    selected_labels: list[str],
+) -> None:
+    """Delete rows selected through their stable display labels."""
+
+    if not selected_labels:
+        return
+
+    label_to_index = {
+        row_display_label(index, row): index
+        for index, row in st.session_state.portfolio_data.iterrows()
+    }
+    indices_to_drop = [
+        label_to_index[label]
+        for label in selected_labels
+        if label in label_to_index
+    ]
+
+    if not indices_to_drop:
+        return
+
+    st.session_state.portfolio_data = st.session_state.portfolio_data.drop(
+        index=indices_to_drop,
+    ).reset_index(
+        drop=True,
+    )
+
+    if "portfolio_editor" in st.session_state:
+        del st.session_state["portfolio_editor"]
+
+
+def scale_weights_to_100() -> bool:
+    """Scale non-missing portfolio weights to exactly 100%."""
+
+    weights = pd.to_numeric(
+        st.session_state.portfolio_data.get("Weight", pd.Series(dtype=float)),
+        errors="coerce",
+    )
+    total_weight = float(
+        weights.fillna(0).sum()
+    )
+
+    if total_weight <= 0:
+        return False
+
+    st.session_state.portfolio_data.loc[:, "Weight"] = (
+        weights.fillna(0) / total_weight * 100
+    ).round(
+        4
+    )
+
+    if "portfolio_editor" in st.session_state:
+        del st.session_state["portfolio_editor"]
+
+    return True
+
+
 def default_portfolio() -> pd.DataFrame:
     """Cree le portefeuille affiche au premier lancement."""
     return pd.DataFrame(
@@ -384,10 +533,10 @@ def normalize_portfolio_table(
     defaults = {
         "Asset type": "stock",
         "Asset class": pd.NA,
-        "Ticker": "SPY",
-        "Sous-jacent": "SPY",
-        "Nom": "Position",
-        "Sector": "Unclassified",
+        "Ticker": pd.NA,
+        "Sous-jacent": pd.NA,
+        "Nom": pd.NA,
+        "Sector": "Non classé",
         "Currency": "USD",
         "Weight": pd.NA,
         "Value": pd.NA,
@@ -410,10 +559,6 @@ def normalize_portfolio_table(
         "Instrument": "Action",
     }
 
-    for column, value in defaults.items():
-        if column not in normalized.columns:
-            normalized[column] = value
-
     normalized = normalized.replace(
         {
             "": pd.NA,
@@ -421,15 +566,40 @@ def normalize_portfolio_table(
         }
     )
 
+    meaningful_columns = [
+        column
+        for column in [
+            "Ticker",
+            "Sous-jacent",
+            "Nom",
+            "Weight",
+            "Value",
+            "Quantity",
+            "Quantite",
+            "Price",
+            "Spot",
+            "Option type",
+            "Strike",
+        ]
+        if column in normalized.columns
+    ]
+    if meaningful_columns:
+        normalized = normalized.loc[
+            ~normalized[meaningful_columns].isna().all(axis=1)
+        ].copy()
+
+    for column, value in defaults.items():
+        if column not in normalized.columns:
+            normalized[column] = value
+
     normalized["Ticker"] = normalized["Ticker"].fillna(
         normalized["Sous-jacent"]
     )
-    normalized["Ticker"] = normalized["Ticker"].fillna("SPY")
     normalized["Sous-jacent"] = normalized["Sous-jacent"].fillna(
         normalized["Ticker"]
     )
     normalized["Nom"] = normalized["Nom"].fillna(normalized["Ticker"])
-    normalized["Sector"] = normalized["Sector"].fillna("Unclassified")
+    normalized["Sector"] = normalized["Sector"].fillna("Non classé")
     normalized["Currency"] = normalized["Currency"].fillna("USD")
     normalized["Data source"] = normalized["Data source"].fillna("Manuel")
     normalized["Commentaire"] = normalized["Commentaire"].fillna("")
@@ -579,47 +749,6 @@ def normalize_portfolio_table(
             * 100
         )
 
-    stock_rows = normalized.loc[stock_mask].copy()
-    option_rows = normalized.loc[option_mask].copy()
-
-    if not stock_rows.empty:
-        grouped_stock_rows = []
-        for _, group in stock_rows.groupby("Ticker", dropna=False, sort=False):
-            first = group.iloc[0].copy()
-            first["Quantity"] = group["Quantity"].sum()
-            first["Quantite"] = first["Quantity"]
-            first["Value"] = group["Value"].sum()
-            first["Weight"] = group["Weight"].sum()
-            comments = [
-                str(comment)
-                for comment in group["Commentaire"].dropna().unique()
-                if str(comment).strip()
-            ]
-            first["Commentaire"] = " | ".join(comments[:3])
-            grouped_stock_rows.append(first)
-        stock_rows = pd.DataFrame(grouped_stock_rows)
-
-    normalized = pd.concat(
-        [
-            option_rows,
-            stock_rows,
-        ],
-        ignore_index=True,
-    )
-
-    weight_total = float(normalized["Weight"].fillna(0).sum())
-    if not normalized.empty and abs(weight_total - 100.0) <= 0.05:
-        rounding_gap = 100.0 - weight_total
-        max_weight_index = normalized["Weight"].fillna(0).idxmax()
-        normalized.loc[max_weight_index, "Weight"] = round(
-            float(normalized.loc[max_weight_index, "Weight"]) + rounding_gap,
-            4,
-        )
-
-    normalized = normalized.drop_duplicates(
-        ignore_index=True,
-    )
-
     desired_columns = PORTFOLIO_INTERNAL_COLUMNS
 
     existing_columns = [
@@ -762,14 +891,23 @@ def build_portfolio_from_table(
     return portfolio
 
 
-def create_stress_chart(scenario_results) -> alt.Chart:
+def create_stress_chart(
+    scenario_results,
+    language: str = "fr",
+) -> alt.Chart:
     """Cree un graphique des profits et pertes par scenario."""
+    is_french = language == "fr"
+    loss_label = "Perte" if is_french else "Loss"
+    pnl_title = "Profit / Perte" if is_french else "Profit / Loss"
     full_data = pd.DataFrame(
         [
             {
-                "Scenario": result.name,
+                "Scenario": display_scenario_name(
+                    result.name,
+                    language,
+                ),
                 "Profit / Perte": result.profit_and_loss,
-                "Resultat": "Gain" if result.profit_and_loss >= 0 else "Perte",
+                "Resultat": "Gain" if result.profit_and_loss >= 0 else loss_label,
             }
             for result in scenario_results
         ]
@@ -798,13 +936,13 @@ def create_stress_chart(scenario_results) -> alt.Chart:
         1.0,
     )
     chart_data["Scenario court"] = chart_data["Scenario"].str.replace(
-        "Global Financial Crisis",
+        "Crise financière mondiale 2008",
         "Crise 2008",
         regex=False,
     )
     chart_data["Scenario court"] = chart_data["Scenario court"].str.replace(
-        "Japan / Yen Carry Unwind",
-        "Yen carry unwind",
+        "Crise japonaise / yen carry trade",
+        "Yen carry",
         regex=False,
     )
     chart_data["Scenario court"] = chart_data["Scenario court"].str.slice(0, 32)
@@ -824,11 +962,15 @@ def create_stress_chart(scenario_results) -> alt.Chart:
         ),
         x=alt.X(
             "Profit / Perte:Q",
-            title="Profit / Perte du portefeuille",
+            title=(
+                "Profit / Perte du portefeuille"
+                if is_french
+                else "Portfolio Profit / Loss"
+            ),
             stack=False,
             scale=alt.Scale(
                 domain=[
-                    -max_abs_impact * 1.08,
+                    -max_abs_impact * 1.12,
                     max_abs_impact * 1.08,
                 ],
                 nice=False,
@@ -838,7 +980,7 @@ def create_stress_chart(scenario_results) -> alt.Chart:
         color=alt.Color(
             "Resultat:N",
             scale=alt.Scale(
-                domain=["Gain", "Perte"],
+                domain=["Gain", loss_label],
                 range=["#19A974", "#E05252"],
             ),
             legend=alt.Legend(
@@ -847,10 +989,13 @@ def create_stress_chart(scenario_results) -> alt.Chart:
             ),
         ),
         tooltip=[
-            alt.Tooltip("Scenario:N", title="Scenario"),
+            alt.Tooltip(
+                "Scenario:N",
+                title="Scénario" if is_french else "Scenario",
+            ),
             alt.Tooltip(
                 "Profit / Perte:Q",
-                title="Profit / Perte",
+                title=pnl_title,
                 format=",.2f",
             ),
         ],
@@ -874,7 +1019,7 @@ def create_stress_chart(scenario_results) -> alt.Chart:
             stack=False,
             scale=alt.Scale(
                 domain=[
-                    -max_abs_impact * 1.08,
+                    -max_abs_impact * 1.12,
                     max_abs_impact * 1.08,
                 ],
                 nice=False,
@@ -883,7 +1028,7 @@ def create_stress_chart(scenario_results) -> alt.Chart:
         color=alt.Color(
             "Resultat:N",
             scale=alt.Scale(
-                domain=["Gain", "Perte"],
+                domain=["Gain", loss_label],
                 range=["#19A974", "#E05252"],
             ),
             legend=alt.Legend(
@@ -892,10 +1037,13 @@ def create_stress_chart(scenario_results) -> alt.Chart:
             ),
         ),
         tooltip=[
-            alt.Tooltip("Scenario:N", title="Scenario"),
+            alt.Tooltip(
+                "Scenario:N",
+                title="Scénario" if is_french else "Scenario",
+            ),
             alt.Tooltip(
                 "Profit / Perte:Q",
-                title="Profit / Perte",
+                title=pnl_title,
                 format=",.2f",
             ),
         ],
@@ -916,8 +1064,8 @@ def create_stress_chart(scenario_results) -> alt.Chart:
         baseline="middle",
         fontSize=12,
         fontWeight="bold",
-        dx=-10,
-        align="right",
+        dx=12,
+        align="left",
     ).encode(
         y=alt.Y(
             "Scenario court:N",
@@ -961,8 +1109,16 @@ def create_stress_chart(scenario_results) -> alt.Chart:
     ).properties(
         height=max(340, len(chart_data) * 42),
         title=alt.TitleParams(
-            text="P&L par scénario de stress",
-            subtitle="Pires pertes et meilleurs gains, triés du plus défavorable au plus favorable.",
+            text=(
+                "P&L par scénario de stress"
+                if is_french
+                else "Stress Scenario P&L"
+            ),
+            subtitle=(
+                "Pires pertes et meilleurs gains, triés du plus défavorable au plus favorable."
+                if is_french
+                else "Worst losses and best gains, sorted from most adverse to most favorable."
+            ),
             fontSize=20,
             subtitleFontSize=13,
             anchor="start",
@@ -1200,9 +1356,13 @@ def create_var_distribution_chart(
     )
 
 
-def create_stress_matrix_chart(surface_data: pd.DataFrame) -> alt.Chart:
+def create_stress_matrix_chart(
+    surface_data: pd.DataFrame,
+    language: str = "fr",
+) -> alt.Chart:
     """Cree une matrice rouge-vert des P&L spot / volatilite."""
 
+    is_french = language == "fr"
     matrix_data = surface_data.copy()
     matrix_data["Choc spot"] = matrix_data["Variation spot"].map(
         lambda value: f"{value:+.0%}"
@@ -1221,7 +1381,7 @@ def create_stress_matrix_chart(surface_data: pd.DataFrame) -> alt.Chart:
     base = alt.Chart(matrix_data).encode(
         x=alt.X(
             "Choc spot:N",
-            title="Choc spot",
+            title="Choc spot" if is_french else "Spot shock",
             sort=[
                 "-15%",
                 "-8%",
@@ -1233,7 +1393,7 @@ def create_stress_matrix_chart(surface_data: pd.DataFrame) -> alt.Chart:
         ),
         y=alt.Y(
             "Choc volatilite:N",
-            title="Choc volatilité",
+            title="Choc volatilité" if is_french else "Volatility shock",
             sort=[
                 "+20%",
                 "+10%",
@@ -1248,7 +1408,7 @@ def create_stress_matrix_chart(surface_data: pd.DataFrame) -> alt.Chart:
     ).encode(
         color=alt.Color(
             "Profit / Perte:Q",
-            title="P&L estimé",
+            title="P&L estimé" if is_french else "Estimated P&L",
             scale=alt.Scale(
                 domain=[
                     -max_abs_pnl,
@@ -1263,9 +1423,19 @@ def create_stress_matrix_chart(surface_data: pd.DataFrame) -> alt.Chart:
             ),
         ),
         tooltip=[
-            alt.Tooltip("Choc spot:N", title="Choc spot"),
-            alt.Tooltip("Choc volatilite:N", title="Choc volatilité"),
-            alt.Tooltip("Profit / Perte:Q", title="Profit / Perte", format=",.2f"),
+            alt.Tooltip(
+                "Choc spot:N",
+                title="Choc spot" if is_french else "Spot shock",
+            ),
+            alt.Tooltip(
+                "Choc volatilite:N",
+                title="Choc volatilité" if is_french else "Volatility shock",
+            ),
+            alt.Tooltip(
+                "Profit / Perte:Q",
+                title="Profit / Perte" if is_french else "Profit / Loss",
+                format=",.2f",
+            ),
         ],
     )
 
@@ -1284,8 +1454,16 @@ def create_stress_matrix_chart(surface_data: pd.DataFrame) -> alt.Chart:
     return (heatmap + labels).properties(
         height=310,
         title=alt.TitleParams(
-            text="Matrice P&L Spot / Volatilité",
-            subtitle="Chaque cellule affiche le P&L estimé pour un choc spot-volatilité.",
+            text=(
+                "Matrice P&L Spot / Volatilité"
+                if is_french
+                else "Spot / Volatility P&L Matrix"
+            ),
+            subtitle=(
+                "Chaque cellule affiche le P&L estimé pour un choc spot-volatilité."
+                if is_french
+                else "Each cell shows the estimated P&L for a spot-volatility shock."
+            ),
             fontSize=20,
             subtitleFontSize=13,
             anchor="start",
@@ -1456,6 +1634,201 @@ def tr(
     return english if ui_language == "en" else french
 
 
+SCENARIO_TRANSLATIONS = {
+    "2008 Global Financial Crisis": {
+        "fr": "Crise financière mondiale 2008",
+        "en": "2008 Global Financial Crisis",
+    },
+    "Covid Liquidity Shock": {
+        "fr": "Choc de liquidité Covid",
+        "en": "Covid Liquidity Shock",
+    },
+    "Japan / Yen Carry Unwind": {
+        "fr": "Crise japonaise / yen carry trade",
+        "en": "Japan / Yen Carry Unwind",
+    },
+    "Inflation Shock": {
+        "fr": "Choc inflationniste",
+        "en": "Inflation Shock",
+    },
+    "Rates Shock": {
+        "fr": "Choc de taux",
+        "en": "Rates Shock",
+    },
+    "Tech Sell-off": {
+        "fr": "Vente massive sur la tech",
+        "en": "Tech Sell-off",
+    },
+    "Volatility Spike": {
+        "fr": "Pic de volatilité",
+        "en": "Volatility Spike",
+    },
+    "Sovereign / Banking Stress": {
+        "fr": "Stress souverain / bancaire",
+        "en": "Sovereign / Banking Stress",
+    },
+    "Hausse modérée": {
+        "fr": "Hausse modérée",
+        "en": "Moderate Rally",
+    },
+    "Stress de marché": {
+        "fr": "Stress de marché",
+        "en": "Market Stress",
+    },
+    "Scenario personnalise": {
+        "fr": "Scénario personnalisé",
+        "en": "Custom Scenario",
+    },
+}
+
+RISK_LABEL_TRANSLATIONS = {
+    "Risque faible": "Low risk",
+    "Risque modéré": "Moderate risk",
+    "Risque eleve": "High risk",
+    "Risque élevé": "High risk",
+    "Risque très élevé": "Very high risk",
+    "Risque critique": "Critical risk",
+}
+
+
+def display_scenario_name(
+    name: str,
+    language: str | None = None,
+) -> str:
+    """Return a localized scenario label without touching engine objects."""
+
+    selected_language = language or ui_language
+    return SCENARIO_TRANSLATIONS.get(
+        str(name),
+        {},
+    ).get(
+        selected_language,
+        str(name),
+    )
+
+
+def display_risk_label(
+    label: str,
+    language: str | None = None,
+) -> str:
+    """Return a localized risk label for UI and reports."""
+
+    selected_language = language or ui_language
+    if selected_language == "en":
+        return RISK_LABEL_TRANSLATIONS.get(
+            str(label),
+            str(label),
+        )
+
+    return str(label)
+
+
+def display_risk_explanation(
+    score: int,
+    explanation: str,
+    language: str | None = None,
+) -> str:
+    """Return a localized risk explanation."""
+
+    selected_language = language or ui_language
+    if selected_language == "fr":
+        return explanation
+
+    if score >= 80:
+        return "The portfolio combines important concentration, stress losses or sensitivities."
+    if score >= 60:
+        return "The portfolio carries material risk and should be monitored before increasing exposure."
+    if score >= 30:
+        return "The portfolio has moderate risk and remains usable with active monitoring."
+    return "The portfolio risk appears contained under the selected assumptions."
+
+
+def display_validation_message(
+    message: str,
+    language: str | None = None,
+) -> str:
+    """Translate the most common portfolio validation messages."""
+
+    selected_language = language or ui_language
+    if selected_language == "fr":
+        return message
+
+    translated = str(message)
+    line_match = re.match(
+        r"Ligne (\d+) : (.*)",
+        translated,
+    )
+    line_prefix = ""
+    if line_match:
+        line_prefix = f"Row {line_match.group(1)}: "
+        translated = line_match.group(2)
+
+    replacements = {
+        "type d'actif manquant.": "missing asset type.",
+        "ticker ou sous-jacent manquant.": "missing ticker or underlying.",
+        "ticker manquant.": "missing ticker.",
+        "quantité manquante.": "missing quantity.",
+        "prix ou spot invalide.": "invalid price or spot.",
+        "type d'actif invalide.": "invalid asset type.",
+        "le type d'option doit être call ou put.": "option type must be call or put.",
+        "strike obligatoire pour une option.": "strike is required for an option.",
+        "maturité obligatoire pour une option.": "maturity is required for an option.",
+        "volatilité obligatoire pour une option.": "volatility is required for an option.",
+        "taux requis pour une option.": "rate is required for an option.",
+        "nom de l'actif manquant.": "missing asset name.",
+        "classe d'actif manquante.": "missing asset class.",
+        "secteur manquant, classé par défaut.": "missing sector, classified by default.",
+        "devise manquante.": "missing currency.",
+        "prix invalide.": "invalid price.",
+        "valeur manquante ou nulle.": "missing or zero value.",
+        "position vendeuse détectée, valeur de marché négative.": "short position detected, negative market value.",
+        "poids manquant ou négatif.": "missing or negative weight.",
+        "Le portefeuille est vide.": "The portfolio is empty.",
+    }
+    for french_text, english_text in replacements.items():
+        translated = translated.replace(
+            french_text,
+            english_text,
+        )
+
+    translated = re.sub(
+        r"Actifs en double à fusionner :",
+        "Duplicate assets to merge:",
+        translated,
+    )
+    translated = re.sub(
+        r"La somme des poids doit être égale à 100 %\. Total actuel : ([0-9.,]+) %\.",
+        r"Total weight must equal 100%. Current total: \1%.",
+        translated,
+    )
+
+    return line_prefix + translated
+
+
+def display_probabilistic_interpretation(
+    probabilistic_result,
+    language: str | None = None,
+) -> str:
+    """Return a localized Monte Carlo interpretation for the UI."""
+
+    selected_language = language or ui_language
+    if selected_language == "fr":
+        return probabilistic_result.interpretation
+
+    return (
+        "Monte Carlo read: under the selected assumptions, the portfolio has "
+        f"an estimated probability of loss of "
+        f"{probabilistic_result.probability_of_loss:.1%}. "
+        f"The 95% VaR is {probabilistic_result.var_95:.1%}: 95% of simulated "
+        "scenarios perform better than this threshold over the selected "
+        f"horizon. The 95% Expected Shortfall is "
+        f"{probabilistic_result.expected_shortfall_95:.1%}: in the worst 5% "
+        "of simulated scenarios, the average loss is close to that level. "
+        f"The main risk driver is {probabilistic_result.main_risk_driver}. "
+        "This is a risk-management view, not a certain forecast."
+    )
+
+
 render_header(
     title="ARIA - Adaptive Risk Intelligence Agent",
     subtitle=tr(
@@ -1471,7 +1844,6 @@ render_header(
         ),
     ),
     badge=tr("Plateforme de risk management", "Risk Management Platform"),
-    
 )
 
 
@@ -1737,72 +2109,6 @@ manual_tab, demo_tab = st.tabs(
 )
 
 with manual_tab:
-    portfolio_file_path = st.text_input(
-        tr("Fichier portefeuille CSV", "Portfolio CSV file"),
-        value=relative_to_project(DEFAULT_PORTFOLIO_PATH),
-    )
-
-    portfolio_action_col_1, portfolio_action_col_2, portfolio_action_col_3 = st.columns(3)
-
-    if portfolio_action_col_1.button(
-        tr("Sauvegarder le portefeuille", "Save Portfolio"),
-        width="stretch",
-    ):
-        portfolio_path = resolve_project_path(portfolio_file_path)
-        portfolio_path.parent.mkdir(
-            parents=True,
-            exist_ok=True,
-        )
-
-        st.session_state.portfolio_data.reindex(
-            columns=PORTFOLIO_EDITOR_COLUMNS
-        ).to_csv(
-            portfolio_path,
-            index=False,
-        )
-
-        st.success(
-            tr("Portefeuille sauvegardé", "Portfolio saved")
-            + f" : {portfolio_file_path}"
-        )
-
-    if portfolio_action_col_2.button(
-        tr("Charger le portefeuille", "Load Portfolio"),
-        width="stretch",
-    ):
-        portfolio_path = resolve_project_path(portfolio_file_path)
-
-        if not portfolio_path.exists():
-            st.error(
-                tr("Fichier introuvable", "File not found")
-                + f" : {portfolio_file_path}"
-            )
-            st.stop()
-
-        loaded_portfolio = pd.read_csv(portfolio_path)
-
-        st.session_state.portfolio_data = normalize_portfolio_table(
-            loaded_portfolio,
-            default_spot_value=current_spot,
-            default_volatility_value=current_volatility,
-        )
-
-        if "portfolio_editor" in st.session_state:
-            del st.session_state["portfolio_editor"]
-
-        st.rerun()
-
-    if portfolio_action_col_3.button(
-        tr("Réinitialiser", "Reset"),
-        width="stretch",
-    ):
-        st.session_state.portfolio_data = default_portfolio()
-
-        if "portfolio_editor" in st.session_state:
-            del st.session_state["portfolio_editor"]
-
-        st.rerun()
-
     render_info_card(
         tr("Lecture des positions", "How to Read Positions"),
         tr(
@@ -1819,6 +2125,338 @@ with manual_tab:
             ),
         ),
     )
+
+    if "current_portfolio_name" not in st.session_state:
+        st.session_state.current_portfolio_name = "Mon portefeuille ARIA"
+
+    saved_files = saved_portfolio_files()
+    saved_labels = [
+        portfolio_file_label(path)
+        for path in saved_files
+    ]
+    saved_display_options = saved_labels or [
+        tr("Aucun portefeuille sauvegardé", "No saved portfolio")
+    ]
+
+    portfolio_name = st.text_input(
+        tr("Nom du portefeuille", "Portfolio Name"),
+        value=st.session_state.current_portfolio_name,
+        help=tr(
+            "Ce nom sert à sauvegarder plusieurs portefeuilles différents.",
+            "This name lets you save several different portfolios.",
+        ),
+    )
+    st.session_state.current_portfolio_name = portfolio_name
+
+    manager_col_1, manager_col_2 = st.columns([1, 1])
+    with manager_col_1:
+        selected_saved_label = st.selectbox(
+            tr("Portefeuille sauvegardé", "Saved Portfolio"),
+            options=saved_display_options,
+            index=0,
+        )
+    with manager_col_2:
+        st.caption(
+            tr(
+                "Tu peux sauvegarder autant de portefeuilles que nécessaire. "
+                "Chaque sauvegarde reste dans le dossier data/portfolios.",
+                "You can save as many portfolios as needed. Each saved "
+                "portfolio stays in the data/portfolios folder.",
+            )
+        )
+
+    selected_saved_path = None
+    if selected_saved_label in saved_labels:
+        selected_saved_path = saved_files[saved_labels.index(selected_saved_label)]
+
+    save_col, load_col, delete_col, reset_col = st.columns(4)
+
+    if save_col.button(
+        tr("Sauvegarder ce portefeuille", "Save This Portfolio"),
+        width="stretch",
+    ):
+        safe_name = sanitize_portfolio_name(portfolio_name)
+        portfolio_path = PORTFOLIOS_DIR / f"{safe_name}.csv"
+        st.session_state.portfolio_data.to_csv(
+            portfolio_path,
+            index=False,
+        )
+        st.success(
+            tr("Portefeuille sauvegardé", "Portfolio saved")
+            + f" : {relative_to_project(portfolio_path)}"
+        )
+
+    if load_col.button(
+        tr("Charger la sélection", "Load Selected"),
+        width="stretch",
+        disabled=selected_saved_path is None,
+    ):
+        loaded_portfolio = pd.read_csv(selected_saved_path)
+        st.session_state.portfolio_data = normalize_portfolio_table(
+            loaded_portfolio,
+            default_spot_value=current_spot,
+            default_volatility_value=current_volatility,
+        )
+        st.session_state.current_portfolio_name = portfolio_file_label(
+            selected_saved_path
+        )
+
+        if "portfolio_editor" in st.session_state:
+            del st.session_state["portfolio_editor"]
+
+        st.rerun()
+
+    if delete_col.button(
+        tr("Supprimer la sélection", "Delete Selected"),
+        width="stretch",
+        disabled=selected_saved_path is None,
+    ):
+        selected_saved_path.unlink(
+            missing_ok=True,
+        )
+        st.success(
+            tr("Portefeuille supprimé.", "Portfolio deleted.")
+        )
+        st.rerun()
+
+    if reset_col.button(
+        tr("Réinitialiser", "Reset"),
+        width="stretch",
+    ):
+        st.session_state.portfolio_data = default_portfolio()
+        st.session_state.current_portfolio_name = "Mon portefeuille ARIA"
+
+        if "portfolio_editor" in st.session_state:
+            del st.session_state["portfolio_editor"]
+
+        st.rerun()
+
+    with st.expander(
+        tr("Importer un CSV avancé", "Advanced CSV Import"),
+        expanded=False,
+    ):
+        portfolio_file_path = st.text_input(
+            tr("Chemin du fichier CSV", "CSV file path"),
+            value=relative_to_project(DEFAULT_PORTFOLIO_PATH),
+        )
+
+        if st.button(
+            tr("Importer ce fichier", "Import This File"),
+            width="stretch",
+        ):
+            portfolio_path = resolve_project_path(portfolio_file_path)
+
+            if not portfolio_path.exists():
+                st.error(
+                    tr("Fichier introuvable", "File not found")
+                    + f" : {portfolio_file_path}"
+                )
+                st.stop()
+
+            loaded_portfolio = pd.read_csv(portfolio_path)
+            st.session_state.portfolio_data = normalize_portfolio_table(
+                loaded_portfolio,
+                default_spot_value=current_spot,
+                default_volatility_value=current_volatility,
+            )
+
+            if "portfolio_editor" in st.session_state:
+                del st.session_state["portfolio_editor"]
+
+            st.rerun()
+
+    with st.expander(
+        tr("Ajouter une position guidée", "Add a Guided Position"),
+        expanded=True,
+    ):
+        guided_base_value = st.number_input(
+            tr("Valeur de référence du portefeuille", "Reference Portfolio Value"),
+            min_value=1_000.0,
+            value=100_000.0,
+            step=5_000.0,
+            help=tr(
+                "Sert uniquement à convertir un poids en montant et en quantité.",
+                "Only used to convert a weight into amount and quantity.",
+            ),
+        )
+        add_col_1, add_col_2, add_col_3 = st.columns(3)
+        asset_kind = add_col_1.selectbox(
+            tr("Type d'instrument", "Instrument Type"),
+            options=[
+                tr("Action / ETF", "Equity / ETF"),
+                tr("Option", "Option"),
+            ],
+        )
+        side_label = add_col_2.selectbox(
+            tr("Sens", "Side"),
+            options=[
+                tr("Achat", "Long"),
+                tr("Vente / couverture", "Short / hedge"),
+            ],
+        )
+        guided_weight = add_col_3.number_input(
+            tr("Poids cible (%)", "Target Weight (%)"),
+            min_value=0.0,
+            max_value=100.0,
+            value=10.0,
+            step=0.5,
+        )
+
+        info_col_1, info_col_2, info_col_3 = st.columns(3)
+        guided_ticker = info_col_1.text_input(
+            tr("Ticker / sous-jacent", "Ticker / Underlying"),
+            value="SPY",
+        ).upper()
+        guided_name = info_col_2.text_input(
+            tr("Nom de la position", "Position Name"),
+            value=tr("Nouvelle position", "New position"),
+        )
+        guided_currency = info_col_3.selectbox(
+            tr("Devise", "Currency"),
+            options=["USD", "EUR", "GBP", "CHF", "JPY"],
+        )
+
+        detail_col_1, detail_col_2, detail_col_3 = st.columns(3)
+        guided_asset_class = detail_col_1.selectbox(
+            tr("Classe d'actif", "Asset Class"),
+            options=[
+                tr("Action / ETF", "Equity / ETF"),
+                tr("Obligation / ETF obligataire", "Bond / Bond ETF"),
+                tr("Monétaire / cash", "Cash / Money Market"),
+                tr("Option", "Option"),
+                tr("Autre", "Other"),
+            ],
+        )
+        guided_sector_choice = detail_col_2.selectbox(
+            tr("Secteur", "Sector"),
+            options=[
+                tr("Indices", "Indices"),
+                tr("Technologie", "Technology"),
+                tr("Santé", "Healthcare"),
+                tr("Finance", "Financials"),
+                tr("Obligations", "Bonds"),
+                tr("Énergie", "Energy"),
+                tr("Consommation", "Consumer"),
+                tr("Autre", "Other"),
+            ],
+        )
+        guided_price = detail_col_3.number_input(
+            tr("Prix / spot", "Price / Spot"),
+            min_value=0.01,
+            value=float(current_spot),
+            step=1.0,
+        )
+
+        guided_sector = guided_sector_choice
+        if guided_sector_choice in {tr("Autre", "Other"), "Other"}:
+            guided_sector = st.text_input(
+                tr("Secteur personnalisé", "Custom Sector"),
+                value=tr("Non classé", "Unclassified"),
+            )
+
+        is_option = asset_kind == tr("Option", "Option")
+        sign = -1 if side_label == tr("Vente / couverture", "Short / hedge") else 1
+        guided_value = guided_weight / 100 * guided_base_value * sign
+        guided_quantity = 0.0
+
+        option_type = ""
+        strike = pd.NA
+        maturity = pd.NA
+        implied_volatility = pd.NA
+        contract_size = 1
+
+        if is_option:
+            option_col_1, option_col_2, option_col_3, option_col_4 = st.columns(4)
+            option_type = option_col_1.selectbox(
+                tr("Type d'option", "Option Type"),
+                options=["call", "put"],
+            )
+            strike = option_col_2.number_input(
+                "Strike",
+                min_value=0.01,
+                value=float(guided_price),
+                step=1.0,
+            )
+            maturity = option_col_3.number_input(
+                tr("Maturité en années", "Maturity in Years"),
+                min_value=0.01,
+                value=0.25,
+                step=0.05,
+            )
+            implied_volatility = option_col_4.number_input(
+                tr("Volatilité implicite", "Implied Volatility"),
+                min_value=0.01,
+                value=float(current_volatility),
+                step=0.01,
+            )
+            contract_size = st.number_input(
+                tr("Taille du contrat", "Contract Size"),
+                min_value=1,
+                value=100,
+                step=1,
+            )
+            guided_quantity = st.number_input(
+                tr("Nombre de contrats", "Number of Contracts"),
+                min_value=1,
+                value=1,
+                step=1,
+            ) * sign
+        else:
+            manual_quantity = st.number_input(
+                tr("Quantité manuelle (0 = calcul automatique)", "Manual Quantity (0 = automatic)"),
+                value=0.0,
+                step=1.0,
+            )
+            guided_quantity = (
+                manual_quantity
+                if manual_quantity != 0
+                else guided_value / guided_price
+            )
+
+        if st.button(
+            tr("Ajouter la position au portefeuille", "Add Position to Portfolio"),
+            type="primary",
+            width="stretch",
+        ):
+            if not guided_ticker.strip():
+                st.error(tr("Le ticker est obligatoire.", "Ticker is required."))
+                st.stop()
+
+            new_row = {
+                "Asset type": "option" if is_option else "stock",
+                "Asset class": "Option" if is_option else guided_asset_class,
+                "Ticker": guided_ticker.strip(),
+                "Sous-jacent": guided_ticker.strip(),
+                "Nom": guided_name.strip() or guided_ticker.strip(),
+                "Sector": guided_sector,
+                "Currency": guided_currency,
+                "Weight": guided_weight,
+                "Value": guided_value,
+                "Quantity": guided_quantity,
+                "Quantite": guided_quantity,
+                "Price": guided_price,
+                "Spot": guided_price,
+                "Data source": "Manuel",
+                "Commentaire": tr("Ajout guidé", "Guided input"),
+                "Instrument": "Option" if is_option else "Action",
+                "Option type": option_type,
+                "Type option": option_type,
+                "Strike": strike,
+                "Maturity": maturity,
+                "Maturite": maturity,
+                "Volatility": implied_volatility,
+                "Volatilite": implied_volatility,
+                "Rate": risk_free_rate,
+                "Contract size": contract_size,
+                "Multiplicateur": contract_size,
+            }
+            append_portfolio_row(
+                new_row,
+                current_spot=current_spot,
+                current_volatility=current_volatility,
+            )
+            st.success(tr("Position ajoutée.", "Position added."))
+            st.rerun()
 
 with demo_tab:
     if st.session_state.get("curated_demo_portfolio") not in {
@@ -1913,6 +2551,30 @@ for text_column in [
     if text_column in editor_data.columns:
         editor_data[text_column] = editor_data[text_column].fillna("").astype(str)
 
+portfolio_row_labels = [
+    row_display_label(index, row)
+    for index, row in st.session_state.portfolio_data.iterrows()
+]
+
+row_action_col_1, row_action_col_2 = st.columns([2, 1])
+rows_to_delete = row_action_col_1.multiselect(
+    tr("Lignes à supprimer", "Rows to Delete"),
+    options=portfolio_row_labels,
+    placeholder=tr(
+        "Choisir une ou plusieurs lignes",
+        "Choose one or more rows",
+    ),
+)
+
+if row_action_col_2.button(
+    tr("Supprimer les lignes sélectionnées", "Delete Selected Rows"),
+    width="stretch",
+    disabled=not rows_to_delete,
+):
+    delete_portfolio_rows(rows_to_delete)
+    st.success(tr("Ligne(s) supprimée(s).", "Row(s) deleted."))
+    st.rerun()
+
 edited_portfolio = st.data_editor(
     editor_data,
     key="portfolio_editor",
@@ -2003,6 +2665,59 @@ st.session_state.portfolio_data = normalize_portfolio_table(
     default_volatility_value=current_volatility,
 )
 
+current_weights = pd.to_numeric(
+    st.session_state.portfolio_data.get("Weight", pd.Series(dtype=float)),
+    errors="coerce",
+)
+weight_total = float(
+    current_weights.fillna(0).sum()
+)
+weight_gap = 100.0 - weight_total
+
+weight_col_1, weight_col_2, weight_col_3 = st.columns([1, 1, 1])
+weight_col_1.metric(
+    tr("Somme des poids", "Total Weight"),
+    f"{weight_total:.2f}%",
+    f"{weight_gap:+.2f} pt",
+)
+weight_col_2.metric(
+    tr("Nombre de lignes", "Number of Rows"),
+    len(st.session_state.portfolio_data),
+)
+weight_col_3.metric(
+    tr("Poids manquants", "Missing Weights"),
+    int(current_weights.isna().sum()),
+)
+
+if abs(weight_gap) <= 0.05:
+    st.success(
+        tr(
+            "La somme des poids est cohérente. Tu peux lancer l'analyse.",
+            "Total weight is coherent. You can run the analysis.",
+        )
+    )
+else:
+    st.warning(
+        tr(
+            "La saisie reste possible, mais l'analyse ARIA sera bloquée tant que la somme des poids n'est pas égale à 100 %.",
+            "Input remains possible, but ARIA analysis will be blocked until total weight equals 100%.",
+        )
+    )
+    if st.button(
+        tr("Ajuster automatiquement les poids à 100 %", "Scale Weights to 100%"),
+        width="stretch",
+    ):
+        if scale_weights_to_100():
+            st.success(tr("Poids ajustés à 100 %.", "Weights scaled to 100%."))
+            st.rerun()
+        else:
+            st.error(
+                tr(
+                    "Impossible d'ajuster : aucun poids positif détecté.",
+                    "Cannot scale: no positive weight detected.",
+                )
+            )
+
 portfolio_validation_errors = validate_portfolio_table(
     st.session_state.portfolio_data
 )
@@ -2020,7 +2735,7 @@ if blocking_validation_errors:
         expanded=True,
     ):
         for validation_error in blocking_validation_errors:
-            st.error(validation_error)
+            st.error(display_validation_message(validation_error))
 elif coherence_warnings:
     pass
 else:
@@ -2063,7 +2778,7 @@ if analyse_button or auto_launch_analysis:
         )
 
     except ValueError as error:
-        st.error(str(error))
+        st.error(display_validation_message(str(error)))
         st.stop()
 
     current_snapshot = create_snapshot(
@@ -2188,28 +2903,32 @@ if analyse_button or auto_launch_analysis:
 
         render_risk_badge(
             risk_score_result.label,
-            label=risk_score_result.label,
+            label=display_risk_label(risk_score_result.label),
         )
 
         score_col_1, score_col_2 = st.columns([1, 3])
 
         score_col_1.metric(
-            "Score de risque",
+            tr("Score de risque", "Risk Score"),
             f"{risk_score_result.score}/100",
         )
-        score_col_1.caption(risk_score_result.label)
+        score_col_1.caption(display_risk_label(risk_score_result.label))
 
         with score_col_2:
             st.progress(risk_score_result.score / 100)
+            score_explanation = display_risk_explanation(
+                risk_score_result.score,
+                risk_score_result.explanation,
+            )
 
             if risk_score_result.score >= 80:
-                st.error(risk_score_result.explanation)
+                st.error(score_explanation)
             elif risk_score_result.score >= 60:
-                st.warning(risk_score_result.explanation)
+                st.warning(score_explanation)
             elif risk_score_result.score >= 30:
-                st.info(risk_score_result.explanation)
+                st.info(score_explanation)
             else:
-                st.success(risk_score_result.explanation)
+                st.success(score_explanation)
 
         with st.expander(
             tr("Voir les principaux facteurs de risque", "Show Main Risk Drivers"),
@@ -2248,24 +2967,41 @@ if analyse_button or auto_launch_analysis:
         )
 
         render_section_title(
-            "Greeks du portefeuille",
+            tr("Greeks du portefeuille", "Portfolio Greeks"),
             tr(
                 "Expositions agrégées aux principaux facteurs de risque.",
                 "Aggregate exposures to the main risk factors.",
             ),
         )
 
-        greek_1, greek_2, greek_3 = st.columns(3)
-
-        greek_1.metric("Delta", f"{greeks['delta']:.4f}")
-        greek_2.metric("Gamma", f"{greeks['gamma']:.4f}")
-        greek_3.metric("Vega", f"{greeks['vega']:.4f}")
-
-        greek_4, greek_5, greek_6 = st.columns(3)
-
-        greek_4.metric("Theta journalier", f"{greeks['theta']:.4f}")
-        greek_5.metric("Rho", f"{greeks['rho']:.4f}")
-        greek_6.metric("Volga", f"{greeks['volga']:.6f}")
+        render_metric_row(
+            [
+                {
+                    "label": "Delta",
+                    "value": f"{greeks['delta']:.4f}",
+                },
+                {
+                    "label": "Gamma",
+                    "value": f"{greeks['gamma']:.4f}",
+                },
+                {
+                    "label": "Vega",
+                    "value": f"{greeks['vega']:.4f}",
+                },
+                {
+                    "label": tr("Theta journalier", "Daily Theta"),
+                    "value": f"{greeks['theta']:.4f}",
+                },
+                {
+                    "label": "Rho",
+                    "value": f"{greeks['rho']:.4f}",
+                },
+                {
+                    "label": "Volga",
+                    "value": f"{greeks['volga']:.6f}",
+                },
+            ]
+        )
 
     with stress_tab:
         render_section_title(
@@ -2290,30 +3026,42 @@ if analyse_button or auto_launch_analysis:
 
         best_column.metric(
             tr("Meilleur scénario", "Best Scenario"),
-            best_scenario.name,
+            display_scenario_name(best_scenario.name),
             f"{best_scenario.profit_and_loss:+,.2f}",
         )
 
         worst_column.metric(
             tr("Scénario le plus défavorable", "Worst Scenario"),
-            worst_scenario.name,
+            display_scenario_name(worst_scenario.name),
             f"{worst_scenario.profit_and_loss:+,.2f}",
         )
+
+        scenario_column = tr("Scénario", "Scenario")
+        spot_move_column = tr("Variation spot", "Spot Move")
+        volatility_move_column = tr("Variation volatilité", "Volatility Move")
+        rate_shock_column = tr("Choc taux", "Rate Shock")
+        correlation_shock_column = tr("Choc corrélation", "Correlation Shock")
+        initial_value_column = tr("Valeur initiale", "Initial Value")
+        stressed_value_column = tr("Valeur stressée", "Stressed Value")
+        pnl_column = tr("Profit / Perte", "Profit / Loss")
+        stressed_delta_column = tr("Delta stressé", "Stressed Delta")
+        stressed_gamma_column = tr("Gamma stressé", "Stressed Gamma")
+        stressed_vega_column = tr("Vega stressé", "Stressed Vega")
 
         scenario_table = pd.DataFrame(
             [
                 {
-                    "Scenario": result.name,
-                    "Variation spot": f"{result.spot_change_percent:+.1%}",
-                    "Variation volatilite": f"{result.volatility_change_points:+.1%}",
-                    "Choc taux": f"{result.rate_change_points:+.1%}",
-                    "Choc correlation": f"{result.correlation_shock:+.1%}",
-                    "Valeur initiale": result.initial_value,
-                    "Valeur stressee": result.stressed_value,
-                    "Profit / Perte": result.profit_and_loss,
-                    "Delta stresse": result.stressed_delta,
-                    "Gamma stresse": result.stressed_gamma,
-                    "Vega stresse": result.stressed_vega,
+                    scenario_column: display_scenario_name(result.name),
+                    spot_move_column: f"{result.spot_change_percent:+.1%}",
+                    volatility_move_column: f"{result.volatility_change_points:+.1%}",
+                    rate_shock_column: f"{result.rate_change_points:+.1%}",
+                    correlation_shock_column: f"{result.correlation_shock:+.1%}",
+                    initial_value_column: result.initial_value,
+                    stressed_value_column: result.stressed_value,
+                    pnl_column: result.profit_and_loss,
+                    stressed_delta_column: result.stressed_delta,
+                    stressed_gamma_column: result.stressed_gamma,
+                    stressed_vega_column: result.stressed_vega,
                 }
                 for result in scenario_results
             ]
@@ -2328,7 +3076,10 @@ if analyse_button or auto_launch_analysis:
         )
 
         with stress_summary_tab:
-            stress_chart = create_stress_chart(scenario_results)
+            stress_chart = create_stress_chart(
+                scenario_results,
+                language=ui_language,
+            )
 
             st.altair_chart(
                 stress_chart,
@@ -2370,7 +3121,10 @@ if analyse_button or auto_launch_analysis:
             surface_data = surface_to_dataframe(surface_points)
 
             st.altair_chart(
-                create_stress_matrix_chart(surface_data),
+                create_stress_matrix_chart(
+                    surface_data,
+                    language=ui_language,
+                ),
                 width="stretch",
             )
 
@@ -2626,7 +3380,12 @@ if analyse_button or auto_launch_analysis:
                     "What the simulation says about the portfolio loss/return profile.",
                 ),
             )
-            st.info(probabilistic_result.interpretation)
+            st.info(
+                display_probabilistic_interpretation(
+                    probabilistic_result,
+                    ui_language,
+                )
+            )
 
         with controls_col:
             render_section_title(
@@ -2847,11 +3606,20 @@ if analyse_button or auto_launch_analysis:
             scenario_results,
             key=lambda result: result.profit_and_loss,
         )
+        worst_scenario_name_fr = display_scenario_name(
+            worst_scenario_for_commentary.name,
+            "fr",
+        )
+        worst_scenario_name_en = display_scenario_name(
+            worst_scenario_for_commentary.name,
+            "en",
+        )
         aria_note = (
             "### Note exécutive ARIA\n\n"
             f"Le portefeuille obtient un score de risque **{risk_score_result.score}/100 "
-            f"({risk_score_result.label})**. Le scénario le plus défavorable est "
-            f"**{worst_scenario_for_commentary.name}** avec un P&L estimé de "
+            f"({display_risk_label(risk_score_result.label, 'fr')})**. "
+            "Le scénario le plus défavorable est "
+            f"**{worst_scenario_name_fr}** avec un P&L estimé de "
             f"**{worst_scenario_for_commentary.profit_and_loss:,.2f}**. "
             f"La VaR ressort à **{var_result.var_amount:,.2f}** et l'Expected "
             f"Shortfall à **{var_result.expected_shortfall:,.2f}**.\n\n"
@@ -2864,8 +3632,9 @@ if analyse_button or auto_launch_analysis:
         aria_note_en = (
             "### ARIA Executive Note\n\n"
             f"The portfolio receives a risk score of **{risk_score_result.score}/100 "
-            f"({risk_score_result.label})**. The worst scenario is "
-            f"**{worst_scenario_for_commentary.name}** with estimated P&L of "
+            f"({display_risk_label(risk_score_result.label, 'en')})**. "
+            "The worst scenario is "
+            f"**{worst_scenario_name_en}** with estimated P&L of "
             f"**{worst_scenario_for_commentary.profit_and_loss:,.2f}**. "
             f"VaR is **{var_result.var_amount:,.2f}** and Expected Shortfall is "
             f"**{var_result.expected_shortfall:,.2f}**.\n\n"
@@ -2940,7 +3709,8 @@ if analyse_button or auto_launch_analysis:
             hedge_result=hedge_result,
             risk_score_result=risk_score_result,
             market_snapshot=market_snapshot,
-            llm_analysis=llm_analysis,
+            llm_analysis=llm_analysis_en if ui_language == "en" else llm_analysis,
+            language=ui_language,
         )
 
         with st.expander(tr("Aperçu du rapport téléchargeable", "Downloadable Report Preview"), expanded=True):

@@ -25,6 +25,62 @@ from portfolio_engine.portfolio import Portfolio
 
 AUTHOR_NAME = "Enrique Jara Ron"
 
+SCENARIO_LABELS = {
+    "2008 Global Financial Crisis": {
+        "fr": "Crise financière mondiale 2008",
+        "en": "2008 Global Financial Crisis",
+    },
+    "Covid Liquidity Shock": {
+        "fr": "Choc de liquidité Covid",
+        "en": "Covid Liquidity Shock",
+    },
+    "Japan / Yen Carry Unwind": {
+        "fr": "Crise japonaise / yen carry trade",
+        "en": "Japan / Yen Carry Unwind",
+    },
+    "Inflation Shock": {
+        "fr": "Choc inflationniste",
+        "en": "Inflation Shock",
+    },
+    "Rates Shock": {
+        "fr": "Choc de taux",
+        "en": "Rates Shock",
+    },
+    "Tech Sell-off": {
+        "fr": "Vente massive sur la tech",
+        "en": "Tech Sell-off",
+    },
+    "Volatility Spike": {
+        "fr": "Pic de volatilité",
+        "en": "Volatility Spike",
+    },
+    "Sovereign / Banking Stress": {
+        "fr": "Stress souverain / bancaire",
+        "en": "Sovereign / Banking Stress",
+    },
+    "Hausse modérée": {
+        "fr": "Hausse modérée",
+        "en": "Moderate Rally",
+    },
+    "Stress de marché": {
+        "fr": "Stress de marché",
+        "en": "Market Stress",
+    },
+    "Scenario personnalise": {
+        "fr": "Scénario personnalisé",
+        "en": "Custom Scenario",
+    },
+}
+
+RISK_LABELS_EN = {
+    "Risque faible": "Low risk",
+    "Risque modéré": "Moderate risk",
+    "Risque eleve": "High risk",
+    "Risque élevé": "High risk",
+    "Risque très élevé": "Very high risk",
+    "Risque critique": "Critical risk",
+}
+
 
 def format_number(
     value: float,
@@ -78,6 +134,147 @@ def _scenario_extremes(
     return best_scenario, worst_scenario
 
 
+def _localized_scenario_name(
+    name: str,
+    language: str
+) -> str:
+    """Return a localized scenario label."""
+
+    return SCENARIO_LABELS.get(
+        str(name),
+        {},
+    ).get(
+        language,
+        str(name),
+    )
+
+
+def _localized_risk_label(
+    label: str,
+    language: str
+) -> str:
+    """Return a localized risk-score label."""
+
+    if language == "en":
+        return RISK_LABELS_EN.get(
+            str(label),
+            str(label),
+        )
+
+    return str(label)
+
+
+def _localized_risk_explanation(
+    score: int,
+    explanation: str,
+    language: str
+) -> str:
+    """Return a localized risk-score explanation."""
+
+    if language == "fr":
+        return explanation
+
+    if score >= 80:
+        return "The portfolio combines important concentration, stress losses or sensitivities."
+    if score >= 60:
+        return "The portfolio carries material risk and should be monitored before increasing exposure."
+    if score >= 30:
+        return "The portfolio has moderate risk and remains usable with active monitoring."
+    return "The portfolio risk appears contained under the selected assumptions."
+
+
+def _plain_language_client_commentary(
+    portfolio: Portfolio,
+    scenario_results: list[Any],
+    var_result: Any,
+    risk_score_result: Any,
+    probabilistic_result: Any | None,
+    language: str
+) -> str:
+    """Explain the report in simple words for a non-specialist client."""
+
+    _, worst_scenario = _scenario_extremes(
+        scenario_results
+    )
+    risk_label = _localized_risk_label(
+        risk_score_result.label,
+        language
+    )
+    worst_text = (
+        _localized_scenario_name(
+            worst_scenario.name,
+            language
+        )
+        if worst_scenario is not None
+        else ("non disponible" if language == "fr" else "not available")
+    )
+
+    if language == "en":
+        probability_sentence = (
+            f" The Monte Carlo model estimates a probability of loss of "
+            f"{format_percent(probabilistic_result.probability_of_loss)}."
+            if probabilistic_result is not None
+            else ""
+        )
+        return (
+            f"In simple terms, this portfolio is worth about "
+            f"{format_number(portfolio.total_market_value())} and ARIA gives it "
+            f"a risk score of {risk_score_result.score}/100 ({risk_label}). "
+            f"The most adverse stress scenario is {worst_text}, while the VaR "
+            f"is {format_number(var_result.var_amount)} and Expected Shortfall "
+            f"is {format_number(var_result.expected_shortfall)}.{probability_sentence} "
+            "This does not mean these losses will happen; it means they are "
+            "useful warning levels. The practical next step is to check which "
+            "positions create the largest downside, reduce or hedge them if the "
+            "risk is too high, and then rerun the analysis before making a real "
+            "decision."
+        )
+
+    probability_sentence = (
+        f" Le modèle Monte Carlo estime une probabilité de perte de "
+        f"{format_percent(probabilistic_result.probability_of_loss)}."
+        if probabilistic_result is not None
+        else ""
+    )
+    return (
+        f"En termes simples, ce portefeuille vaut environ "
+        f"{format_number(portfolio.total_market_value())} et ARIA lui attribue "
+        f"un score de risque de {risk_score_result.score}/100 ({risk_label}). "
+        f"Le scénario de stress le plus défavorable est {worst_text}. La VaR "
+        f"ressort à {format_number(var_result.var_amount)} et l'Expected "
+        f"Shortfall à {format_number(var_result.expected_shortfall)}.{probability_sentence} "
+        "Cela ne veut pas dire que ces pertes vont arriver; ce sont des niveaux "
+        "d'alerte pour mieux piloter le portefeuille. Concrètement, il faut "
+        "regarder quelles lignes créent le plus de perte potentielle, réduire "
+        "ou couvrir ces expositions si le risque est trop élevé, puis relancer "
+        "l'analyse avant toute décision réelle."
+    )
+
+
+def _localized_probabilistic_interpretation(
+    probabilistic_result: Any,
+    language: str
+) -> str:
+    """Return a localized Monte Carlo interpretation."""
+
+    if language == "fr":
+        return probabilistic_result.interpretation
+
+    return (
+        "Monte Carlo read: under the selected assumptions, the portfolio has "
+        f"an estimated probability of loss of "
+        f"{format_percent(probabilistic_result.probability_of_loss)}. "
+        f"The 95% VaR is {format_percent(probabilistic_result.var_95)}: 95% "
+        "of simulated scenarios perform better than this threshold over the "
+        f"selected horizon. The 95% Expected Shortfall is "
+        f"{format_percent(probabilistic_result.expected_shortfall_95)}: in "
+        "the worst 5% of simulated scenarios, the average loss is close to "
+        f"that level. The main risk driver is "
+        f"{probabilistic_result.main_risk_driver}. This is a risk-management "
+        "view, not a certain forecast."
+    )
+
+
 def generate_executive_summary_section(
     portfolio: Portfolio,
     spot: float,
@@ -102,7 +299,7 @@ def generate_executive_summary_section(
         f"| Spot used | {format_number(spot)} |",
         f"| Volatility used | {format_percent(volatility)} |",
         f"| Number of positions | {len(portfolio.positions)} |",
-        f"| ARIA Risk Score | {risk_score_result.score}/100 - {risk_score_result.label} |",
+        f"| ARIA Risk Score | {risk_score_result.score}/100 - {_localized_risk_label(risk_score_result.label, 'en')} |",
         f"| Quantitative alerts | {len(alerts)} |",
         f"| VaR | {format_number(var_result.var_amount)} |",
         f"| Expected Shortfall | {format_number(var_result.expected_shortfall)} |",
@@ -110,13 +307,13 @@ def generate_executive_summary_section(
 
     if worst_scenario is not None:
         lines.append(
-            f"| Worst stress scenario | {worst_scenario.name} "
+            f"| Worst stress scenario | {_localized_scenario_name(worst_scenario.name, 'en')} "
             f"({format_number(worst_scenario.profit_and_loss)}) |"
         )
 
     if best_scenario is not None:
         lines.append(
-            f"| Best stress scenario | {best_scenario.name} "
+            f"| Best stress scenario | {_localized_scenario_name(best_scenario.name, 'en')} "
             f"({format_number(best_scenario.profit_and_loss)}) |"
         )
 
@@ -263,9 +460,13 @@ def generate_risk_score_section(
         "",
         f"**Score:** {risk_score_result.score}/100",
         "",
-        f"**Status:** {risk_score_result.label}",
+        f"**Status:** {_localized_risk_label(risk_score_result.label, 'en')}",
         "",
-        risk_score_result.explanation,
+        _localized_risk_explanation(
+            risk_score_result.score,
+            risk_score_result.explanation,
+            "en",
+        ),
         "",
         (
             "The ARIA Risk Score combines Greek limit breaches, "
@@ -351,7 +552,7 @@ def generate_stress_section(
     for result in scenario_results:
         lines.append(
             "| "
-            f"{result.name} | "
+            f"{_localized_scenario_name(result.name, 'en')} | "
             f"{format_percent(result.spot_change_percent)} | "
             f"{format_percent(result.volatility_change_points)} | "
             f"{format_number(result.profit_and_loss)} | "
@@ -366,11 +567,11 @@ def generate_stress_section(
         [
             "",
             (
-                f"Best scenario: **{best_scenario.name}** with P&L "
+                f"Best scenario: **{_localized_scenario_name(best_scenario.name, 'en')}** with P&L "
                 f"**{format_number(best_scenario.profit_and_loss)}**."
             ),
             (
-                f"Worst scenario: **{worst_scenario.name}** with P&L "
+                f"Worst scenario: **{_localized_scenario_name(worst_scenario.name, 'en')}** with P&L "
                 f"**{format_number(worst_scenario.profit_and_loss)}**."
             ),
             "",
@@ -540,7 +741,7 @@ def generate_key_risk_drivers_section(
 
     if worst_scenario is not None:
         lines.append(
-            f"- Worst stress scenario: {worst_scenario.name} "
+            f"- Worst stress scenario: {_localized_scenario_name(worst_scenario.name, 'en')} "
             f"({format_number(worst_scenario.profit_and_loss)})"
         )
 
@@ -711,11 +912,16 @@ def generate_risk_report(
     risk_score_result: Any,
     probabilistic_result: Any | None = None,
     market_snapshot: Any | None = None,
-    llm_analysis: str | None = None
+    llm_analysis: str | None = None,
+    language: str = "fr"
 ) -> str:
     """
     Generate a complete Markdown executive risk report.
     """
+
+    language = language.lower()
+    if language not in {"fr", "en"}:
+        language = "fr"
 
     report_date = datetime.now().strftime(
         "%Y-%m-%d %H:%M:%S"
@@ -727,6 +933,18 @@ def generate_risk_report(
     )
     drivers = risk_score_result.main_drivers[:4]
     top_alerts = alerts[:3]
+    risk_label = _localized_risk_label(
+        risk_score_result.label,
+        language
+    )
+    plain_commentary = _plain_language_client_commentary(
+        portfolio=portfolio,
+        scenario_results=scenario_results,
+        var_result=var_result,
+        risk_score_result=risk_score_result,
+        probabilistic_result=probabilistic_result,
+        language=language
+    )
 
     if risk_score_result.score >= 75:
         executive_view = (
@@ -758,7 +976,9 @@ def generate_risk_report(
         )
     if worst_scenario is not None:
         action_lines.append(
-            f"- Réduire ou couvrir les positions qui contribuent au scénario le plus défavorable : {worst_scenario.name}."
+            "- Réduire ou couvrir les positions qui contribuent au scénario "
+            "le plus défavorable : "
+            f"{_localized_scenario_name(worst_scenario.name, 'fr')}."
         )
     if drivers:
         action_lines.append(
@@ -773,7 +993,7 @@ def generate_risk_report(
         ("Valeur du portefeuille", format_number(portfolio_value)),
         ("Spot utilisé", format_number(spot)),
         ("Volatilité utilisée", format_percent(volatility)),
-        ("Score ARIA", f"{risk_score_result.score}/100 - {risk_score_result.label}"),
+        ("Score ARIA", f"{risk_score_result.score}/100 - {risk_label}"),
         ("Nombre d'alertes", str(len(alerts))),
         ("Delta", format_number(greeks["delta"], 4)),
         ("Gamma", format_number(greeks["gamma"], 6)),
@@ -786,14 +1006,14 @@ def generate_risk_report(
     if worst_scenario is not None:
         table_rows.append(
             (
-                f"Pire stress - {worst_scenario.name}",
+                f"Pire stress - {_localized_scenario_name(worst_scenario.name, 'fr')}",
                 format_number(worst_scenario.profit_and_loss),
             )
         )
     if best_scenario is not None:
         table_rows.append(
             (
-                f"Meilleur stress - {best_scenario.name}",
+                f"Meilleur stress - {_localized_scenario_name(best_scenario.name, 'fr')}",
                 format_number(best_scenario.profit_and_loss),
             )
         )
@@ -815,6 +1035,154 @@ def generate_risk_report(
             ]
         )
 
+    if language == "en":
+        en_action_lines = []
+        if hedge_result.hedge_quantity != 0:
+            en_action_lines.append(
+                f"- Review an indicative delta hedge of {hedge_result.hedge_quantity:,.2f} units of the underlying."
+            )
+        if worst_scenario is not None:
+            en_action_lines.append(
+                "- Reduce or hedge positions contributing to the worst scenario: "
+                + _localized_scenario_name(worst_scenario.name, "en")
+                + "."
+            )
+        if drivers:
+            en_action_lines.append(
+                "- Priority drivers: " + "; ".join(drivers) + "."
+            )
+        if not en_action_lines:
+            en_action_lines.append(
+                "- Keep monitoring VaR, stress tests, Greeks and concentration after each adjustment."
+            )
+
+        en_table_rows = [
+            ("Portfolio value", format_number(portfolio_value)),
+            ("Spot used", format_number(spot)),
+            ("Volatility used", format_percent(volatility)),
+            ("ARIA Score", f"{risk_score_result.score}/100 - {risk_label}"),
+            ("Number of alerts", str(len(alerts))),
+            ("Delta", format_number(greeks["delta"], 4)),
+            ("Gamma", format_number(greeks["gamma"], 6)),
+            ("Vega", format_number(greeks["vega"], 4)),
+            ("VaR", format_number(var_result.var_amount)),
+            ("Expected Shortfall", format_number(var_result.expected_shortfall)),
+            ("Worst simulated loss", format_number(var_result.worst_loss)),
+            ("Parametric VaR", format_number(parametric_var)),
+        ]
+        if worst_scenario is not None:
+            en_table_rows.append(
+                (
+                    "Worst stress - "
+                    + _localized_scenario_name(worst_scenario.name, "en"),
+                    format_number(worst_scenario.profit_and_loss),
+                )
+            )
+        if best_scenario is not None:
+            en_table_rows.append(
+                (
+                    "Best stress - "
+                    + _localized_scenario_name(best_scenario.name, "en"),
+                    format_number(best_scenario.profit_and_loss),
+                )
+            )
+        if probabilistic_result is not None:
+            en_table_rows.extend(
+                [
+                    (
+                        "Probability of loss",
+                        format_percent(probabilistic_result.probability_of_loss),
+                    ),
+                    (
+                        "Probability loss > 10%",
+                        format_percent(probabilistic_result.probability_loss_gt_10),
+                    ),
+                    (
+                        "Probabilistic ES 95%",
+                        format_percent(probabilistic_result.expected_shortfall_95),
+                    ),
+                ]
+            )
+
+        en_executive_view = (
+            "The portfolio shows high risk. Priority should be given to reducing extreme losses, concentration and dominant sensitivities before adding exposure."
+            if risk_score_result.score >= 75
+            else (
+                "The portfolio is usable, but requires active monitoring of stress tests and main Greeks."
+                if risk_score_result.score >= 50
+                else (
+                    "The portfolio has intermediate risk. Hedges and diversification should be reviewed before increasing exposure."
+                    if risk_score_result.score >= 30
+                    else "The portfolio appears defensive under ARIA assumptions. The key point is to monitor hedge cost and retained return potential."
+                )
+            )
+        )
+        en_worst_line = (
+            f"- Worst stress: **{_localized_scenario_name(worst_scenario.name, 'en')}** for **{format_number(worst_scenario.profit_and_loss)}**."
+            if worst_scenario is not None
+            else "- Worst stress: not available."
+        )
+        en_alert_lines = (
+            [
+                f"- Priority alert: {alert.name} - {alert.message}"
+                for alert in top_alerts
+            ]
+            if top_alerts
+            else ["- No priority quantitative alert."]
+        )
+        en_lines = [
+            "# ARIA - Executive Risk Report",
+            "",
+            f"Prepared by: **{AUTHOR_NAME}**",
+            "",
+            f"Generated on: **{report_date}**",
+            "",
+            "## 1. Plain-language client explanation",
+            "",
+            plain_commentary,
+            "",
+            "## 2. Executive view",
+            "",
+            en_executive_view,
+            "",
+            "## 3. Risk diagnosis",
+            "",
+            f"- ARIA Score: **{risk_score_result.score}/100 - {risk_label}**.",
+            f"- VaR: **{format_number(var_result.var_amount)}** ; Expected Shortfall: **{format_number(var_result.expected_shortfall)}**.",
+            en_worst_line,
+            "",
+            "## 4. Key points",
+            "",
+            *[f"- {driver}" for driver in drivers],
+            *en_alert_lines,
+            "",
+            "## 5. Actions to review",
+            "",
+            *en_action_lines,
+            "",
+            (
+                llm_analysis
+                if llm_analysis
+                else "LLM commentary disabled. The recommendations above come from ARIA quantitative metrics."
+            ),
+            "",
+            "## 6. Disclaimer",
+            "",
+            (
+                "These elements support risk-management decisions. They are not performance certainty or personalized financial advice. "
+                "Any action must be reviewed against market assumptions, liquidity and real constraints."
+            ),
+            "",
+            "## Appendix - key figures",
+            "",
+            "| Metric | Value |",
+            "|---|---:|",
+            *[f"| {name} | {value} |" for name, value in en_table_rows],
+            "",
+        ]
+
+        return "\n".join(en_lines)
+
     lines = [
         "# ARIA - Rapport exécutif de risque",
         "",
@@ -822,21 +1190,25 @@ def generate_risk_report(
         "",
         f"Généré le : **{report_date}**",
         "",
-        "## 1. Vue exécutive",
+        "## 1. Explication simple pour le client",
+        "",
+        plain_commentary,
+        "",
+        "## 2. Vue exécutive",
         "",
         executive_view,
         "",
-        "## 2. Diagnostic de risque",
+        "## 3. Diagnostic de risque",
         "",
-        f"- Score ARIA : **{risk_score_result.score}/100 - {risk_score_result.label}**.",
+        f"- Score ARIA : **{risk_score_result.score}/100 - {risk_label}**.",
         f"- VaR : **{format_number(var_result.var_amount)}** ; Expected Shortfall : **{format_number(var_result.expected_shortfall)}**.",
         (
-            f"- Pire stress : **{worst_scenario.name}** pour **{format_number(worst_scenario.profit_and_loss)}**."
+            f"- Pire stress : **{_localized_scenario_name(worst_scenario.name, 'fr')}** pour **{format_number(worst_scenario.profit_and_loss)}**."
             if worst_scenario is not None
             else "- Pire stress : non disponible."
         ),
         "",
-        "## 3. Points clés",
+        "## 4. Points clés",
         "",
         *[f"- {driver}" for driver in drivers],
         *(
@@ -845,7 +1217,7 @@ def generate_risk_report(
             else ["- Aucune alerte quantitative prioritaire."]
         ),
         "",
-        "## 4. Recommandations à étudier",
+        "## 5. Recommandations à étudier",
         "",
         *action_lines,
         "",
@@ -855,7 +1227,7 @@ def generate_risk_report(
             else "Commentaire LLM non activé. Les recommandations ci-dessus proviennent des métriques ARIA."
         ),
         "",
-        "## 5. Avertissement",
+        "## 6. Avertissement",
         "",
         (
             "Ces éléments sont une aide à la décision de gestion du risque. "
@@ -889,7 +1261,8 @@ def generate_executive_risk_report(
     risk_score_result: Any,
     probabilistic_result: Any | None = None,
     market_snapshot: Any | None = None,
-    llm_analysis: str | None = None
+    llm_analysis: str | None = None,
+    language: str = "fr"
 ) -> str:
     """Explicit alias for the executive report format."""
 
@@ -905,7 +1278,8 @@ def generate_executive_risk_report(
         hedge_result=hedge_result,
         risk_score_result=risk_score_result,
         market_snapshot=market_snapshot,
-        llm_analysis=llm_analysis
+        llm_analysis=llm_analysis,
+        language=language
     )
 
 
@@ -1367,13 +1741,17 @@ def _build_action_rows(
         )
 
     if worst_scenario is not None:
+        worst_name = _localized_scenario_name(
+            worst_scenario.name,
+            language
+        )
         rows.append(
             [
                 "3",
                 (
-                    f"Tester une reduction des lignes responsables du scenario le plus defavorable: {worst_scenario.name}, P&L {format_number(worst_scenario.profit_and_loss)}."
+                    f"Tester une reduction des lignes responsables du scenario le plus defavorable: {worst_name}, P&L {format_number(worst_scenario.profit_and_loss)}."
                     if language == "fr"
-                    else f"Test reducing lines responsible for the worst scenario: {worst_scenario.name}, P&L {format_number(worst_scenario.profit_and_loss)}."
+                    else f"Test reducing lines responsible for the worst scenario: {worst_name}, P&L {format_number(worst_scenario.profit_and_loss)}."
                 ),
                 (
                     "Ramener la perte de stress dans une zone acceptable avant d'augmenter le risque."
@@ -1462,7 +1840,7 @@ def _key_metric_rows(
         ],
         [
             "Risk Score",
-            f"{risk_score_result.score}/100 - {risk_score_result.label}",
+            f"{risk_score_result.score}/100 - {_localized_risk_label(risk_score_result.label, language)}",
         ],
         [
             "Delta",
@@ -1523,7 +1901,10 @@ def _key_metric_rows(
         rows.append(
             [
                 "Pire stress" if language == "fr" else "Worst stress",
-                f"{worst_scenario.name}: {format_number(worst_scenario.profit_and_loss)}",
+                (
+                    f"{_localized_scenario_name(worst_scenario.name, language)}: "
+                    f"{format_number(worst_scenario.profit_and_loss)}"
+                ),
             ]
         )
 
@@ -1553,7 +1934,10 @@ def _key_metric_rows(
         rows.append(
             [
                 "Meilleur stress" if language == "fr" else "Best stress",
-                f"{best_scenario.name}: {format_number(best_scenario.profit_and_loss)}",
+                (
+                    f"{_localized_scenario_name(best_scenario.name, language)}: "
+                    f"{format_number(best_scenario.profit_and_loss)}"
+                ),
             ]
         )
 
@@ -1674,7 +2058,7 @@ def _build_executive_decision_rows(
         ],
         [
             "Score ARIA",
-            f"{risk_score_result.score}/100 - {risk_score_result.label}",
+            f"{risk_score_result.score}/100 - {_localized_risk_label(risk_score_result.label, language)}",
             verdict,
         ],
         [
@@ -1695,7 +2079,10 @@ def _build_executive_decision_rows(
         rows.append(
             [
                 "Pire stress" if language == "fr" else "Worst stress",
-                f"{worst_scenario.name}: {format_number(worst_scenario.profit_and_loss)}",
+                (
+                    f"{_localized_scenario_name(worst_scenario.name, language)}: "
+                    f"{format_number(worst_scenario.profit_and_loss)}"
+                ),
                 (
                     "Identifier les lignes contributrices puis tester reduction, spread ou couverture."
                     if language == "fr"
@@ -1760,14 +2147,22 @@ def _portfolio_position_rows(
     )
 
     for position in sorted_positions[:8]:
+        raw_position_type = position.__class__.__name__.replace(
+            "Position",
+            ""
+        )
+        position_type = {
+            "Stock": "Action / ETF" if language == "fr" else "Equity / ETF",
+            "Option": "Option",
+        }.get(
+            raw_position_type,
+            raw_position_type,
+        )
         rows.append(
             [
                 position.name,
                 position.underlying,
-                position.__class__.__name__.replace(
-                    "Position",
-                    ""
-                ),
+                position_type,
                 format_number(
                     position.quantity,
                     2
@@ -1957,6 +2352,27 @@ def generate_professional_pdf_report(
 
     _section(
         story,
+        "Explication simple pour le client"
+        if language == "fr"
+        else "Plain-Language Client Explanation",
+        styles
+    )
+    story.append(
+        _p(
+            _plain_language_client_commentary(
+                portfolio=portfolio,
+                scenario_results=scenario_results,
+                var_result=var_result,
+                risk_score_result=risk_score_result,
+                probabilistic_result=probabilistic_result,
+                language=language
+            ),
+            styles["callout"]
+        )
+    )
+
+    _section(
+        story,
         "Synthese decisionnelle" if language == "fr" else "Decision Summary",
         styles
     )
@@ -2012,9 +2428,9 @@ def generate_professional_pdf_report(
         story.append(
             _p(
                 (
-                    "Commentaire LLM non active. Les recommandations du rapport sont construites uniquement a partir des metriques quantitatives ARIA."
+                    "Commentaire LLM non activé. La lecture ci-dessus reste générée par ARIA à partir des métriques quantitatives."
                     if language == "fr"
-                    else "LLM commentary is disabled. The report recommendations are built only from ARIA quantitative metrics."
+                    else "LLM commentary is disabled. The client explanation above is generated by ARIA from quantitative metrics."
                 ),
                 styles["body"]
             )
@@ -2074,7 +2490,9 @@ def generate_professional_pdf_report(
     story.append(
         _p(
             (
-                f"Risk Score ARIA: {risk_score_result.score}/100 - {risk_score_result.label}. {risk_score_result.explanation}"
+                f"Risk Score ARIA: {risk_score_result.score}/100 - "
+                f"{_localized_risk_label(risk_score_result.label, language)}. "
+                f"{_localized_risk_explanation(risk_score_result.score, risk_score_result.explanation, language)}"
             ),
             styles["body"]
         )
@@ -2118,7 +2536,10 @@ def generate_professional_pdf_report(
     for result in scenario_results:
         stress_rows.append(
             [
-                result.name,
+                _localized_scenario_name(
+                    result.name,
+                    language
+                ),
                 format_percent(
                     result.spot_change_percent
                 ),
@@ -2254,7 +2675,10 @@ def generate_professional_pdf_report(
         )
         story.append(
             _p(
-                probabilistic_result.interpretation,
+                _localized_probabilistic_interpretation(
+                    probabilistic_result,
+                    language
+                ),
                 styles["callout"]
             )
         )
