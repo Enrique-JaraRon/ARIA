@@ -292,13 +292,26 @@ Réponds comme une note courte de risk management institutionnelle,
 claire et présentable en entretien, inspirée d'une note Goldman Sachs /
 J.P. Morgan : sobre, structurée, concrète, sans texte inutile.
 
-Structure obligatoire :
+Structure obligatoire en Markdown strict :
 
-1. Vue exécutive
-2. Diagnostic de risque
-3. Actions recommandées à étudier
-4. Impact attendu et compromis
-5. Tableau final des chiffres significatifs
+## 1. Vue exécutive
+## 2. Diagnostic de risque
+## 3. Actions recommandées à étudier
+### a) Couverture delta immédiate
+- Action indicative en une phrase.
+- Pourquoi cela réduit le risque.
+### b) Réduction de convexité / gamma
+- Action indicative en une phrase.
+- Compromis attendu.
+### c) Gestion vega / volatilité
+- Action indicative en une phrase.
+- Compromis attendu.
+## 4. Impact attendu et compromis
+## 5. Tableau final des chiffres significatifs
+
+Important : ne mets jamais deux sous-titres sur la même ligne.
+Chaque point a), b), c), d), e) doit commencer sur une nouvelle ligne.
+N'utilise pas de paragraphe compact du type "a) ... b) ... c) ...".
 
 Si une information numérique n'est pas fournie, indique qu'elle n'est pas disponible.
 Dans le plan d'action, sois concret :

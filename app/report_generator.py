@@ -2,6 +2,7 @@
 ARIA - Executive risk report generation.
 """
 
+import re
 from datetime import datetime
 from io import BytesIO
 from typing import Any
@@ -98,6 +99,43 @@ def format_percent(
     """Format a decimal value as a percentage."""
 
     return f"{value:.{decimals}%}"
+
+
+def _normalize_markdown_block(
+    text: object
+) -> str:
+    """Return safe Markdown text with compact LLM headings split across lines."""
+
+    if text is None:
+        return ""
+
+    if not isinstance(text, str):
+        text = str(text)
+
+    cleaned = text.replace(
+        "\r\n",
+        "\n",
+    ).replace(
+        "\r",
+        "\n",
+    )
+    cleaned = re.sub(
+        r"[ \t]+([a-h]\)\s+)",
+        r"\n\n\1",
+        cleaned,
+    )
+    cleaned = re.sub(
+        r"[ \t]+(\d+\.\s+[A-ZÉÈÀÂÊÎÔÛÇ])",
+        r"\n\n\1",
+        cleaned,
+    )
+    cleaned = re.sub(
+        r"\n{3,}",
+        "\n\n",
+        cleaned,
+    )
+
+    return cleaned.strip()
 
 
 def _market_value(
@@ -922,6 +960,7 @@ def generate_risk_report(
     language = language.lower()
     if language not in {"fr", "en"}:
         language = "fr"
+    llm_analysis = _normalize_markdown_block(llm_analysis)
 
     report_date = datetime.now().strftime(
         "%Y-%m-%d %H:%M:%S"
@@ -2260,6 +2299,7 @@ def generate_professional_pdf_report(
         raise ValueError(
             "language must be 'fr' or 'en'"
         )
+    llm_analysis = _normalize_markdown_block(llm_analysis)
 
     styles = _pdf_styles()
     buffer = BytesIO()

@@ -12,7 +12,6 @@ import streamlit as st
 
 from app.app_config import (
     DEFAULT_MARKET_DATA_PATH,
-    DEFAULT_PORTFOLIO_PATH,
     PORTFOLIOS_DIR,
     RISK_HISTORY_PATH,
     ensure_runtime_directories,
@@ -71,9 +70,14 @@ from risk_engine.scenario_analysis import (
 )
 from risk_engine.var_analysis import calculate_var_es, parametric_var_estimate
 
+TRANSPARENT_FAVICON = (
+    "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' "
+    "width='1' height='1'/%3E"
+)
+
 st.set_page_config(
     page_title="ARIA Risk Agent",
-    page_icon="📊",
+    page_icon=TRANSPARENT_FAVICON,
     layout="wide",
 )
 
@@ -2235,35 +2239,108 @@ with manual_tab:
         tr("Importer un CSV avancé", "Advanced CSV Import"),
         expanded=False,
     ):
-        portfolio_file_path = st.text_input(
-            tr("Chemin du fichier CSV", "CSV file path"),
-            value=relative_to_project(DEFAULT_PORTFOLIO_PATH),
+        st.info(
+            tr(
+                (
+                    "Cette option sert à importer un portefeuille CSV déjà préparé. "
+                    "Le plus simple reste de sauvegarder/charger avec les boutons "
+                    "au-dessus. Pour un import externe, le CSV peut contenir par "
+                    "exemple : Ticker, Nom, Weight, Price, Quantity, Asset type, "
+                    "Sector, Currency, Option type, Strike, Maturity, Volatility."
+                ),
+                (
+                    "This option imports an already prepared CSV portfolio. "
+                    "The easiest workflow is still to save/load with the buttons "
+                    "above. For an external import, the CSV can contain for "
+                    "example: Ticker, Name, Weight, Price, Quantity, Asset type, "
+                    "Sector, Currency, Option type, Strike, Maturity, Volatility."
+                ),
+            )
         )
 
-        if st.button(
-            tr("Importer ce fichier", "Import This File"),
+        uploaded_portfolio_file = st.file_uploader(
+            tr("Déposer un CSV de portefeuille", "Upload a Portfolio CSV"),
+            type=["csv"],
+            accept_multiple_files=False,
+        )
+
+        if uploaded_portfolio_file is not None and st.button(
+            tr("Importer le CSV déposé", "Import Uploaded CSV"),
             width="stretch",
         ):
-            portfolio_path = resolve_project_path(portfolio_file_path)
-
-            if not portfolio_path.exists():
-                st.error(
-                    tr("Fichier introuvable", "File not found")
-                    + f" : {portfolio_file_path}"
-                )
-                st.stop()
-
-            loaded_portfolio = pd.read_csv(portfolio_path)
+            loaded_portfolio = pd.read_csv(uploaded_portfolio_file)
             st.session_state.portfolio_data = normalize_portfolio_table(
                 loaded_portfolio,
                 default_spot_value=current_spot,
                 default_volatility_value=current_volatility,
             )
+            st.session_state.current_portfolio_name = Path(
+                uploaded_portfolio_file.name
+            ).stem
 
             if "portfolio_editor" in st.session_state:
                 del st.session_state["portfolio_editor"]
 
+            st.success(tr("CSV importé.", "CSV imported."))
             st.rerun()
+
+        default_import_path = (
+            relative_to_project(saved_files[0])
+            if saved_files
+            else ""
+        )
+        portfolio_file_path = st.text_input(
+            tr("Chemin du fichier CSV", "CSV file path"),
+            value=default_import_path,
+            placeholder="data/portfolios/mon_portefeuille.csv",
+            help=tr(
+                (
+                    "Utilise ce champ seulement si le fichier existe déjà dans "
+                    "le projet ou si tu colles un chemin absolu."
+                ),
+                (
+                    "Use this field only if the file already exists in the "
+                    "project or if you paste an absolute path."
+                ),
+            ),
+        )
+
+        if st.button(
+            tr("Importer depuis ce chemin", "Import From This Path"),
+            width="stretch",
+        ):
+            if not portfolio_file_path.strip():
+                st.error(
+                    tr(
+                        "Indique un chemin CSV existant ou dépose un fichier au-dessus.",
+                        "Enter an existing CSV path or upload a file above.",
+                    )
+                )
+            else:
+                portfolio_path = resolve_project_path(portfolio_file_path)
+
+                if not portfolio_path.exists():
+                    st.error(
+                        tr("Fichier introuvable", "File not found")
+                        + f" : {portfolio_file_path}"
+                    )
+
+                else:
+                    loaded_portfolio = pd.read_csv(portfolio_path)
+                    st.session_state.portfolio_data = normalize_portfolio_table(
+                        loaded_portfolio,
+                        default_spot_value=current_spot,
+                        default_volatility_value=current_volatility,
+                    )
+                    st.session_state.current_portfolio_name = portfolio_file_label(
+                        portfolio_path
+                    )
+
+                    if "portfolio_editor" in st.session_state:
+                        del st.session_state["portfolio_editor"]
+
+                    st.success(tr("CSV importé.", "CSV imported."))
+                    st.rerun()
 
     with st.expander(
         tr("Ajouter une position guidée", "Add a Guided Position"),

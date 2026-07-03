@@ -3,6 +3,8 @@
 ARIA - Workflow principal
 """
 
+import re
+
 from app.app_config import (
     RISK_HISTORY_PATH,
     ensure_runtime_directories,
@@ -13,6 +15,41 @@ from portfolio_engine.portfolio import OptionPosition, Portfolio, StockPosition
 from portfolio_engine.pricing_BS import OptionContract
 from risk_engine.anomaly_detector import AnomalyDetector, create_snapshot
 from risk_engine.risk_history import RiskHistory
+
+
+def normalize_llm_markdown(text: object) -> str:
+    """Clean LLM Markdown so Streamlit displays sections on separate lines."""
+
+    if text is None:
+        return ""
+
+    if not isinstance(text, str):
+        text = str(text)
+
+    cleaned = text.replace(
+        "\r\n",
+        "\n",
+    ).replace(
+        "\r",
+        "\n",
+    )
+    cleaned = re.sub(
+        r"[ \t]+([a-h]\)\s+)",
+        r"\n\n\1",
+        cleaned,
+    )
+    cleaned = re.sub(
+        r"[ \t]+(\d+\.\s+[A-ZÉÈÀÂÊÎÔÛÇ])",
+        r"\n\n\1",
+        cleaned,
+    )
+    cleaned = re.sub(
+        r"\n{3,}",
+        "\n\n",
+        cleaned,
+    )
+
+    return cleaned.strip()
 
 
 def update_portfolio_market(
@@ -134,18 +171,20 @@ def generate_llm_analysis(
             model=model
         )
 
-        return explainer.explain(
-            snapshot=snapshot,
-            alerts=alerts,
-            risk_score_result=risk_score_result,
-            scenario_results=scenario_results,
-            var_result=var_result,
-            probabilistic_result=probabilistic_result,
-            portfolio_diagnosis_result=portfolio_diagnosis_result,
-            rebalancing_summary=rebalancing_summary,
-            hedge_result=hedge_result,
-            market_snapshot=market_snapshot,
-            language=language
+        return normalize_llm_markdown(
+            explainer.explain(
+                snapshot=snapshot,
+                alerts=alerts,
+                risk_score_result=risk_score_result,
+                scenario_results=scenario_results,
+                var_result=var_result,
+                probabilistic_result=probabilistic_result,
+                portfolio_diagnosis_result=portfolio_diagnosis_result,
+                rebalancing_summary=rebalancing_summary,
+                hedge_result=hedge_result,
+                market_snapshot=market_snapshot,
+                language=language
+            )
         )
 
     except Exception as error:

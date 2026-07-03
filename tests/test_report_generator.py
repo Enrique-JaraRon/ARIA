@@ -169,6 +169,39 @@ def test_generate_risk_report_can_include_llm_analysis():
     assert llm_analysis in report
 
 
+def test_generate_risk_report_cleans_compact_llm_markdown():
+    """Verifie que les sous-parties LLM compactes passent a la ligne."""
+
+    inputs = build_report_inputs()
+    inputs["llm_analysis"] = (
+        "3. Actions recommandees a etudier "
+        "a) Couverture delta immediate - vendre. "
+        "b) Reduction de convexite - transformer."
+    )
+
+    report = generate_risk_report(
+        **inputs
+    )
+
+    assert "etudier\n\na)" in report
+    assert "vendre.\n\nb)" in report
+
+
+def test_generate_risk_report_accepts_non_string_llm_payload():
+    """Verifie qu'un retour LLM non standard ne fait pas planter le rapport."""
+
+    inputs = build_report_inputs()
+    inputs["llm_analysis"] = {
+        "message": "Analyse structuree"
+    }
+
+    report = generate_risk_report(
+        **inputs
+    )
+
+    assert "Analyse structuree" in report
+
+
 def test_generate_risk_report_supports_english_language():
     """Verifie que le rapport Markdown peut etre genere en anglais."""
 
