@@ -3155,7 +3155,7 @@ if analyse_button or auto_launch_analysis:
         with stress_summary_tab:
             stress_chart = create_stress_chart(
                 scenario_results,
-                language=ui_language,
+                
             )
 
             st.altair_chart(
@@ -3200,7 +3200,7 @@ if analyse_button or auto_launch_analysis:
             st.altair_chart(
                 create_stress_matrix_chart(
                     surface_data,
-                    language=ui_language,
+                    
                 ),
                 width="stretch",
             )
@@ -3441,7 +3441,7 @@ if analyse_button or auto_launch_analysis:
             simulations_data=probabilistic_simulations,
             selected_var=selected_var,
             selected_es=selected_es,
-            language=ui_language,
+            
         )
         st.altair_chart(
             distribution_chart,
@@ -3787,7 +3787,7 @@ if analyse_button or auto_launch_analysis:
             risk_score_result=risk_score_result,
             market_snapshot=market_snapshot,
             llm_analysis=llm_analysis_en if ui_language == "en" else llm_analysis,
-            language=ui_language,
+            
         )
 
         with st.expander(tr("Aperçu du rapport téléchargeable", "Downloadable Report Preview"), expanded=True):
