@@ -19,7 +19,12 @@ from app.app_config import (
     resolve_project_path,
 )
 from app.aria_workflow import generate_llm_analysis
-from app.report_generator import generate_professional_pdf_report, generate_risk_report
+from app.report_generator import (
+    compact_llm_commentary,
+    generate_professional_pdf_report,
+    generate_report_preview,
+    generate_risk_report,
+)
 from app.ui_components import (
     inject_custom_css,
     render_header,
@@ -312,14 +317,90 @@ def portfolio_file_label(
     )
 
 
+def imported_portfolio_table(
+    raw_data: pd.DataFrame,
+    current_spot: float,
+    current_volatility: float,
+) -> pd.DataFrame:
+    """Validate and normalize an imported portfolio CSV."""
+
+    if raw_data.empty:
+        raise ValueError(
+            "Le CSV est vide."
+        )
+
+    normalized_columns = normalize_dataframe_columns(
+        raw_data
+    )
+    recognized_columns = {
+        "Ticker",
+        "Sous-jacent",
+        "Nom",
+        "Weight",
+        "Value",
+        "Quantity",
+        "Quantite",
+        "Price",
+        "Spot",
+        "Asset type",
+        "Instrument",
+        "Sector",
+        "Currency",
+    }
+    if not recognized_columns.intersection(
+        normalized_columns.columns
+    ):
+        raise ValueError(
+            "Colonnes non reconnues. Le CSV doit contenir au moins Ticker, "
+            "Nom, Weight, Value, Quantity, Price ou Asset type."
+        )
+
+    imported = normalize_portfolio_table(
+        normalized_columns,
+        default_spot_value=current_spot,
+        default_volatility_value=current_volatility,
+    )
+    if imported.empty:
+        raise ValueError(
+            "Aucune ligne de portefeuille exploitable n'a ete trouvee."
+        )
+
+    return imported
+
+
+def safe_cell_text(
+    value: object,
+    default: str = "",
+) -> str:
+    """Convert a Streamlit/Pandas cell to text without crashing on pd.NA."""
+
+    if value is None:
+        return default
+
+    try:
+        if pd.isna(value):
+            return default
+    except (TypeError, ValueError):
+        pass
+
+    text = str(value).strip()
+    return text if text else default
+
+
 def row_display_label(
     index: int,
     row: pd.Series,
 ) -> str:
     """Return a readable label for row actions."""
 
-    ticker = str(row.get("Ticker", "") or "").strip() or "Ticker manquant"
-    name = str(row.get("Nom", "") or "").strip() or "Sans nom"
+    ticker = safe_cell_text(
+        row.get("Ticker", ""),
+        "Ticker manquant",
+    )
+    name = safe_cell_text(
+        row.get("Nom", ""),
+        "Sans nom",
+    )
     weight = pd.to_numeric(
         row.get("Weight"),
         errors="coerce",
@@ -2428,20 +2509,26 @@ with manual_tab:
         width="stretch",
         disabled=selected_saved_path is None,
     ):
-        loaded_portfolio = pd.read_csv(selected_saved_path)
-        st.session_state.portfolio_data = normalize_portfolio_table(
-            loaded_portfolio,
-            default_spot_value=current_spot,
-            default_volatility_value=current_volatility,
-        )
-        st.session_state.current_portfolio_name = portfolio_file_label(
-            selected_saved_path
-        )
+        try:
+            loaded_portfolio = pd.read_csv(selected_saved_path)
+            st.session_state.portfolio_data = imported_portfolio_table(
+                loaded_portfolio,
+                current_spot=current_spot,
+                current_volatility=current_volatility,
+            )
+            st.session_state.current_portfolio_name = portfolio_file_label(
+                selected_saved_path
+            )
 
-        if "portfolio_editor" in st.session_state:
-            del st.session_state["portfolio_editor"]
+            if "portfolio_editor" in st.session_state:
+                del st.session_state["portfolio_editor"]
 
-        st.rerun()
+            st.rerun()
+        except Exception as error:
+            st.error(
+                tr("Import impossible : ", "Import failed: ")
+                + str(error)
+            )
 
     if delete_col.button(
         tr("Supprimer la sélection", "Delete Selected"),
@@ -2501,21 +2588,27 @@ with manual_tab:
             tr("Importer le CSV déposé", "Import Uploaded CSV"),
             width="stretch",
         ):
-            loaded_portfolio = pd.read_csv(uploaded_portfolio_file)
-            st.session_state.portfolio_data = normalize_portfolio_table(
-                loaded_portfolio,
-                default_spot_value=current_spot,
-                default_volatility_value=current_volatility,
-            )
-            st.session_state.current_portfolio_name = Path(
-                uploaded_portfolio_file.name
-            ).stem
+            try:
+                loaded_portfolio = pd.read_csv(uploaded_portfolio_file)
+                st.session_state.portfolio_data = imported_portfolio_table(
+                    loaded_portfolio,
+                    current_spot=current_spot,
+                    current_volatility=current_volatility,
+                )
+                st.session_state.current_portfolio_name = Path(
+                    uploaded_portfolio_file.name
+                ).stem
 
-            if "portfolio_editor" in st.session_state:
-                del st.session_state["portfolio_editor"]
+                if "portfolio_editor" in st.session_state:
+                    del st.session_state["portfolio_editor"]
 
-            st.success(tr("CSV importé.", "CSV imported."))
-            st.rerun()
+                st.success(tr("CSV importé.", "CSV imported."))
+                st.rerun()
+            except Exception as error:
+                st.error(
+                    tr("Import CSV impossible : ", "CSV import failed: ")
+                    + str(error)
+                )
 
         default_import_path = (
             relative_to_project(saved_files[0])
@@ -2559,21 +2652,27 @@ with manual_tab:
                     )
 
                 else:
-                    loaded_portfolio = pd.read_csv(portfolio_path)
-                    st.session_state.portfolio_data = normalize_portfolio_table(
-                        loaded_portfolio,
-                        default_spot_value=current_spot,
-                        default_volatility_value=current_volatility,
-                    )
-                    st.session_state.current_portfolio_name = portfolio_file_label(
-                        portfolio_path
-                    )
+                    try:
+                        loaded_portfolio = pd.read_csv(portfolio_path)
+                        st.session_state.portfolio_data = imported_portfolio_table(
+                            loaded_portfolio,
+                            current_spot=current_spot,
+                            current_volatility=current_volatility,
+                        )
+                        st.session_state.current_portfolio_name = portfolio_file_label(
+                            portfolio_path
+                        )
 
-                    if "portfolio_editor" in st.session_state:
-                        del st.session_state["portfolio_editor"]
+                        if "portfolio_editor" in st.session_state:
+                            del st.session_state["portfolio_editor"]
 
-                    st.success(tr("CSV importé.", "CSV imported."))
-                    st.rerun()
+                        st.success(tr("CSV importé.", "CSV imported."))
+                        st.rerun()
+                    except Exception as error:
+                        st.error(
+                            tr("Import CSV impossible : ", "CSV import failed: ")
+                            + str(error)
+                        )
 
     with st.expander(
         tr("Ajouter une position guidée", "Add a Guided Position"),
@@ -4142,7 +4241,13 @@ if analyse_button or auto_launch_analysis:
 
         if llm_analysis:
             with st.expander(tr("Voir le commentaire LLM", "Show LLM Commentary"), expanded=True):
-                st.markdown(llm_analysis if ui_language == "fr" else llm_analysis_en)
+                st.markdown(
+                    compact_llm_commentary(
+                        llm_analysis if ui_language == "fr" else llm_analysis_en,
+                        language=ui_language,
+                        max_items=5,
+                    )
+                )
 
         st.divider()
 
@@ -4166,12 +4271,27 @@ if analyse_button or auto_launch_analysis:
             hedge_result=hedge_result,
             risk_score_result=risk_score_result,
             market_snapshot=market_snapshot,
-            llm_analysis=llm_analysis_en if ui_language == "en" else llm_analysis,
+            llm_analysis=compact_llm_commentary(
+                llm_analysis_en if ui_language == "en" else llm_analysis,
+                language=ui_language,
+                max_items=5,
+            ),
+            language=ui_language,
 
+        )
+        report_preview = generate_report_preview(
+            portfolio=portfolio,
+            scenario_results=scenario_results,
+            var_result=var_result,
+            probabilistic_result=probabilistic_result,
+            hedge_result=hedge_result,
+            risk_score_result=risk_score_result,
+            llm_analysis=llm_analysis_en if ui_language == "en" else llm_analysis,
+            language=ui_language,
         )
 
         with st.expander(tr("Aperçu du rapport téléchargeable", "Downloadable Report Preview"), expanded=True):
-            st.markdown(report_text)
+            st.markdown(report_preview)
 
         report_pdf_fr = generate_professional_pdf_report(
             portfolio=portfolio,

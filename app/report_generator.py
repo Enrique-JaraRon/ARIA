@@ -16,7 +16,6 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import cm
 from reportlab.platypus import (
-    PageBreak,
     Paragraph,
     SimpleDocTemplate,
     Spacer,
@@ -132,12 +131,163 @@ def _normalize_markdown_block(
         cleaned,
     )
     cleaned = re.sub(
-        r"\n{3,}",
+        r"(?:\n[ \t]*){3,}",
         "\n\n",
         cleaned,
     )
 
     return cleaned.strip()
+
+
+def _plain_report_line(
+    line: str
+) -> str:
+    """Strip lightweight Markdown syntax from one report line."""
+
+    cleaned = line.strip()
+    cleaned = re.sub(
+        r"^#{1,6}\s*",
+        "",
+        cleaned,
+    )
+    cleaned = re.sub(
+        r"^[-*]\s+",
+        "",
+        cleaned,
+    )
+    cleaned = re.sub(
+        r"^\d+\.\s+",
+        "",
+        cleaned,
+    )
+    cleaned = cleaned.replace(
+        "**",
+        "",
+    )
+    cleaned = cleaned.replace(
+        "__",
+        "",
+    )
+    cleaned = cleaned.replace(
+        "|",
+        " ",
+    )
+    cleaned = re.sub(
+        r"\s+",
+        " ",
+        cleaned,
+    )
+
+    return cleaned.strip()
+
+
+def _extract_llm_points(
+    text: str | None,
+    max_items: int = 6,
+) -> list[str]:
+    """Extract compact, display-ready points from an LLM commentary."""
+
+    cleaned = _normalize_markdown_block(
+        text
+    )
+    if not cleaned:
+        return []
+
+    points = []
+    seen = set()
+    generic_headings = {
+        "diagnostic synthetique",
+        "actions recommandees a etudier",
+        "couverture delta immediate",
+        "reduction de convexite",
+        "reequilibrage vega",
+        "reduction vega",
+    }
+    for raw_line in cleaned.splitlines():
+        line = _plain_report_line(
+            raw_line
+        )
+        if not line or line in seen:
+            continue
+        heading_key = re.sub(
+            r"^[a-h]\)\s*",
+            "",
+            line.lower().strip(" .:"),
+        )
+        if heading_key in generic_headings:
+            continue
+        if len(line) < 8:
+            continue
+        seen.add(
+            line
+        )
+        points.append(
+            line
+        )
+        if len(
+            points
+        ) >= max_items:
+            break
+
+    return points
+
+
+def compact_llm_commentary(
+    text: str | None,
+    language: str = "fr",
+    max_items: int = 5,
+) -> str:
+    """Return a short Markdown LLM commentary without excessive spacing."""
+
+    points = _extract_llm_points(
+        text,
+        max_items=max_items,
+    )
+    if not points:
+        return ""
+
+    title = (
+        "### Lecture qualitative LLM"
+        if language == "fr"
+        else "### LLM Qualitative Read"
+    )
+    bullets = "\n".join(
+        f"- {point}"
+        for point in points
+    )
+
+    return f"{title}\n\n{bullets}"
+
+
+def _compact_llm_paragraph(
+    text: str | None,
+    language: str,
+) -> str:
+    """Return a short paragraph for the professional PDF."""
+
+    points = _extract_llm_points(
+        text,
+        max_items=4,
+    )
+    if not points:
+        return (
+            "Commentaire LLM non active. La lecture qualitative ci-dessous est construite a partir des metriques ARIA."
+            if language == "fr"
+            else "LLM commentary disabled. The qualitative read below is built from ARIA quantitative metrics."
+        )
+
+    paragraph = " ".join(
+        points
+    )
+    if len(
+        paragraph
+    ) > 850:
+        paragraph = paragraph[:850].rsplit(
+            " ",
+            1,
+        )[0] + "..."
+
+    return paragraph
 
 
 def _market_value(
@@ -1290,6 +1440,150 @@ def generate_risk_report(
     )
 
 
+def generate_report_preview(
+    portfolio: Portfolio,
+    scenario_results: list[Any],
+    var_result: Any,
+    hedge_result: Any,
+    risk_score_result: Any,
+    probabilistic_result: Any | None = None,
+    llm_analysis: str | None = None,
+    language: str = "fr",
+) -> str:
+    """Generate a short analyst-style preview for the Streamlit app."""
+
+    language = language.lower()
+    if language not in {
+        "fr",
+        "en",
+    }:
+        language = "fr"
+
+    _, worst_scenario = _scenario_extremes(
+        scenario_results
+    )
+    risk_label = _localized_risk_label(
+        risk_score_result.label,
+        language,
+    )
+    worst_name = (
+        _localized_scenario_name(
+            worst_scenario.name,
+            language,
+        )
+        if worst_scenario is not None
+        else ("Non disponible" if language == "fr" else "Not available")
+    )
+    worst_pnl = (
+        format_number(
+            worst_scenario.profit_and_loss
+        )
+        if worst_scenario is not None
+        else "N/A"
+    )
+    llm_points = _extract_llm_points(
+        llm_analysis,
+        max_items=3,
+    )
+    hedge_action = _hedge_action_text(
+        hedge_result,
+        language,
+    )
+    probability_line = ""
+    if probabilistic_result is not None:
+        probability_line = (
+            f"- Probabilite de perte Monte Carlo : **{format_percent(probabilistic_result.probability_of_loss)}**."
+            if language == "fr"
+            else f"- Monte Carlo probability of loss: **{format_percent(probabilistic_result.probability_of_loss)}**."
+        )
+
+    if language == "en":
+        lines = [
+            "### ARIA Analyst Preview",
+            "",
+            "| Key item | Reading |",
+            "|---|---:|",
+            f"| Portfolio value | {format_number(portfolio.total_market_value())} |",
+            f"| ARIA score | {risk_score_result.score}/100 - {risk_label} |",
+            f"| VaR / ES | {format_number(var_result.var_amount)} / {format_number(var_result.expected_shortfall)} |",
+            f"| Worst stress | {worst_name}: {worst_pnl} |",
+            "",
+            "**Priority view**",
+            "",
+            f"- {hedge_action}",
+            "- Reduce or hedge the lines driving the worst stress loss before adding risk.",
+            "- Re-run ARIA after each adjustment and compare VaR, ES and Greeks.",
+        ]
+        if probability_line:
+            lines.append(
+                probability_line
+            )
+        if llm_points:
+            lines.extend(
+                [
+                    "",
+                    "**LLM qualitative read**",
+                    "",
+                    *[
+                        f"- {point}"
+                        for point in llm_points
+                    ],
+                ]
+            )
+        lines.extend(
+            [
+                "",
+                "_The downloadable PDF contains the full institutional memo, charts and appendix._",
+            ]
+        )
+        return "\n".join(
+            lines
+        )
+
+    lines = [
+        "### ARIA - Apercu analyste",
+        "",
+        "| Point cle | Lecture |",
+        "|---|---:|",
+        f"| Valeur du portefeuille | {format_number(portfolio.total_market_value())} |",
+        f"| Score ARIA | {risk_score_result.score}/100 - {risk_label} |",
+        f"| VaR / ES | {format_number(var_result.var_amount)} / {format_number(var_result.expected_shortfall)} |",
+        f"| Pire stress | {worst_name}: {worst_pnl} |",
+        "",
+        "**Lecture prioritaire**",
+        "",
+        f"- {hedge_action}",
+        "- Reduire ou couvrir les lignes qui expliquent le pire stress avant d'ajouter du risque.",
+        "- Relancer ARIA apres chaque ajustement et comparer VaR, ES et Greeks.",
+    ]
+    if probability_line:
+        lines.append(
+            probability_line
+        )
+    if llm_points:
+        lines.extend(
+            [
+                "",
+                "**Lecture qualitative LLM**",
+                "",
+                *[
+                    f"- {point}"
+                    for point in llm_points
+                ],
+            ]
+        )
+    lines.extend(
+        [
+            "",
+            "_Le PDF telechargeable contient la note institutionnelle complete, les graphiques et l'annexe._",
+        ]
+    )
+
+    return "\n".join(
+        lines
+    )
+
+
 def generate_executive_risk_report(
     portfolio: Portfolio,
     spot: float,
@@ -1329,32 +1623,9 @@ def _clean_markdown_for_pdf(
 ) -> str:
     """Convert a simple Markdown line to plain text for PDF rendering."""
 
-    cleaned = line.replace(
-        "**",
-        ""
+    return _plain_report_line(
+        line
     )
-    cleaned = cleaned.replace(
-        "|",
-        "  "
-    )
-    cleaned = cleaned.replace(
-        "---",
-        ""
-    )
-    cleaned = cleaned.replace(
-        "# ",
-        ""
-    )
-    cleaned = cleaned.replace(
-        "## ",
-        ""
-    )
-    cleaned = cleaned.replace(
-        "- ",
-        "* "
-    )
-
-    return cleaned.strip()
 
 
 PDF_ACCENT = colors.HexColor(
@@ -2242,7 +2513,7 @@ def _portfolio_position_rows(
         reverse=True,
     )
 
-    for position in sorted_positions[:8]:
+    for position in sorted_positions[:5]:
         raw_position_type = position.__class__.__name__.replace(
             "Position",
             ""
@@ -3128,15 +3399,19 @@ def generate_professional_pdf_report(
 
     _section(
         story,
-        "Commentaire LLM optionnel" if language == "fr" else "Optional LLM Commentary",
+        "Lecture qualitative" if language == "fr" else "Qualitative Read",
         styles
     )
 
     if llm_analysis:
-        _add_paragraph_block(
-            story,
-            llm_analysis,
-            styles
+        story.append(
+            _p(
+                _compact_llm_paragraph(
+                    llm_analysis,
+                    language,
+                ),
+                styles["callout"]
+            )
         )
 
     else:
@@ -3175,10 +3450,6 @@ def generate_professional_pdf_report(
             ],
         )
     )
-    story.append(
-        PageBreak()
-    )
-
     _section(
         story,
         "Contexte de marche, score et portefeuille" if language == "fr" else "Market Context, Score and Portfolio",
@@ -3321,7 +3592,18 @@ def generate_professional_pdf_report(
             "P&L",
         ]
     ]
-    for result in scenario_results:
+    selected_stress_results = sorted(
+        scenario_results,
+        key=lambda result: abs(
+            result.profit_and_loss
+        ),
+        reverse=True,
+    )[:6]
+    selected_stress_results = sorted(
+        selected_stress_results,
+        key=lambda result: result.profit_and_loss,
+    )
+    for result in selected_stress_results:
         stress_rows.append(
             [
                 _localized_scenario_name(
@@ -3534,20 +3816,6 @@ def generate_professional_pdf_report(
                         6
                     ),
                 ],
-                [
-                    "Theta",
-                    format_number(
-                        greeks["theta"],
-                        6
-                    ),
-                ],
-                [
-                    "Rho",
-                    format_number(
-                        greeks["rho"],
-                        6
-                    ),
-                ],
             ],
             widths=[
                 7.2 * cm,
@@ -3591,9 +3859,6 @@ def generate_professional_pdf_report(
         )
     )
 
-    story.append(
-        PageBreak()
-    )
     _section(
         story,
         "Annexe - chiffres importants a retenir" if language == "fr" else "Appendix - Key Figures to Remember",

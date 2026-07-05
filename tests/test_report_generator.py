@@ -5,9 +5,11 @@ Tests du module report_generator.py
 import pandas as pd
 
 from app.report_generator import (
+    compact_llm_commentary,
     generate_executive_risk_report,
     generate_pdf_report,
     generate_professional_pdf_report,
+    generate_report_preview,
     generate_risk_report,
 )
 from portfolio_engine.market_data import HistoricalMarketData, MarketSnapshot
@@ -191,6 +193,26 @@ def test_generate_risk_report_cleans_compact_llm_markdown():
     assert "vendre.\n\nb)" in report
 
 
+def test_compact_llm_commentary_removes_excessive_spacing():
+    """Verifie que l'affichage LLM reste compact dans Streamlit et le PDF."""
+
+    raw_commentary = (
+        "1. Diagnostic synthetique\n\n\n\n"
+        "- Risque principal : delta eleve.\n\n\n\n\n"
+        "a) Couverture delta immediate\n\n\n"
+        "- Vendre une partie du sous-jacent."
+    )
+
+    compact = compact_llm_commentary(
+        raw_commentary,
+        language="fr",
+    )
+
+    assert "\n\n\n" not in compact
+    assert "Lecture qualitative LLM" in compact
+    assert "delta eleve" in compact
+
+
 def test_generate_risk_report_accepts_non_string_llm_payload():
     """Verifie qu'un retour LLM non standard ne fait pas planter le rapport."""
 
@@ -326,6 +348,29 @@ def test_generate_pdf_report_returns_pdf_bytes():
     assert len(
         pdf_report
     ) > 1000
+
+
+def test_generate_report_preview_is_short_and_actionable():
+    """Verifie que l'aperçu telechargeable reste une synthese professionnelle."""
+
+    inputs = build_report_inputs()
+    preview = generate_report_preview(
+        portfolio=inputs["portfolio"],
+        scenario_results=inputs["scenario_results"],
+        var_result=inputs["var_result"],
+        probabilistic_result=None,
+        hedge_result=inputs["hedge_result"],
+        risk_score_result=inputs["risk_score_result"],
+        llm_analysis="Diagnostic : surveiller le delta. Action : tester une couverture.",
+        language="fr",
+    )
+
+    assert "ARIA - Apercu analyste" in preview
+    assert "Score ARIA" in preview
+    assert "Lecture prioritaire" in preview
+    assert len(
+        preview.splitlines()
+    ) < 35
 
 
 def test_generate_professional_pdf_report_accepts_market_history():
