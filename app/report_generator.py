@@ -1629,19 +1629,22 @@ def _clean_markdown_for_pdf(
 
 
 PDF_ACCENT = colors.HexColor(
-    "#10B981"
+    "#B08A3C"
 )
 PDF_DARK = colors.HexColor(
-    "#111827"
+    "#1F2A44"
 )
 PDF_MUTED = colors.HexColor(
-    "#6B7280"
+    "#667085"
 )
 PDF_LIGHT = colors.HexColor(
-    "#F3F7F6"
+    "#F8F6F1"
 )
 PDF_BORDER = colors.HexColor(
-    "#D7E2DF"
+    "#DED8CC"
+)
+PDF_NAVY = colors.HexColor(
+    "#243B64"
 )
 
 
@@ -1905,7 +1908,7 @@ def _table(
                         0
                     ),
                     colors.HexColor(
-                        "#E8F7F2"
+                        "#F2EFE8"
                     ),
                 ),
                 (
@@ -2552,74 +2555,110 @@ def _brand_cover_drawing(
     width: float,
     language: str
 ) -> Drawing:
-    """Create an institutional ARIA cover mark."""
+    """Create a light institutional ARIA cover mark."""
 
     drawing = Drawing(
         width,
-        3.0 * cm
+        3.2 * cm
     )
     drawing.add(
         Rect(
             0,
             0,
             width,
-            3.0 * cm,
-            fillColor=colors.HexColor("#0B1220"),
-            strokeColor=None,
+            3.2 * cm,
+            fillColor=colors.white,
+            strokeColor=PDF_BORDER,
+            strokeWidth=0.8,
         )
     )
     drawing.add(
         Rect(
-            0.45 * cm,
-            0.55 * cm,
-            1.5 * cm,
-            1.9 * cm,
+            0,
+            3.0 * cm,
+            width,
+            0.10 * cm,
             fillColor=PDF_ACCENT,
             strokeColor=None,
         )
     )
     drawing.add(
-        String(
-            2.25 * cm,
-            1.75 * cm,
-            "ARIA",
-            fontName="Helvetica-Bold",
-            fontSize=28,
-            fillColor=colors.white,
+        Rect(
+            0.48 * cm,
+            0.72 * cm,
+            1.45 * cm,
+            1.45 * cm,
+            fillColor=colors.HexColor("#F4EFE4"),
+            strokeColor=PDF_ACCENT,
+            strokeWidth=0.8,
         )
     )
     drawing.add(
         String(
-            2.27 * cm,
-            1.05 * cm,
+            0.73 * cm,
+            1.19 * cm,
+            "A",
+            fontName="Helvetica-Bold",
+            fontSize=24,
+            fillColor=PDF_DARK,
+        )
+    )
+    drawing.add(
+        String(
+            2.35 * cm,
+            1.88 * cm,
+            "ARIA",
+            fontName="Helvetica-Bold",
+            fontSize=24,
+            fillColor=PDF_DARK,
+        )
+    )
+    drawing.add(
+        String(
+            2.36 * cm,
+            1.23 * cm,
             (
                 "Adaptive Risk Intelligence Agent"
                 if language == "en"
                 else "Plateforme de risk analytics"
             ),
             fontName="Helvetica",
-            fontSize=10,
-            fillColor=colors.HexColor("#C8D3E0"),
+            fontSize=9.5,
+            fillColor=PDF_MUTED,
         )
     )
     drawing.add(
         String(
-            width - 4.5 * cm,
-            1.58 * cm,
-            "Risk memo",
+            width - 4.35 * cm,
+            1.88 * cm,
+            "Professional Risk Memo",
             fontName="Helvetica-Bold",
-            fontSize=12,
-            fillColor=colors.HexColor("#C8D3E0"),
+            fontSize=9.5,
+            fillColor=PDF_DARK,
+        )
+    )
+    drawing.add(
+        String(
+            width - 4.35 * cm,
+            1.23 * cm,
+            (
+                "Synthese institutionnelle"
+                if language == "fr"
+                else "Institutional summary"
+            ),
+            fontName="Helvetica",
+            fontSize=8,
+            fillColor=PDF_MUTED,
         )
     )
     drawing.add(
         Line(
-            width - 4.5 * cm,
-            1.35 * cm,
-            width - 0.6 * cm,
-            1.35 * cm,
+            width - 4.35 * cm,
+            1.67 * cm,
+            width - 0.75 * cm,
+            1.67 * cm,
             strokeColor=PDF_ACCENT,
-            strokeWidth=1.2,
+            strokeWidth=0.9,
         )
     )
 
@@ -2642,10 +2681,10 @@ def _risk_gauge_drawing(
     bar_width = width - 0.8 * cm
     y = 0.45 * cm
     segments = [
-        (0.0, 0.30, colors.HexColor("#10B981")),
-        (0.30, 0.60, colors.HexColor("#F59E0B")),
-        (0.60, 0.80, colors.HexColor("#F97316")),
-        (0.80, 1.0, colors.HexColor("#DC2626")),
+        (0.0, 0.30, colors.HexColor("#6D7FA3")),
+        (0.30, 0.60, colors.HexColor("#B08A3C")),
+        (0.60, 0.80, colors.HexColor("#C46A35")),
+        (0.80, 1.0, colors.HexColor("#B42318")),
     ]
     for start, end, color in segments:
         drawing.add(
@@ -2773,9 +2812,9 @@ def _stress_chart_drawing(
             pnl
         ) / max_abs * (chart_width / 2)
         color = colors.HexColor(
-            "#10B981"
+            "#2F5D8C"
         ) if pnl >= 0 else colors.HexColor(
-            "#DC2626"
+            "#B42318"
         )
         x = zero_x if pnl >= 0 else zero_x - bar_length
         drawing.add(
@@ -2919,10 +2958,10 @@ def _market_performance_drawing(
         )
     )
     palette = [
-        colors.HexColor("#0B4F71"),
-        colors.HexColor("#10B981"),
-        colors.HexColor("#F59E0B"),
-        colors.HexColor("#7C3AED"),
+        colors.HexColor("#243B64"),
+        colors.HexColor("#6D7FA3"),
+        colors.HexColor("#B08A3C"),
+        colors.HexColor("#8E5A5A"),
     ]
 
     for ticker_index, ticker in enumerate(
@@ -3100,9 +3139,9 @@ def _correlation_heatmap_drawing(
                     1.0
                 )
                 fill = colors.Color(
-                    0.94 - 0.75 * intensity,
-                    0.98 - 0.35 * intensity,
-                    0.94 - 0.55 * intensity,
+                    0.94 - 0.62 * intensity,
+                    0.93 - 0.50 * intensity,
+                    0.88 - 0.33 * intensity,
                 )
             else:
                 intensity = min(
@@ -3112,9 +3151,9 @@ def _correlation_heatmap_drawing(
                     1.0
                 )
                 fill = colors.Color(
-                    1.0 - 0.25 * intensity,
-                    0.94 - 0.55 * intensity,
+                    0.98 - 0.26 * intensity,
                     0.92 - 0.55 * intensity,
+                    0.88 - 0.56 * intensity,
                 )
             x = left + column_index * cell
             drawing.add(
@@ -3153,15 +3192,27 @@ def _draw_pdf_page(
     width, height = A4
     canvas.saveState()
     canvas.setFillColor(
-        PDF_ACCENT
+        colors.HexColor("#F8F6F1")
     )
     canvas.rect(
         0,
-        height - 0.35 * cm,
+        height - 0.18 * cm,
         width,
-        0.35 * cm,
+        0.18 * cm,
         fill=1,
         stroke=0,
+    )
+    canvas.setStrokeColor(
+        PDF_ACCENT
+    )
+    canvas.setLineWidth(
+        0.6
+    )
+    canvas.line(
+        doc.leftMargin,
+        height - 1.08 * cm,
+        width - doc.rightMargin,
+        height - 1.08 * cm,
     )
     canvas.setFillColor(
         PDF_DARK
