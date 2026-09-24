@@ -1,56 +1,51 @@
 # ARIA — Adaptive Risk Intelligence & Analytics
 
-> **Portfolio risk, derivatives and scenario analytics platform built for quantitative finance applications.**
+> **A quantitative portfolio-risk and derivatives analytics platform built in Python and Streamlit.**
 
-ARIA is a Python/Streamlit platform designed to turn a portfolio of equities, ETFs and options into a structured risk analysis. It combines **derivatives pricing, Greeks, Value-at-Risk, Expected Shortfall, Monte Carlo simulation, stress testing and market-data analytics** in a single interactive application.
+ARIA turns a portfolio of equities, ETFs and European options into a structured market-risk analysis. The project combines **derivatives pricing, Greeks, implied volatility, Value-at-Risk, Expected Shortfall, Monte Carlo simulation and stress testing** in one interactive application.
 
-Developed by **Enrique Jara Ron**, Financial Engineering student at ESILV with a background in Applied Economics from Université Paris-Dauphine – PSL.
-
-> Educational and research project. Outputs are not investment advice and do not guarantee future performance.
+Built by **Enrique Jara Ron** — Financial Engineering student at **ESILV**, with a BSc in Applied Economics from **Université Paris-Dauphine – PSL**.
 
 ---
 
-## Why ARIA?
+## At a glance
 
-The objective of ARIA is to bridge **quantitative models** and **practical portfolio decision-making**.
+| Area | Implementation |
+|---|---|
+| **Derivatives** | Black-Scholes pricing, implied volatility, European calls & puts |
+| **Greeks** | Delta, Gamma, Theta, Vega, Rho, Vanna, Volga |
+| **Market Risk** | VaR, Expected Shortfall, risk alerts |
+| **Simulation** | Monte Carlo portfolio-risk simulation |
+| **Stress Testing** | Historical scenarios, custom shocks, spot/volatility matrices |
+| **Portfolio Analytics** | P&L profiles, exposures, correlations, volatility |
+| **Reporting** | Interactive dashboards and PDF risk reports |
+| **Engineering** | Modular Python architecture, Pytest, Ruff, Streamlit |
 
-A user can build or import a portfolio, analyse its market exposures, run deterministic and probabilistic stress scenarios, inspect option sensitivities and generate an executive risk report.
+### What this project demonstrates
 
-### Core capabilities
-
-- **Portfolio analytics** for equities, ETFs and options
-- **Black-Scholes pricing** for European options
-- **Implied volatility** and option sensitivity analysis
-- **Greeks:** Delta, Gamma, Theta, Vega, Rho, Vanna and Volga
-- **Value-at-Risk (VaR)** and **Expected Shortfall (ES)**
-- **Monte Carlo risk simulation**
-- Historical and custom **stress testing**
-- Spot / volatility stress matrices
-- P&L sensitivity analysis
-- Historical market-data analysis
-- Annualised volatility and correlation matrices
-- Quantitative risk alerts
-- Optional LLM-generated commentary
-- Professional PDF risk reporting
-- French / English interface
+- translating quantitative-finance concepts into usable analytical tools;
+- implementing option-pricing and market-risk methods in Python;
+- separating pricing, portfolio and risk logic into testable modules;
+- designing an interactive workflow for portfolio and derivatives analysis;
+- combining numerical methods, financial modelling and software engineering.
 
 ---
 
-## Application Preview
+## Application preview
 
-### Portfolio Dashboard
+### Portfolio dashboard
 
 ![Portfolio dashboard](screenshots/portfolio_editor.png)
 
-### Risk Dashboard
+### Risk dashboard
 
 ![ARIA risk dashboard](screenshots/dashboard.png)
 
-### Stress Testing
+### Stress testing
 
 ![Stress testing](screenshots/stress_testing.png)
 
-### Spot / Volatility Risk Matrix
+### Spot / volatility risk matrix
 
 ![Risk matrix](screenshots/risk_matrix.png)
 
@@ -58,62 +53,53 @@ A user can build or import a portfolio, analyse its market exposures, run determ
 
 ![VaR and Expected Shortfall](screenshots/var_analysis.png)
 
-### P&L Sensitivities
+### P&L sensitivities
 
 ![PnL sensitivities](screenshots/sensitivities_pnl.png)
 
-### Greeks Profile
+### Greeks profile
 
 ![Greeks profile](screenshots/greeks_profile.png)
 
-### Probabilistic Risk
+### Probabilistic risk
 
 ![Probabilistic risk](screenshots/probabilistic_risk.png)
 
-### Executive Risk Report
+### Executive risk report
 
 ![Risk report](screenshots/risk_report.png)
 
 ---
 
-## Quantitative Methods
+## Quantitative framework
 
-ARIA currently integrates several concepts commonly used in derivatives and market-risk analysis.
+ARIA currently integrates several methods commonly used in derivatives and market-risk analysis.
 
-| Area | Methods |
-|---|---|
-| **Option Pricing** | Black-Scholes, European calls & puts |
-| **Volatility** | Historical volatility, implied volatility |
-| **Greeks** | Delta, Gamma, Theta, Vega, Rho, Vanna, Volga |
-| **Market Risk** | VaR, Expected Shortfall |
-| **Simulation** | Monte Carlo |
-| **Scenario Analysis** | Historical shocks, custom stress scenarios |
-| **Portfolio Analytics** | P&L profiles, correlations, exposure analysis |
-| **Risk Monitoring** | Quantitative alerts and risk scoring |
+### Option pricing
 
----
+- Black-Scholes pricing for European calls and puts
+- put-call parity controls
+- implied-volatility estimation
+- spot and volatility sensitivity analysis
 
-## Market Data
+### Greeks
 
-ARIA can operate in manual mode for stable offline demonstrations or use external/local market data for more realistic analysis.
+- Delta
+- Gamma
+- Theta
+- Vega
+- Rho
+- Vanna
+- Volga
 
-The market-data engine can build:
+### Market risk
 
-- price histories by underlying;
-- daily returns;
-- annualised volatility estimates;
-- correlation matrices;
-- inputs for probabilistic risk calibration.
-
-Example CSV format:
-
-```csv
-Date,Ticker,Close
-2026-01-02,SPY,500.0
-2026-01-02,QQQ,430.0
-2026-01-03,SPY,504.0
-2026-01-03,QQQ,435.0
-```
+- Value-at-Risk
+- Expected Shortfall
+- Monte Carlo simulation
+- historical and custom stress scenarios
+- P&L sensitivity analysis
+- volatility and correlation analysis
 
 ---
 
@@ -131,33 +117,43 @@ ARIA/
 └── streamlit_app.py    # Main Streamlit entry point
 ```
 
-The project separates the **portfolio/pricing layer**, **risk engine** and **user interface** so that quantitative components can be tested independently from the application layer.
+The architecture separates the **portfolio/pricing layer**, **risk engine** and **user interface**, allowing quantitative components to be tested independently from the application layer.
 
 ---
 
-## Tech Stack
+## Tech stack
 
-**Language**
+**Core:** Python
 
-- Python
+**Quantitative & data:** NumPy · Pandas · SciPy
 
-**Quantitative & Data**
+**Application:** Streamlit
 
-- NumPy
-- Pandas
-- SciPy
-- Statistical and numerical methods
+**Engineering:** Pytest · Ruff · modular Python architecture · environment-variable configuration
 
-**Application**
+---
 
-- Streamlit
+## Market data
 
-**Engineering**
+ARIA can operate with manually supplied inputs for reproducible demonstrations or with external/local market data for more realistic analysis.
 
-- Pytest
-- Ruff
-- Modular Python architecture
-- Environment-variable based configuration
+The market-data layer can build:
+
+- historical prices by underlying;
+- daily returns;
+- annualised volatility estimates;
+- correlation matrices;
+- calibration inputs for probabilistic risk analysis.
+
+Example CSV:
+
+```csv
+Date,Ticker,Close
+2026-01-02,SPY,500.0
+2026-01-02,QQQ,430.0
+2026-01-03,SPY,504.0
+2026-01-03,QQQ,435.0
+```
 
 ---
 
@@ -185,11 +181,11 @@ streamlit run streamlit_app.py
 
 ---
 
-## Optional LLM Layer
+## Optional LLM layer
 
 The quantitative engine works independently of any language model.
 
-To enable the optional natural-language risk commentary, create a local `.env` file from `.env.example`.
+To enable optional natural-language risk commentary, create a local `.env` file from `.env.example`.
 
 ```powershell
 Copy-Item .env.example .env
@@ -204,7 +200,7 @@ ARIA_LLM_MODEL=gpt-5-mini
 
 ---
 
-## Quality Controls
+## Quality controls
 
 Run the test suite:
 
@@ -220,26 +216,22 @@ Run linting:
 
 ---
 
-## Project Focus
+## Current focus
 
-ARIA is part of my work at the intersection of:
+ARIA sits at the intersection of:
 
-- **Quantitative Finance**
-- **Derivatives**
-- **Market Risk**
-- **Portfolio Analytics**
-- **Financial Engineering**
-- **Python for Finance**
+**Quantitative Finance · Derivatives · Market Risk · Portfolio Analytics · Financial Engineering · Python**
 
-Future extensions may include additional pricing models, richer volatility modelling, more advanced portfolio-risk decomposition and further derivatives analytics.
+Possible extensions include richer volatility modelling, additional pricing methods, portfolio-risk decomposition and further derivatives analytics.
 
 ---
 
 ## Author
 
-**Enrique Jara Ron**
-
+**Enrique Jara Ron**  
 Financial Engineering — ESILV  
-Applied Economics — Université Paris-Dauphine – PSL
+BSc Applied Economics — Université Paris-Dauphine – PSL
 
 GitHub: [Enrique-JaraRon](https://github.com/Enrique-JaraRon)
+
+> Educational and research project. Outputs are not investment advice and do not guarantee future performance.
