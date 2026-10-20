@@ -67,20 +67,21 @@ ARIA brings together **Black–Scholes pricing, implied volatility, Greeks, Valu
 
 Requires **Python 3.11+**. The commands below work in a shell from the repository root.
 
+**macOS / Linux:**
+
 ```bash
-python -m venv .venv
+python3 -m venv .venv
+source .venv/bin/activate
 python -m pip install -r requirements.txt
-streamlit run streamlit_app.py
+python -m streamlit run streamlit_app.py
 ```
 
-If you prefer an activated environment, activate `.venv` first using your platform's standard command, then install dependencies.
-
-On Windows PowerShell:
+**Windows PowerShell** (using the venv directly; no activation required):
 
 ```powershell
-.\.venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
-streamlit run streamlit_app.py
+py -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m streamlit run streamlit_app.py
 ```
 
 ### Run quality checks
